@@ -80,6 +80,9 @@ export function createSubagentTool(
           // pai segue o seletor global, a troca no meio vale para ele também
           permissionMode: input.options.permissionMode,
           followGlobalPermission: input.options.followGlobalPermission,
+          // O recorte de servidores MCP também é do pai: o worker não decide
+          // sozinho quais servidores vê (undefined = todos os ligados).
+          toolsServers: input.options.toolsServers,
         },
         directory: input.directory,
         extraDirectories: input.extraDirectories,
@@ -156,6 +159,9 @@ export interface TaskModeCeiling {
   browser: boolean
   vision: boolean
   subagents: boolean
+  /** Recorte de servidores MCP escolhido na conversa (undefined = todos).
+   *  As ferramentas não têm liga/desliga: o recorte vale para os workers. */
+  toolsServers?: string[]
 }
 
 /**
@@ -249,6 +255,9 @@ export function createTaskTool(
           plan: readOnly,
           simple,
           subagents: clamp(subagents, ceiling.subagents, 'subagents'),
+          // Não é escolha do orquestrador: o recorte de servidores MCP vale
+          // para a conversa inteira e acompanha os workers.
+          toolsServers: ceiling.toolsServers,
         },
         vision: clamp(vision, ceiling.vision, 'vision'),
         status: 'idle',

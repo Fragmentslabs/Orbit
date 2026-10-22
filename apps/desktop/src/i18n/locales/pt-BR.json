@@ -1058,6 +1058,13 @@
     "disable": "Desativar visão",
     "done": "Concluir"
   },
+  "toolsPopover": {
+    "label": "Ferramentas",
+    "title": "Ferramentas MCP",
+    "scope": "nesta conversa",
+    "empty": "Nenhum servidor ligado no app.",
+    "manage": "MCP & Skills"
+  },
   "vision": {
     "hint": "Seu modelo atual não tem visão e o modo Visão está desligado — imagens anexadas não são vistas pelo agente.",
     "configure": "Configurar visão",
@@ -1313,8 +1320,8 @@
       "retry": "Verificar de novo",
       "installed": "Instalado",
       "connected": "Conectado",
-      "nodaraTools_one": "{{count}} ferramenta disponível no modo Código",
-      "nodaraTools_other": "{{count}} ferramentas disponíveis no modo Código",
+      "nodaraTools_one": "{{count}} ferramenta disponível para o agente",
+      "nodaraTools_other": "{{count}} ferramentas disponíveis para o agente",
       "nodaraStaleToken": "Token desatualizado — reconecte para renovar a autorização.",
       "nodaraError": {
         "unauthorized": "Autorização recusada pelo Nodara — reconecte para renovar o token.",
@@ -1338,8 +1345,8 @@
         "installed": "Nodara rodando. Conecte para liberar as ferramentas ao agente."
       },
       "fractaDescription": "Explore e consulte seus bancos de dados pelo Orbit usando MCP.",
-      "fractaTools_one": "{{count}} ferramenta disponível no modo Código",
-      "fractaTools_other": "{{count}} ferramentas disponíveis no modo Código",
+      "fractaTools_one": "{{count}} ferramenta disponível para o agente",
+      "fractaTools_other": "{{count}} ferramentas disponíveis para o agente",
       "fractaStaleToken": "Token desatualizado — reconecte para renovar a autorização.",
       "fractaError": {
         "unauthorized": "O Fracta recusou o token — reconecte para renová-lo.",
@@ -1363,6 +1370,7 @@
       "empty": "Nenhum servidor MCP configurado.",
       "toolsAvailable_one": "{{count}} ferramenta disponível",
       "toolsAvailable_other": "{{count}} ferramentas disponíveis",
+      "enabledHint": "Liga ou desliga este servidor em todas as conversas",
       "reconnect": "Reconectar",
       "edit": "Editar",
       "remove": "Remover",

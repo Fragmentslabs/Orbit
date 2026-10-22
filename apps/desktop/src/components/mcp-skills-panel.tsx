@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -822,6 +823,15 @@ export function McpSkillsPanel() {
     }
   }
 
+  /** Liga/desliga o servidor no APP inteiro — o recorte por conversa é no
+   *  popover de ferramentas do composer. */
+  const toggleServer = (name: string, enabled: boolean) =>
+    runServerAction(name, async () => {
+      const config = await mcpApi.config()
+      config.servers = config.servers.map((server) => (server.name === name ? { ...server, enabled } : server))
+      await mcpApi.save(config)
+    })
+
   const importSkill = async () => {
     setImportError("")
     const result = await skillsApi.import()
@@ -905,6 +915,13 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    <Switch
+                      checked={server.config.enabled !== false}
+                      disabled={busy === server.config.name}
+                      title={t("mcp.servers.enabledHint")}
+                      aria-label={t("mcp.servers.enabledHint")}
+                      onCheckedChange={(checked) => void toggleServer(server.config.name, checked)}
+                    />
                     {needsAuth(server) && (
                       <Button
                         size="sm"

@@ -35,39 +35,52 @@ export function commandMatches(command: SlashCommand, query: string): boolean {
   return query.split(" ").every((token) => haystack.includes(token))
 }
 
-/** Skills + MCP como REFERÊNCIAS ("@"): usado pela palette "@", junto com os
- *  arquivos da pasta. A "/" é só de comandos e modos. */
-export function useReferenceCommands(): SlashCommand[] {
+/**
+ * Referências `@` do composer. Skills valem só no modo código. Servidores MCP
+ * valem nos dois modos (as tools não têm liga/desliga) e respeitam o recorte
+ * `options.servers` da conversa, para não citar servidor que este turno não
+ * expõe.
+ */
+export function useReferenceCommands(
+  mode?: SessionMode,
+  options?: { servers?: string[] | null },
+): SlashCommand[] {
   const skills = useSkillsStore((s) => s.skills)
   const mcpServers = useSkillsStore((s) => s.mcpServers)
   const initialize = useSkillsStore((s) => s.initialize)
   const { t } = useTranslation()
+  const only = options?.servers
 
   useEffect(() => {
     void initialize()
   }, [initialize])
 
   return useMemo<SlashCommand[]>(
-    () => [
-      ...skills.map<SlashCommand>((skill) => ({
-        id: `skill-${skill.slug}`,
-        label: `@${skill.slug}`,
-        description: skill.description || t("input.slash.userSkill"),
-        keywords: [skill.slug, skill.name],
-        group: "Skills",
-        run: ({ setText }) => setText(`@${skill.slug} `),
-      })),
-      ...mcpServers
-        .filter((s) => s.state === "connected")
-        .map<SlashCommand>((server) => ({
-          id: `mcp-${server.config.name}`,
-          label: `@mcp:${server.config.name}`,
-          description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
-          group: "MCP",
-          run: ({ setText }) => setText(`@mcp:${server.config.name} `),
-        })),
-    ],
-    [skills, mcpServers, t],
+    () => {
+      const inCode = !mode || mode === "code"
+      return [
+        ...(inCode
+          ? skills.map<SlashCommand>((skill) => ({
+              id: `skill-${skill.slug}`,
+              label: `@${skill.slug}`,
+              description: skill.description || t("input.slash.userSkill"),
+              keywords: [skill.slug, skill.name],
+              group: "Skills",
+              run: ({ setText }) => setText(`@${skill.slug} `),
+            }))
+          : []),
+        ...mcpServers
+          .filter((s) => s.state === "connected" && (!only || only.includes(s.config.name)))
+          .map<SlashCommand>((server) => ({
+            id: `mcp-${server.config.name}`,
+            label: `@mcp:${server.config.name}`,
+            description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
+            group: "MCP",
+            run: ({ setText }) => setText(`@mcp:${server.config.name} `),
+          })),
+      ]
+    },
+    [skills, mcpServers, mode, only, t],
   )
 }
 

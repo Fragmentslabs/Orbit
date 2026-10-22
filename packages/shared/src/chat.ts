@@ -866,6 +866,13 @@ export interface SendMessageOptions {
   orchestrate?: { plan?: OrchestrationPlan }
   /** Modo Loop: agente revisa e itera até completar a tarefa (max N iterações configurável) */
   loop?: boolean
+  /**
+   * Recorte de servidores MCP desta conversa (nomes). `undefined` = todos os
+   * servidores ligados no app, que é o default; o recorte é o mesmo que o
+   * prompt descreve, para o modelo não ver na lista um servidor que não tem
+   * tool disponível no turno.
+   */
+  toolsServers?: string[]
   /** Modo de permissões (code-mode e workers): default efetivo "ask" */
   permissionMode?: PermissionMode
   /**

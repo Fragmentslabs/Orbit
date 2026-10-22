@@ -399,6 +399,8 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       browser: input.options.browser === true,
       vision: Boolean(input.visionModel),
       subagents: input.options.subagents === true,
+      // Recorte de servidores MCP da conversa (ausente = todos os ligados).
+      toolsServers: input.options.toolsServers,
     }
     // Orçamento de leitura das passadas de planejamento. Fica fora do
     // runPlanningPass porque as tools são criadas uma vez e reusadas pela

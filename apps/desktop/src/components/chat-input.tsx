@@ -19,6 +19,7 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
+import { ToolsPopover } from "@/src/components/tools-popover"
 import { VisionConfigDialog } from "@/src/components/vision-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
@@ -106,6 +107,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const vision = useModeActive("vision", sessionId, chatActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
+  // servidores esta conversa enxerga (as tools em si não têm liga/desliga).
+  const toolsServers = useToolsServers(sessionId)
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -145,7 +149,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
-  }), [search, browser, simple, brain, brainContext, thinking, variantId])
+    toolsServers: toolsServers ?? undefined,
+  }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers])
 
   /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
    *  `voiceCall` para o agente responder curto e falado. */
@@ -191,7 +196,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
 
   return (
     <PromptInputProvider>
-    <ReferencePalette>
+    <ReferencePalette servers={toolsServers}>
     <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
     <DraftInputBridge sessionId={sessionId} />
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
@@ -412,11 +417,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                 else if (visionModel) setModeActive("vision", sessionId, true)
                 else setVisionConfigOpen(true)
               }}
+              onConfig={() => setVisionConfigOpen(true)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
         </div>
-        <div className="ml-auto mt-2">
+        <div className="ml-auto mt-2 flex items-center gap-0.5">
+          <ToolsPopover sessionId={sessionId} iconOnly={modeLabelStyle === "icon"} />
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>

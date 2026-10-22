@@ -91,9 +91,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
 
   if (input.mode === 'chat') {
-    // Modo chat: SEM tools MCP — um chat básico não deve ter nenhuma tool.
-    // As tools só aparecem quando um toggle está ativo, e cada toggle expõe
-    // apenas as suas próprias (nunca servidores MCP externos).
+    // Modo chat: as tools de fábrica só entram quando um toggle está ativo, e
+    // cada toggle expõe apenas as suas próprias. Servidores MCP são a exceção:
+    // existem sempre que há servidor ligado, recortados pela escolha desta
+    // conversa (`toolsServers`; ausente = todos).
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
@@ -187,6 +188,17 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
     // describe_image descreve sob demanda (com o contexto que ele passar).
     if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
+    // Servidores MCP: não são toggle — as tools existem sempre, recortadas
+    // pela escolha desta conversa (ausente = todos os ligados no app).
+    Object.assign(
+      tools,
+      getMcpTools({
+        sessionId: input.sessionId,
+        canShow: input.orchestrationRole !== 'worker',
+        canDescribe: Boolean(input.visionModel),
+        only: input.options.toolsServers,
+      }),
+    )
     // Fluxo explícito /create-skill: habilita só a tool de propor skill
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
       tools.create_skill = createSkillTool()
@@ -198,7 +210,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     return tools
   }
 
-  // Modo código: MCP disponível (servidores configurados) + skill flow
+  // Modo código: MCP disponível (servidores configurados) + skill flow, com o
+  // recorte da conversa (`toolsServers`; ausente = todos, que é também o de
+  // quem chama o engine sem passar pelo composer: celular, rotinas, esteira).
   // As imagens que um servidor devolve vão para a galeria deste chat; o
   // resultado diz ao modelo como mostrá-las ou olhá-las — por isso o MCP
   // precisa saber se show_image e describe_image existem neste turno (as
@@ -209,6 +223,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       sessionId: input.sessionId,
       canShow: ctx !== null && input.orchestrationRole !== 'worker',
       canDescribe: Boolean(input.visionModel),
+      only: input.options.toolsServers,
     }),
   )
   if (input.orchestrationRole !== 'worker') {

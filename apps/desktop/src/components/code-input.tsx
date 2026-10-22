@@ -20,6 +20,7 @@ import {
 } from "@/src/components/ai/prompt-input"
 import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
+import { ToolsPopover } from "@/src/components/tools-popover"
 import { VisionConfigDialog } from "@/src/components/vision-config-dialog"
 import { LoopConfigDialog } from "@/src/components/loop-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
@@ -167,6 +168,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const vision = useModeActive("vision", sessionId, codeActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
+  // servidores esta conversa enxerga (as tools em si não têm liga/desliga).
+  const toolsServers = useToolsServers(sessionId)
   const workerModel = useProviderStore((s) => s.workerModel)
   // Aviso da primeira vez: só abre na 1ª ativação do modo agente sem worker
   // configurado; depois disso o toggle só liga/desliga (padrão = modelo principal)
@@ -193,7 +197,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     orchestrate: orchestra && mode === "code" ? {} : undefined,
     // Na orquestra o Loop não vale (quem revisa é o orquestrador)
     loop: orchestra && mode === "code" ? undefined : loop,
-  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, mode])
+    toolsServers: toolsServers ?? undefined,
+  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, toolsServers, mode])
 
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders
@@ -396,7 +401,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
 
   return (
     <PromptInputProvider>
-      <ReferencePalette directory={sessionDir ?? folders[0]} className="mx-auto w-full max-w-2xl">
+      <ReferencePalette directory={sessionDir ?? folders[0]} servers={toolsServers} className="mx-auto w-full max-w-2xl">
       <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
       <DraftInputBridge sessionId={sessionId} />
       <ChatInputDraft sessionId={sessionId} />
@@ -696,7 +701,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             />
           )}
         </div>
-        <div className="ml-auto mt-2">
+        <div className="ml-auto mt-2 flex items-center gap-0.5">
+          <ToolsPopover sessionId={sessionId} iconOnly={modeLabelStyle === "icon"} />
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>

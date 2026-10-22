@@ -32,6 +32,7 @@ import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
 import { modeActiveFor, useModeOverrides } from "@/src/stores/mode-overrides"
+import { useSessionTools } from "@/src/stores/session-tools"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useMessageReply } from "@/src/stores/message-reply"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
@@ -1094,6 +1095,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
       useModeOverrides.getState().adopt(sessionId)
+      useSessionTools.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
       // A mensagem respondida no chat novo (chave "draft") vira da sessão
       useMessageReply.getState().adopt(sessionId)

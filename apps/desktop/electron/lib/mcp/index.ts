@@ -66,6 +66,17 @@ export interface McpToolScope {
   sessionId: string
   canShow: boolean
   canDescribe: boolean
+  /**
+   * Recorte de servidores escolhido na conversa (nomes). Ausente = todos os
+   * ligados no app; vazio = nenhum.
+   */
+  only?: string[]
+}
+
+/** Servidor entra neste turno? Desligado no app ou fora do recorte da conversa. */
+function inScope(runtime: ServerRuntime, only?: string[]): boolean {
+  if (runtime.config.enabled === false) return false
+  return !only || only.includes(runtime.config.name)
 }
 
 const servers = new Map<string, ServerRuntime>()
@@ -396,7 +407,7 @@ function createClient(serverName: string): Client {
 export function getMcpTools(scope: McpToolScope): ToolSet {
   const merged: ToolSet = {}
   for (const runtime of servers.values()) {
-    if (runtime.config.enabled === false) continue
+    if (!inScope(runtime, scope.only)) continue
     if (runtime.state !== 'connected' || !runtime.client) continue
     const client = runtime.client
     for (const def of runtime.tools) {
@@ -427,11 +438,15 @@ export function listMcpServerNames(): string[] {
     .map((r) => r.config.name)
 }
 
-/** Descrição formatada dos servidores MCP conectados e suas ferramentas. */
-export function listMcpToolDescriptions(): string {
+/**
+ * Descrição formatada dos servidores MCP conectados e suas ferramentas.
+ * `only` espelha o recorte da conversa: o prompt não deve listar um servidor
+ * cuja tool não foi exposta neste turno.
+ */
+export function listMcpToolDescriptions(only?: string[]): string {
   const lines: string[] = []
   for (const runtime of servers.values()) {
-    if (runtime.config.enabled === false || runtime.state !== 'connected') continue
+    if (!inScope(runtime, only) || runtime.state !== 'connected') continue
     const names = runtime.tools.map((t) => t.name)
     lines.push(`- @mcp:${runtime.config.name}: ${names.join(', ')}`)
   }

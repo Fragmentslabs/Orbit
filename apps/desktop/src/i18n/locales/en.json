@@ -1058,6 +1058,13 @@
     "disable": "Disable vision",
     "done": "Done"
   },
+  "toolsPopover": {
+    "label": "Tools",
+    "title": "MCP tools",
+    "scope": "this conversation",
+    "empty": "No server turned on in the app.",
+    "manage": "MCP & Skills"
+  },
   "vision": {
     "hint": "Your current model has no vision and vision mode is off — attached images are not seen by the agent.",
     "configure": "Configure vision",
@@ -1313,8 +1320,8 @@
       "retry": "Check again",
       "installed": "Installed",
       "connected": "Connected",
-      "nodaraTools_one": "{{count}} tool available in Code mode",
-      "nodaraTools_other": "{{count}} tools available in Code mode",
+      "nodaraTools_one": "{{count}} tool available to the agent",
+      "nodaraTools_other": "{{count}} tools available to the agent",
       "nodaraStaleToken": "Stale token — reconnect to refresh the authorization.",
       "nodaraError": {
         "unauthorized": "Nodara refused the authorization — reconnect to refresh the token.",
@@ -1338,8 +1345,8 @@
         "installed": "Nodara is running. Connect to expose its tools to the agent."
       },
       "fractaDescription": "Explore and query your databases from Orbit using MCP.",
-      "fractaTools_one": "{{count}} tool available in Code mode",
-      "fractaTools_other": "{{count}} tools available in Code mode",
+      "fractaTools_one": "{{count}} tool available to the agent",
+      "fractaTools_other": "{{count}} tools available to the agent",
       "fractaStaleToken": "Stale token — reconnect to refresh the authorization.",
       "fractaError": {
         "unauthorized": "Fracta refused the token — reconnect to refresh it.",
@@ -1363,6 +1370,7 @@
       "empty": "No MCP server configured.",
       "toolsAvailable_one": "{{count}} tool available",
       "toolsAvailable_other": "{{count}} tools available",
+      "enabledHint": "Turns this server on or off for every conversation",
       "reconnect": "Reconnect",
       "edit": "Edit",
       "remove": "Remove",

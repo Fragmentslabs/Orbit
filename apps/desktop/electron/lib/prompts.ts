@@ -706,12 +706,12 @@ export async function buildSystemPrompt(
 
   parts.push(...(await buildSkillsBlock(input)))
 
-  // Servidores MCP disponíveis (só no modo código — no chat as tools MCP não existem)
-  if (input.mode === 'code') {
-    const mcpBlock = listMcpToolDescriptions()
-    if (mcpBlock) {
-      parts.push(`AVAILABLE MCP TOOLS. Connected MCP servers and their tools (use the <server>_ prefix to call them):\n${mcpBlock}`)
-    }
+  // Servidores MCP disponíveis: os que estão ligados no app, recortados pela
+  // escolha desta conversa (`toolsServers`) — o mesmo recorte que o engine
+  // expõe, para o modelo não ver aqui um servidor cuja tool não existe.
+  const mcpBlock = listMcpToolDescriptions(input.options.toolsServers)
+  if (mcpBlock) {
+    parts.push(`AVAILABLE MCP TOOLS. Connected MCP servers and their tools (use the <server>_ prefix to call them):\n${mcpBlock}`)
   }
 
   // Contexto automático: injeta memórias no prompt

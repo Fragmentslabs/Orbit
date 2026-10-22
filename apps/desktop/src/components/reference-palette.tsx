@@ -30,8 +30,10 @@ function fileMatches(filePath: string, query: string): boolean {
   return query.split(" ").every((token) => haystack.includes(token))
 }
 
-export function ReferencePalette({ directory, children, className }: {
+export function ReferencePalette({ directory, servers, children, className }: {
   directory?: string
+  /** Recorte de servidores MCP desta conversa (`undefined` = todos). */
+  servers?: string[] | null
   children: ReactNode
   className?: string
 }) {
@@ -39,7 +41,7 @@ export function ReferencePalette({ directory, children, className }: {
   const controller = usePromptInputController()
   const attachments = usePromptInputAttachments()
   const value = controller.textInput.value
-  const commands = useReferenceCommands()
+  const commands = useReferenceCommands(undefined, { servers })
 
   const open = value.startsWith("@") && !value.slice(1).includes(" ")
   const query = open ? normalizeText(value.slice(1)) : ""
