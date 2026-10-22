@@ -257,6 +257,9 @@
       "ls": "Listing",
       "glob": "Searching files",
       "grep": "Searching",
+      "code_search": "Searching code",
+      "code_outline": "Outlining",
+      "code_refs": "Tracing uses",
       "bash": "Running",
       "websearch": "Searching",
       "webfetch": "Reading page"

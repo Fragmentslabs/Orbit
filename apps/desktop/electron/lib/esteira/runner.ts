@@ -17,6 +17,7 @@ import {
   createReadTool,
   createWriteTool,
 } from '../tools/files'
+import { createCodeTools } from '../tools/code'
 import { createPanelBrowserTools } from '../tools/panel-browser'
 import { createBrowserScriptTools } from '../tools/browser-script'
 import { createChatMemoryTools } from '../tools/memory'
@@ -106,6 +107,7 @@ function montarTools(ctx: ContextoFase, toolCtx: ToolContext, registrarComando: 
   tools.ls = createListTool(toolCtx)
   tools.glob = createGlobTool(toolCtx)
   tools.grep = createGrepTool(toolCtx)
+  Object.assign(tools, createCodeTools(toolCtx))
   tools.verify_changes = createVerifyChangesTool(toolCtx)
 
   if (permitidas.has('edit')) {
@@ -384,6 +386,12 @@ function resumirTool(tool: string, input: unknown): string {
     case 'glob':
     case 'grep':
       return curto(args.pattern)
+    case 'code_search':
+      return curto(args.query)
+    case 'code_outline':
+      return curto(args.filePath ?? args.path ?? 'mapa do projeto')
+    case 'code_refs':
+      return curto(args.symbol)
     case 'ls':
       return curto(args.dirPath)
     case 'panel_navigate':

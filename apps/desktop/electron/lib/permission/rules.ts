@@ -163,6 +163,12 @@ const NATIVE_TOOLS = new Set([
   // toda chamada — o que fazia o modelo pular a verificação.
   'verify_changes',
   'session_context',
+  // Índice de código (code-index): leitura pura do projeto, mesmo threat model
+  // do read/grep — que nunca pediram. Cairiam no catch-all de MCP se houvesse
+  // um servidor chamado "code".
+  'code_search',
+  'code_outline',
+  'code_refs',
   // Conexões MCP (mcp_connect/mcp_update/mcp_servers): só PROPÕEM — a conexão
   // passa a existir quando o usuário aceita no card da conversa, e é o card
   // que grava. Sem entrar nesta lista elas caíam no catch-all de MCP como se

@@ -26,6 +26,7 @@ import { readJson, writeJson } from './storage'
 import { createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from './tools/files'
+import { createCodeTools } from './tools/code'
 import { createQuestionTool } from './tools/question'
 import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/workers'
 import type { ToolContext } from './tools/context'
@@ -380,6 +381,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     planTools.ls = capReadTool(createListTool(planCtx))
     planTools.glob = capReadTool(createGlobTool(planCtx))
     planTools.grep = capReadTool(createGrepTool(planCtx))
+    // Índice de código: com só 8 leituras de orçamento, o mapa do projeto e a
+    // busca por símbolo rendem muito mais por chamada do que ls/read.
+    for (const [name, codeTool] of Object.entries(createCodeTools(planCtx))) planTools[name] = capReadTool(codeTool)
     // Delegar pesquisa a outro modelo é o que o modo Subagentes controla no
     // resto do app (allowDelegation em tools/index) — a orquestração era a
     // única exceção. Agora segue a mesma regra.
@@ -399,7 +403,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         : 'The user enabled no optional modes: workers get the working folder and nothing else. Do not request research, browser, vision or subagents.',
       ceiling.subagents
         ? 'You also have the subagent tool for research while planning (3 calls max).'
-        : 'You do NOT have subagents: research the project yourself with read/ls/glob/grep before splitting.',
+        : 'You do NOT have subagents: research the project yourself before splitting — code_outline (no filePath) for the project map and code_search to find code, then read/grep for details.',
     ].join('\n') + workersNotice
     const provider = await getProvider(primary.providerId)
     const baseMessages = normalizeMessages(

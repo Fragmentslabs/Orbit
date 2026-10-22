@@ -32,6 +32,9 @@ function useActionLabels(): Record<string, string> {
     ls: t("chat.actions.ls"),
     glob: t("chat.actions.glob"),
     grep: t("chat.actions.grep"),
+    code_search: t("chat.actions.code_search"),
+    code_outline: t("chat.actions.code_outline"),
+    code_refs: t("chat.actions.code_refs"),
     bash: t("chat.actions.bash"),
     websearch: t("chat.actions.websearch"),
     webfetch: t("chat.actions.webfetch"),
@@ -42,7 +45,7 @@ function useActionLabels(): Record<string, string> {
 export function toolChip(part: ToolPart): string | undefined {
   const input = part.input ?? {}
   const candidate =
-    input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
+    input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.symbol ?? input.url ?? input.command
   if (typeof candidate !== "string" || !candidate) return undefined
   const isPath = typeof input.filePath === "string" || typeof input.dirPath === "string"
   return isPath ? candidate.split(/[\\/]/).pop() : candidate

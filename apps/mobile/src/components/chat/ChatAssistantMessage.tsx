@@ -296,7 +296,7 @@ const MAX_VISIBLE_TOOLS = 5
 
 function toolChip(part: ToolPart): string | undefined {
   const input = part.input ?? {}
-  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
+  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.symbol ?? input.url ?? input.command
   if (typeof candidate !== 'string' || !candidate) return undefined
   const isPath = typeof input.filePath === 'string' || typeof input.dirPath === 'string'
   return isPath ? candidate.split(/[\\/]/).pop() : candidate

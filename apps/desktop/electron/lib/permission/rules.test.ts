@@ -5,7 +5,7 @@ vi.mock('../storage', () => ({ dataDir: () => '/tmp/orbit-rules-test-inexistente
 // Os nomes de servidor MCP vêm da configuração (../mcp). Aqui, um servidor de
 // mentira: o que se testa é a REGRA, não o cadastro — e o cadastro real ainda
 // faria o teste depender da máquina de quem roda.
-vi.mock('../mcp', () => ({ isMcpServerName: (name: string) => name === 'Nodara' }))
+vi.mock('../mcp', () => ({ isMcpServerName: (name: string) => name === 'Nodara' || name === 'code' }))
 
 const { assess } = await import('./rules')
 
@@ -30,6 +30,12 @@ describe('assess — nativas x MCP', () => {
     // Buscar imagem em acervo aberto e importar a escolhida.
     expect(assess('image_search', { query: 'lion' }, null)).toBeNull()
     expect(assess('image_import', { ids: ['wc:1'] }, null)).toBeNull()
+  })
+
+  it('as tools do índice de código são nativas: não pedem nem com servidor MCP homônimo', () => {
+    expect(assess('code_search', { query: 'retry' }, null)).toBeNull()
+    expect(assess('code_outline', {}, null)).toBeNull()
+    expect(assess('code_refs', { symbol: 'buildToolSet', depth: 3 }, null)).toBeNull()
   })
 
   it('uma tool de servidor MCP de verdade continua pedindo', () => {

@@ -789,6 +789,9 @@
       "ls": "Listando",
       "glob": "Buscando arquivos",
       "grep": "Procurando",
+      "code_search": "Buscando no código",
+      "code_outline": "Mapeando",
+      "code_refs": "Rastreando usos",
       "bash": "Executando",
       "websearch": "Pesquisando",
       "webfetch": "Lendo página"

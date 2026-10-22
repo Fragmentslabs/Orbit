@@ -72,7 +72,7 @@ const MAX_KEPT_INPUT_STRING = 400
  * segundo `git status` não invalida o primeiro como registro do que houve) e
  * `write`/`edit` têm efeito colateral.
  */
-const IDEMPOTENT_TOOLS = new Set(['read', 'ls', 'glob', 'grep'])
+const IDEMPOTENT_TOOLS = new Set(['read', 'ls', 'glob', 'grep', 'code_search', 'code_outline', 'code_refs'])
 
 /** Prefixo do texto que substitui um resultado descartado — serve de sentinela
  *  para não reprocessar, step após step, o que já foi cortado. */
