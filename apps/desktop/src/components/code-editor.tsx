@@ -29,7 +29,7 @@ import {
   syntaxTree,
 } from "@codemirror/language"
 import { languages } from "@codemirror/language-data"
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
+import { highlightSelectionMatches } from "@codemirror/search"
 import { linter, lintGutter, type Diagnostic } from "@codemirror/lint"
 import { useTheme } from "@/components/theme-provider"
 import { darkHighlightStyle, editorChrome, lightHighlightStyle } from "@/src/lib/code-editor-theme"
@@ -40,6 +40,7 @@ import {
   syntaxDiagnostics,
 } from "@/src/lib/code-diagnostics"
 import { lintApi } from "@/src/lib/ipc"
+import { applyCase, buildMatcher, replaceInText } from "@/src/lib/text-match"
 
 /**
  * Visualizador/editor do painel de arquivos.
@@ -139,6 +140,81 @@ const elementHighlightTheme = EditorView.baseTheme({
   },
 })
 
+const setFindQuery = StateEffect.define<{
+  query: string
+  options: SearchReplaceOptions
+} | null>()
+
+/**
+ * Consulta da busca do painel, para grifar as ocorrências DENTRO do arquivo.
+ *
+ * Não dá para reusar o realçador do `@codemirror/search`: ele devolve
+ * `Decoration.none` enquanto o painel dele está fechado — e aqui ele nunca
+ * abre, porque quem manda a consulta é o campo da direita.
+ */
+const findQuery = StateField.define<{
+  query: string
+  options: SearchReplaceOptions
+} | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setFindQuery)) value = effect.value
+    }
+    return value
+  },
+})
+
+const findMatchMark = Decoration.mark({ class: "cm-findMatch" })
+
+/** Teto de marcas: um `.*` num arquivo grande viraria uma por caractere. */
+const FIND_MATCH_LIMIT = 2000
+
+/**
+ * Intervalos de casamento no texto, com teto.
+ *
+ * É o mesmo passo para as duas pontas: o que o campo grifa e o que o "próximo"
+ * percorre. Separado assim, é impossível as duas contarem diferente.
+ */
+function collectMatches(
+  text: string,
+  matcher: RegExp,
+  limit: number,
+): { from: number; to: number }[] {
+  const ranges: { from: number; to: number }[] = []
+  let match: RegExpExecArray | null
+  while ((match = matcher.exec(text)) !== null && ranges.length < limit) {
+    if (match[0].length === 0) {
+      // Casamento vazio (regex do tipo `a*`) não avança sozinho: sem isso o
+      // laço não termina.
+      matcher.lastIndex += 1
+      continue
+    }
+    ranges.push({ from: match.index, to: match.index + match[0].length })
+  }
+  return ranges
+}
+
+const findMatches = EditorView.decorations.compute(
+  [findQuery, "doc"],
+  (state) => {
+    const search = state.field(findQuery)
+    if (!search || search.query === "") return Decoration.none
+    const matcher = buildMatcher(search.query, search.options)
+    if (!matcher) return Decoration.none
+    const ranges = collectMatches(
+      state.doc.toString(),
+      matcher,
+      FIND_MATCH_LIMIT,
+    )
+    if (ranges.length === 0) return Decoration.none
+    return Decoration.set(
+      ranges.map((range) => findMatchMark.range(range.from, range.to)),
+      true,
+    )
+  },
+)
+
 /** Erro de estrutura sai da árvore que já existe: dá para ser quase imediato. */
 const SYNTAX_LINT_DELAY_MS = 300
 /** O eslint atravessa IPC e roda numa worker; não vale correr atrás de cada tecla. */
@@ -191,6 +267,10 @@ function baseExtensions(): Extension[] {
     highlightActiveLine(),
     highlightSpecialChars(),
     highlightSelectionMatches(),
+    // Sem `search()`/`searchKeymap`: a barra de busca do arquivo é nossa
+    // (`FileFindBar`), com a mesma gramática do campo do painel direito. O
+    // painel da lib abria com rótulos em inglês e caixas brancas — corpo
+    // estranho no meio do app.
     drawSelection(),
     rectangularSelection(),
     crosshairCursor(),
@@ -200,6 +280,8 @@ function baseExtensions(): Extension[] {
     agentHighlightTheme,
     elementHighlight,
     elementHighlightTheme,
+    findQuery,
+    findMatches,
     lintGutter(),
     // Alt+clique para cursor extra sai daqui: o padrão do
     // `clickAddsSelectionRange` já é `altKey`, mas sem isto o segundo cursor
@@ -278,12 +360,64 @@ export interface AgentWriteOutcome {
   content: string
 }
 
+export interface SearchReplaceOptions {
+  caseSensitive?: boolean
+  regex?: boolean
+  wholeWord?: boolean
+  preserveCase?: boolean
+}
+
 export interface CodeEditorHandle {
   /** Funde a escrita do agente no buffer. Ver `planMerge` para os critérios. */
   applyAgentWrite: (write: AgentWrite) => AgentWriteOutcome
   getContent: () => string
   /** Realça e rola até o elemento do caminho (filhos-elemento do <body>); `null` limpa. */
   revealElement: (path: number[] | null) => void
+  /**
+   * Substitui no BUFFER, nunca no disco.
+   *
+   * É o caminho do "substituir neste arquivo": a troca entra como uma edição
+   * comum — desfaz com Mod+Z, marca o rascunho e o salvamento automático a
+   * grava. Escrever no disco por baixo do buffer apagaria o que ainda não foi
+   * salvo, que é exatamente o trabalho que ninguém quer perder.
+   */
+  replaceAll: (
+    query: string,
+    replacement: string,
+    options?: SearchReplaceOptions,
+  ) => number
+  /**
+   * Leva a vista até a linha e a deixa selecionada — sem isso, clicar numa
+   * ocorrência da busca abriria o arquivo sempre no topo, e a linha que o
+   * usuário clicou ficaria escondida.
+   */
+  scrollToLine: (line: number) => void
+  /**
+   * Grifa as ocorrências da busca do painel DENTRO do arquivo aberto. O campo
+   * da direita deixa de ser só uma lista: ele aponta no texto o que está
+   * listando. Consulta vazia limpa o grifo.
+   */
+  highlightQuery: (query: string, options?: SearchReplaceOptions) => void
+  /**
+   * Anda até a próxima ocorrência e a seleciona, rolando até ela. `start` é o
+   * primeiro salto (consulta nova, a partir do cursor); `next`/`prev` dão a
+   * volta no fim do arquivo. Devolve a posição para a barra mostrar "3 de 12".
+   */
+  find: (
+    query: string,
+    options: SearchReplaceOptions,
+    direction: "start" | "next" | "prev",
+  ) => { total: number; index: number }
+  /**
+   * Troca SÓ a ocorrência selecionada — o "substituir" da barra do arquivo.
+   * Devolve `false` quando a seleção não é um casamento (o usuário mexeu no
+   * texto entre o salto e o clique), e aí nada é escrito.
+   */
+  replaceMatch: (
+    query: string,
+    replacement: string,
+    options: SearchReplaceOptions,
+  ) => boolean
 }
 
 export interface CodeEditorProps {
@@ -300,6 +434,8 @@ export interface CodeEditorProps {
   onDirtyChange?: (dirty: boolean) => void
   /** Cada tecla digitada — usado pelo salvamento automático. */
   onChange?: (content: string) => void
+  /** Cmd+F: o dono do editor abre a barra de busca dele. */
+  onRequestFind?: () => void
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
@@ -312,6 +448,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     onSave,
     onDirtyChange,
     onChange,
+    onRequestFind,
   },
   ref,
 ) {
@@ -329,8 +466,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
    * Callbacks por ref: entram no keymap e no updateListener, que são montados
    * uma vez. Sem isso, cada re-render do pai exigiria recriar o editor.
    */
-  const callbacks = useRef({ onSave, onDirtyChange, onChange })
-  callbacks.current = { onSave, onDirtyChange, onChange }
+  const callbacks = useRef({ onSave, onDirtyChange, onChange, onRequestFind })
+  callbacks.current = { onSave, onDirtyChange, onChange, onRequestFind }
 
   /**
    * Um jogo de compartments POR INSTÂNCIA. Trocar linguagem, tema ou quebra de
@@ -406,8 +543,18 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
                 return true
               },
             },
+            {
+              // Quem abre a busca é o dono do editor: a barra vive ao lado
+              // dele, com o estado que sobrevive à troca de arquivo.
+              key: "Mod-f",
+              preventDefault: true,
+              run: () => {
+                callbacks.current.onRequestFind?.()
+                return true
+              },
+            },
           ]),
-          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return
             const text = update.state.doc.toString()
@@ -512,6 +659,108 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       revealElement: (path) => {
         revealPath.current = path
         applyReveal(true)
+      },
+      replaceAll: (query, replacement, options = {}) => {
+        const instance = view.current
+        if (!instance || query === "") return 0
+        const before = instance.state.doc.toString()
+        // As mesmas regras da lista de ocorrências (palavra inteira, caixa,
+        // preservar formato): a prévia só é honesta se a tecla fizer o mesmo.
+        const { text: after, count } = replaceInText(
+          before,
+          query,
+          replacement,
+          options,
+        )
+        if (count === 0) return 0
+        // Uma transação só: a substituição inteira é UM passo de desfazer.
+        instance.dispatch({ changes: { from: 0, to: before.length, insert: after } })
+        return count
+      },
+      scrollToLine: (line) => {
+        const instance = view.current
+        if (!instance) return
+        // O documento pode ter encolhido desde a busca (substituição em massa):
+        // a linha vem de um resultado antigo e precisa caber no que existe hoje.
+        const target = instance.state.doc.line(
+          Math.min(Math.max(1, line), instance.state.doc.lines),
+        )
+        instance.dispatch({
+          selection: { anchor: target.from, head: target.to },
+          effects: EditorView.scrollIntoView(target.from, { y: "center" }),
+        })
+        instance.focus()
+      },
+      /**
+       * Grifa pela consulta da busca do painel: mesmas opções (caixa, palavra
+       * inteira, regex) e uma decoração própria, porque o realçador do
+       * `@codemirror/search` só pinta com o painel dele aberto.
+       */
+      highlightQuery: (query, options = {}) => {
+        const instance = view.current
+        if (!instance) return
+        instance.dispatch({
+          effects: setFindQuery.of(query === "" ? null : { query, options }),
+        })
+      },
+      find: (query, options, direction) => {
+        const instance = view.current
+        if (!instance || query === "") return { total: 0, index: 0 }
+        const matcher = buildMatcher(query, options)
+        if (!matcher) return { total: 0, index: 0 }
+        const matches = collectMatches(
+          instance.state.doc.toString(),
+          matcher,
+          FIND_MATCH_LIMIT,
+        )
+        if (matches.length === 0) return { total: 0, index: 0 }
+        const selection = instance.state.selection.main
+        let index = -1
+        if (direction === "prev") {
+          for (let i = matches.length - 1; i >= 0; i -= 1) {
+            if (matches[i].to <= selection.from) {
+              index = i
+              break
+            }
+          }
+          // Do começo do arquivo, "anterior" dá a volta: o fim é o anterior
+          // de quem está no topo.
+          if (index === -1) index = matches.length - 1
+        } else {
+          const after = direction === "next" ? selection.to : selection.from
+          index = matches.findIndex((match) => match.from >= after)
+          if (index === -1) index = 0
+        }
+        const range = matches[index]
+        instance.dispatch({
+          selection: { anchor: range.from, head: range.to },
+          effects: EditorView.scrollIntoView(range.from, { y: "center" }),
+        })
+        return { total: matches.length, index: index + 1 }
+      },
+      replaceMatch: (query, replacement, options) => {
+        const instance = view.current
+        if (!instance || query === "") return false
+        const selection = instance.state.selection.main
+        if (selection.empty) return false
+        const selected = instance.state.sliceDoc(selection.from, selection.to)
+        const matcher = buildMatcher(query, options)
+        if (!matcher) return false
+        // A seleção tem de ser EXATAMENTE um casamento: entre o salto e o
+        // clique o texto pode ter mudado, e trocar o que está selecionado sem
+        // conferir comeria um trecho que ninguém pediu.
+        const exact = new RegExp(
+          "^(?:" + matcher.source + ")$",
+          matcher.flags.replace("g", ""),
+        )
+        if (!exact.test(selected)) return false
+        const insert = options.preserveCase
+          ? applyCase(selected, replacement)
+          : replacement
+        instance.dispatch({
+          changes: { from: selection.from, to: selection.to, insert },
+        })
+        return true
       },
       applyAgentWrite: (write) => {
         const instance = view.current

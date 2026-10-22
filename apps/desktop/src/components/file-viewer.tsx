@@ -32,7 +32,12 @@ import {
   SaveIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CodeEditor, type CodeEditorHandle } from "@/src/components/code-editor";
+import {
+  CodeEditor,
+  type CodeEditorHandle,
+  type SearchReplaceOptions,
+} from "@/src/components/code-editor";
+import { FileFindBar } from "@/src/components/file-find-bar";
 import { agentWriteFromTool } from "@/src/lib/agent-merge";
 import { chatApi, fsApi } from "@/src/lib/ipc";
 import { parsePatch } from "@/lib/unified-diff";
@@ -90,6 +95,30 @@ export interface FileViewerProps {
   onLensChange: (lens: ViewerLens) => void;
   /** Alterna a visibilidade do navegador de arquivos (botão do cabeçalho). */
   onToggleBrowser: () => void;
+  /**
+   * Entrega ao pai a função que substitui no buffer aberto — e `null` quando
+   * não há editor (lente de diff, imagem, arquivo fechado). Passar pelo
+   * editor, e não pelo disco, é o que preserva rascunho não salvo.
+   */
+  onRegisterReplaceInFile?: (
+    fn:
+      | ((query: string, replacement: string, options: SearchReplaceOptions) => number)
+      | null,
+  ) => void;
+  /** Linha para onde rolar assim que o arquivo terminar de carregar. */
+  revealLine?: { line: number; nonce: number };
+  /**
+   * A consulta da busca do índice, para grifar as ocorrências dentro do
+   * arquivo aberto. Vazio limpa. O painel da direita deixa de ser só uma
+   * lista: ele aponta no texto o que está listando.
+   */
+  searchHighlight?: { query: string; options: SearchReplaceOptions } | null;
+  /**
+   * Cresce quando o arquivo mudou EM DISCO por fora do editor — é o que a
+   * substituição em massa faz. O rascunho manda: com edição pendente o
+   * recarregamento não acontece, para não apagar o que ainda não foi salvo.
+   */
+  reloadToken?: number;
 }
 
 /**
@@ -124,6 +153,10 @@ export function FileViewer({
   onDirtyChange,
   onLensChange,
   onToggleBrowser,
+  onRegisterReplaceInFile,
+  revealLine,
+  reloadToken,
+  searchHighlight,
 }: FileViewerProps) {
   const { t } = useTranslation();
 
@@ -145,6 +178,8 @@ export function FileViewer({
   );
   const [copied, setCopied] = useState(false);
   const [mdMode, setMdMode] = useState<"source" | "preview">("preview");
+  /** Cmd+F: a barra de busca do arquivo aberto. */
+  const [findOpen, setFindOpen] = useState(false);
   /** Patch da lente de diff — o único dado que ela carrega do git. */
   const [patch, setPatch] = useState<string | null>(null);
   // Abrir direto no diff (é o que a lista de alterações pede) já nasce
@@ -159,6 +194,12 @@ export function FileViewer({
   const editorRef = useRef<CodeEditorHandle>(null);
   const autoSaveTimer = useRef<number>();
   const copyTimeoutRef = useRef<number>();
+  /** Espelho de "há rascunho": efeitos que não podem depender do estado leem daqui. */
+  const dirtyNow = useRef(false);
+  dirtyNow.current = dirty;
+  /** Último token de reload já aplicado — separa "abriu outro arquivo" de
+   *  "o mesmo arquivo mudou no disco". */
+  const appliedReload = useRef(reloadToken);
 
   /**
    * `repoRoot`, `t` e `onDirtyChange` entram por ref dentro dos efeitos: são
@@ -193,6 +234,11 @@ export function FileViewer({
 
   useEffect(() => {
     if (!file) return;
+    const externalReload = appliedReload.current !== reloadToken;
+    appliedReload.current = reloadToken;
+    // Escrita por fora (substituição em massa) com rascunho pendente: o texto
+    // na tela ganha, senão recarregar apagaria o que ainda não foi salvo.
+    if (externalReload && dirtyNow.current) return;
     let cancelled = false;
     resetEditorState();
     onDirtyChangeRef.current(false);
@@ -278,7 +324,35 @@ export function FileViewer({
     return () => {
       cancelled = true;
     };
-  }, [file, resetEditorState]);
+  }, [file, resetEditorState, reloadToken]);
+
+  /**
+   * Rolar até a linha pedida pela busca do índice. Espera o conteúdo: com o
+   * editor ainda vazio o documento não tem a linha para onde ir.
+   */
+  useEffect(() => {
+    if (!revealLine || content == null) return;
+    editorRef.current?.scrollToLine(revealLine.line);
+  }, [revealLine, content]);
+
+  // Trocar de arquivo fecha a barra: a consulta de um não vale no outro, e
+  // deixá-la aberta com "0/0" pareceria um arquivo sem a palavra procurada.
+  useEffect(() => {
+    setFindOpen(false);
+  }, [file?.path]);
+
+  /**
+   * O grifo da busca acompanha a consulta, e precisa ser reaplicado quando o
+   * conteúdo chega — o editor nasce vazio a cada arquivo, e um grifo aplicado
+   * antes disso não teria texto onde cair.
+   */
+  useEffect(() => {
+    if (content == null) return;
+    editorRef.current?.highlightQuery(
+      searchHighlight?.query ?? "",
+      searchHighlight?.options,
+    );
+  }, [searchHighlight, content]);
 
   const isMarkdownFile = file ? /(?:\.md|\.markdown)$/i.test(file.path) : false;
   const isImage = file ? isImageFile(file.path) : false;
@@ -331,6 +405,32 @@ export function FileViewer({
     image == null &&
     content != null &&
     !(isMarkdownFile && mdMode === "preview");
+
+  /**
+   * ⌘F com o foco FORA do editor — na árvore, logo depois de abrir o arquivo —
+   * não chega ao keymap do CodeMirror, e é exatamente aí que a tecla é
+   * apertada. Aqui ela é capturada na janela; com o foco no editor, o keymap
+   * dele já marcou `defaultPrevented` e este handler se cala.
+   */
+  useEffect(() => {
+    function onFind(event: KeyboardEvent) {
+      if (event.defaultPrevented || !showsEditor) return;
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return;
+      if (event.code !== "KeyF") return;
+      // Campo de texto fora do editor (composer, busca do painel) manda em si.
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest("input, textarea, [contenteditable='true']") &&
+        !target.closest(".cm-editor")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setFindOpen(true);
+    }
+    window.addEventListener("keydown", onFind);
+    return () => window.removeEventListener("keydown", onFind);
+  }, [showsEditor]);
 
   /**
    * Só arquivo do working tree é editável: o de um commit é histórico, e o
@@ -579,6 +679,19 @@ export function FileViewer({
 
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), []);
 
+  /**
+   * Publica a substituição no buffer para quem está fora: a busca do painel
+   * direito troca o texto sem tocar no disco. Sem editor (lente de diff,
+   * imagem, nenhum arquivo) o registro vira `null` e a UI desabilita o botão.
+   */
+  useEffect(() => {
+    if (!onRegisterReplaceInFile) return;
+    onRegisterReplaceInFile((query, replacement, options) =>
+      editorRef.current?.replaceAll(query, replacement, options) ?? 0,
+    );
+    return () => onRegisterReplaceInFile(null);
+  }, [onRegisterReplaceInFile]);
+
   return (
     <Artifact className="h-full min-w-0 rounded-none border-0 bg-sidebar mt-2">
       <ArtifactHeader className="min-w-0 bg-sidebar">
@@ -776,6 +889,12 @@ export function FileViewer({
               )}
             </div>
           )}
+          {/* A barra fica FORA do scroller: o editor rola por dentro dele, e
+              uma busca que rola junto com o código sai da tela justo quando
+              você está procurando. */}
+          {findOpen && showsEditor && (
+            <FileFindBar editor={editorRef} onClose={() => setFindOpen(false)} />
+          )}
           <ArtifactContent
             className={cn(
               "min-h-0 min-w-0 flex-1 p-0",
@@ -826,6 +945,7 @@ export function FileViewer({
                   onSave={saveFile}
                   onDirtyChange={handleEditorDirty}
                   onChange={handleEditorChange}
+                  onRequestFind={() => setFindOpen(true)}
                 />
               )
             ) : null}

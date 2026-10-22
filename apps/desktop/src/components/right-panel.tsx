@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
@@ -28,6 +28,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
 import { useTerminalStore } from "@/src/stores/terminal-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
+import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store"
 import { cn } from "@/lib/utils"
 
 interface TabMeta {
@@ -548,6 +549,10 @@ export function RightPanel() {
   const addTabToStore = usePanelStore((s) => s.addTab)
   const removeTabFromStore = usePanelStore((s) => s.removeTab)
   const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
+  const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
+  const pendingFile = useWorkspaceSearchStore((s) => s.pending)
+  /** Último pedido da paleta já atendido — o nonce evita repetir a abertura. */
+  const handledFileRequest = useRef(0)
   const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
   const dndContext = useDndContext()
   const isDragging = dndContext.active !== null
@@ -628,6 +633,22 @@ export function RightPanel() {
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
   }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
+
+  /**
+   * A paleta (⌘P) pediu um arquivo. Aqui só se prepara o LUGAR: abrir o painel,
+   * garantir uma aba de arquivos e ativá-la. O arquivo em si quem abre é a
+   * FoldersTab, que escuta o mesmo pedido — este efeito não sabe lidar com o
+   * visualizador, e não precisa.
+   */
+  useEffect(() => {
+    if (!pendingFile || handledFileRequest.current === pendingFile.nonce) return
+    handledFileRequest.current = pendingFile.nonce
+    if (folders.length === 0) return
+    setRightPanelOpen(true)
+    const existing = tabs.find((tab) => tab.type === "folders")
+    if (existing) setActiveTabInStore(sessionKey, existing.id)
+    else void addTab("folders")
+  }, [pendingFile, folders.length, tabs, sessionKey, setActiveTabInStore, setRightPanelOpen, addTab])
 
   const removeTab = useCallback((id: string) => {
     const sk = activeSessionId ?? ORPHAN_KEY

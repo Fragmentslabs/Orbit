@@ -28,6 +28,8 @@ import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/brow
 import { TitleBar } from "@/src/components/titlebar"
 import { SettingsDialogHost } from "@/src/components/settings-dialog"
 import { RotationDialogHost } from "@/src/components/models/rotation-dialog"
+import { WorkspaceSearchDialog } from "@/src/components/workspace-search-dialog"
+import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { LinkRouter } from "@/src/components/link-router"
@@ -66,6 +68,7 @@ function Layout() {
   const [mode, setModeState] = useState<SidebarMode>(loadMode)
   const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
+  const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
   // Modo corrente para o handler de eventos do main: ele é registrado UMA vez e
@@ -192,6 +195,16 @@ function Layout() {
   useEffect(() => {
     if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
   }, [workspaceMode, setRightPanelOpen])
+
+  /**
+   * A paleta (⌘P) pode pedir um arquivo com o painel FECHADO — e aí o RightPanel
+   * não está montado (ele vive sob `rightPanelOpen`), então o efeito que abriria
+   * o painel estaria dentro do componente que não existe. Abrir o painel é do
+   * App; garantir a aba é do RightPanel, que passa a existir logo depois.
+   */
+  useEffect(() => {
+    if (pendingFile) setRightPanelOpen(true)
+  }, [pendingFile, setRightPanelOpen])
 
   const handleHoverShow = useCallback(() => {
     clearTimeout(showTimer.current)
@@ -383,6 +396,14 @@ function App() {
         e.preventDefault()
         setSearchOpen((v) => !v)
       }
+      // ⌘P procura no código de qualquer aba: a paleta existe para trazer o que
+      // não está à vista, então amarrá-la à aba de arquivos faria o atalho
+      // calar justamente quando ele é mais útil. Quem abre a aba é o painel,
+      // ao receber o pedido do resultado.
+      if (e.code === "KeyP" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault()
+        useWorkspaceSearchStore.getState().toggle()
+      }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -395,6 +416,7 @@ function App() {
           <div className="flex h-svh flex-col overflow-hidden">
             <TitleBar onSearchOpen={() => setSearchOpen(true)} />
             <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
+            <WorkspaceSearchDialog />
             <SettingsDialogHost />
             <LinkRouter />
             <RotationDialogHost />

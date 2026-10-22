@@ -46,6 +46,13 @@ import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog, ensureCustomProvidersSeeded, onCatalogRefreshed } from './lib/catalog'
 import { checkWritePath } from './lib/file-write-guard'
+import {
+  invalidateIndex,
+  matchNames,
+  replaceInFiles,
+  searchText,
+  workspaceIndex,
+} from './lib/workspace-search'
 import { recordManualSave } from './lib/manual-saves'
 import { lintFile, stopLintWorkers } from './lib/eslint-service'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
@@ -726,30 +733,11 @@ function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
 }
 
 /**
- * Pastas que a busca RECURSIVA não atravessa — por custo, não por segredo.
- * Descer em node_modules é varrer centenas de milhares de arquivos, e a paleta
- * travaria em qualquer projeto JS; o .git são milhares de objetos internos que
- * ninguém procura pelo nome. Na árvore elas aparecem normalmente: lá cada pasta
- * só é lida quando alguém a abre.
+ * A lista do que uma varredura recursiva atravessa vive em `workspace-search`:
+ * é o MESMO filtro que a busca do painel, a paleta do `@` e a varredura de
+ * texto usam. Duas listas divergiriam, e a que ficasse para trás varreria
+ * node_modules ou esconderia o código atrás de `.whisper-build`.
  */
-const RECURSION_SKIPPED_DIRS = new Set([
-  'node_modules',
-  '.git',
-  // Pastas com ponto que o filtro antigo ("esconder o que começa com ponto")
-  // pulava por tabela, e que são tão pesadas quanto node_modules: ambientes
-  // virtuais do Python, saídas de build e caches de ferramentas.
-  '.venv',
-  '.next',
-  '.nuxt',
-  '.svelte-kit',
-  '.turbo',
-  '.cache',
-  '.parcel-cache',
-  '.gradle',
-  '.expo',
-  '.pytest_cache',
-  '.mypy_cache',
-])
 
 interface DirEntryInfo {
   name: string
@@ -796,22 +784,6 @@ async function readTextFile(
   } catch (err) {
     return { error: (err as Error).message }
   }
-}
-
-async function listFilesRecursive(dirPath: string, prefix = ''): Promise<string[]> {
-  const entries = await fs.readdir(dirPath, { withFileTypes: true })
-  const results: string[] = []
-  for (const entry of entries) {
-    if (entry.isDirectory() && RECURSION_SKIPPED_DIRS.has(entry.name)) continue
-    const fullPath = path.join(dirPath, entry.name)
-    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
-    if (entry.isDirectory()) {
-      results.push(...await listFilesRecursive(fullPath, relPath))
-    } else {
-      results.push(relPath)
-    }
-  }
-  return results
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -1567,12 +1539,124 @@ app.whenReady().then(() => {
 
   ipcMain.handle('fs:listFilesRecursive', async (_event, dirPath: string) => {
     try {
-      const files = await listFilesRecursive(dirPath)
-      return { ok: true, files }
+      // O índice compartilhado: mesmo ignore da busca, já ordenado e em cache.
+      const index = await workspaceIndex(dirPath)
+      return { ok: true, files: index.files }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  // ---- Busca do espaço de trabalho: painel, modal e paleta do `@` ----------
+  /** Varreduras de texto vivas, por id de requisição — o que o cancelar aborta. */
+  const textSearches = new Map<string, AbortController>()
+
+  ipcMain.handle(
+    'ws:names',
+    async (_event, input: { root: string; query: string; refresh?: boolean }) => {
+      try {
+        const index = await workspaceIndex(input.root, { refresh: input.refresh })
+        return {
+          ok: true as const,
+          hits: matchNames(index.files, input.query),
+          total: index.files.length,
+          truncated: index.truncated,
+        }
+      } catch (err) {
+        return { ok: false as const, error: (err as Error).message }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'ws:text',
+    async (
+      _event,
+      input: {
+        id: string
+        root: string
+        query: string
+        caseSensitive?: boolean
+        regex?: boolean
+        wholeWord?: boolean
+      },
+    ) => {
+      // Pedido novo no mesmo campo mata o anterior: o que o usuário já
+      // abandonou não pode continuar lendo disco e ocupando a fila.
+      textSearches.get(input.id)?.abort()
+      const controller = new AbortController()
+      textSearches.set(input.id, controller)
+      try {
+        const index = await workspaceIndex(input.root)
+        const result = await searchText(
+          input.root,
+          index.files,
+          input.query,
+          {
+            caseSensitive: input.caseSensitive,
+            regex: input.regex,
+            wholeWord: input.wholeWord,
+          },
+          controller.signal,
+        )
+        return { ok: true as const, ...result }
+      } catch (err) {
+        return { ok: false as const, error: (err as Error).message }
+      } finally {
+        if (textSearches.get(input.id) === controller) textSearches.delete(input.id)
+      }
+    },
+  )
+
+  ipcMain.handle('ws:cancel', (_event, id: string) => {
+    textSearches.get(id)?.abort()
+    textSearches.delete(id)
+    return true
+  })
+
+  /**
+   * Substituição em massa. Os alvos vêm da lista de ocorrências, então o
+   * escopo (o espaço, a pasta) é decisão da UI; aqui só se grava, com a MESMA
+   * guarda de caminho do `fs:writeFile` — inclusive a recusa de `.git`.
+   */
+  ipcMain.handle(
+    'ws:replace',
+    async (
+      _event,
+      input: {
+        root: string
+        targets: string[]
+        query: string
+        replacement: string
+        caseSensitive?: boolean
+        regex?: boolean
+        wholeWord?: boolean
+        preserveCase?: boolean
+      },
+    ) => {
+      const result = await replaceInFiles(
+        input.root,
+        input.targets,
+        input.query,
+        input.replacement,
+        {
+          caseSensitive: input.caseSensitive,
+          regex: input.regex,
+          wholeWord: input.wholeWord,
+          preserveCase: input.preserveCase,
+        },
+        (absolute) => {
+          const verdict = checkWritePath(absolute, [input.root])
+          return verdict.ok
+            ? { ok: true as const }
+            : { ok: false as const, reason: verdict.reason }
+        },
+      )
+      for (const file of result.written) recordManualSave(file)
+      invalidateIndex(input.root)
+      return { ok: true as const, ...result }
+    },
+  )
 
   // Stat de caminho (ex.: validar pasta solta por drag & drop)
   ipcMain.handle('fs:stat', async (_event, filePath: string) => {

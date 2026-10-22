@@ -106,6 +106,8 @@ import {
   type ViewerLens,
 } from "@/src/lib/folders";
 import { useGitRepos } from "@/src/lib/use-git-repos";
+import type { WsMatchOptions } from "@/src/lib/ipc";
+import { WorkspaceSearch } from "@/src/components/workspace-search";
 
 /** Modo do par de painéis — o mesmo da aba selecionada à direita. */
 export type BrowserTab = "files" | "changes" | "commits";
@@ -138,6 +140,26 @@ export interface FileBrowserProps {
     deleted: boolean,
     lens: ViewerLens,
   ) => void;
+  /**
+   * A consulta da busca também grifa o arquivo aberto no visualizador. Vem de
+   * fora porque o grifo mora no editor, do outro lado do split. Consulta vazia
+   * limpa.
+   *
+   * Substituir no arquivo aberto NÃO fica aqui: a lista do painel é o espaço
+   * inteiro, e o botão de lá substitui em todos. O arquivo em foco só entra no
+   * modal (⌘P), onde ele é o assunto.
+   */
+  onHighlightQuery?: (query: string, options: WsMatchOptions) => void;
+  /**
+   * Abre um resultado da busca já na linha clicada. Sem isso o visualizador
+   * abriria o arquivo no topo, e o trecho encontrado ficaria fora da tela.
+   */
+  onOpenOccurrence?: (path: string, line: number) => void;
+  /**
+   * Quais arquivos foram gravados por fora ("substituir em todos"). O
+   * visualizador usa a lista para recarregar o que estiver aberto.
+   */
+  onReplaced?: (paths: string[]) => void;
 }
 
 // ── Regiões do log de commits (estilo VS Code) ──────────────────────────
@@ -519,6 +541,9 @@ export function FileBrowser({
   onReveal,
   onRefreshChanges,
   onOpenCommitFile,
+  onHighlightQuery,
+  onOpenOccurrence,
+  onReplaced,
 }: FileBrowserProps) {
   const { t } = useTranslation();
   /**
@@ -1440,33 +1465,48 @@ export function FileBrowser({
             className="min-h-0 min-w-0 flex-1 overflow-hidden"
             value="files"
           >
-            <ScrollArea className="h-full">
-              <FileTree
-                className="rounded-none border-0 bg-transparent mr-2 "
-                expanded={expandedPaths}
-                onExpandedChange={handleExpandedChange}
-                onSelect={handleSelect}
-                selectedPath={selectedPath}
-              >
-                {folders.map((folderPath) => (
-                  <FileTreeFolder
-                    key={folderPath}
-                    name={getBaseName(folderPath)}
-                    path={folderPath}
-                  >
-                    {expandedPaths.has(folderPath) &&
-                      renderEntries(
-                        folderPath,
-                        dirCache[folderPath],
-                        dirCache,
-                        expandedPaths,
-                        gitStatus,
-                        deletedByDir,
-                      )}
-                  </FileTreeFolder>
-                ))}
-              </FileTree>
-            </ScrollArea>
+            {/* A busca é o topo do índice, e a árvore é o estado dela sem
+                consulta: digitar troca a árvore pelos resultados, apagar volta.
+                Um campo só — nome e conteúdo —, sem sintaxe para decorar. */}
+            <WorkspaceSearch
+              className="min-h-0 flex-1 pt-1"
+              openFile={selectedPath ?? null}
+              roots={folders}
+              onOpen={(path, line) => {
+                if (line != null && onOpenOccurrence) onOpenOccurrence(path, line);
+                else handleSelect(path);
+              }}
+              onHighlightQuery={onHighlightQuery}
+              onReplaced={onReplaced}
+            >
+              <ScrollArea className="h-full">
+                <FileTree
+                  className="rounded-none border-0 bg-transparent mr-2 "
+                  expanded={expandedPaths}
+                  onExpandedChange={handleExpandedChange}
+                  onSelect={handleSelect}
+                  selectedPath={selectedPath}
+                >
+                  {folders.map((folderPath) => (
+                    <FileTreeFolder
+                      key={folderPath}
+                      name={getBaseName(folderPath)}
+                      path={folderPath}
+                    >
+                      {expandedPaths.has(folderPath) &&
+                        renderEntries(
+                          folderPath,
+                          dirCache[folderPath],
+                          dirCache,
+                          expandedPaths,
+                          gitStatus,
+                          deletedByDir,
+                        )}
+                    </FileTreeFolder>
+                  ))}
+                </FileTree>
+              </ScrollArea>
+            </WorkspaceSearch>
           </TabsContent>
         </Tabs>
 

@@ -19,7 +19,7 @@
  * foco, com que lente ele abre, até onde rolar e se há rascunho a perder.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -29,6 +29,8 @@ import { FileBrowser, type BrowserTab } from "@/src/components/file-browser";
 import { ChangesView, type RevealRequest } from "@/src/components/changes-view";
 import type { ViewedFile, ViewerLens } from "@/src/lib/folders";
 import { useGitRepos } from "@/src/lib/use-git-repos";
+import type { WsMatchOptions } from "@/src/lib/ipc";
+import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store";
 
 const FILE_PANEL_MIN_PX = 200;
 
@@ -82,8 +84,76 @@ export function FoldersTab() {
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
   /** Espelho de "há rascunho" para leitura dentro dos callbacks de troca. */
   const dirtyRef = useRef(false);
+  /** Espelho do alvo em foco, para callbacks que não podem depender do estado. */
+  const targetRef = useRef<ViewerTarget | undefined>(undefined);
+  targetRef.current = target;
   /** Cresce a cada pedido de foco: repetir o clique no mesmo arquivo vale de novo. */
   const revealNonce = useRef(0);
+  /** Linha pedida pela busca; o visualizador rola até ela ao carregar o arquivo. */
+  const [revealLine, setRevealLine] = useState<{ line: number; nonce: number }>();
+  const lineNonce = useRef(0);
+  /** Cresce quando uma substituição em massa grava o arquivo que está aberto. */
+  const [viewerReload, setViewerReload] = useState(0);
+
+  /**
+   * A substituição no arquivo aberto mora no editor (é ele que tem o buffer e
+   * o histórico de undo). O visualizador publica a função aqui, e a busca do
+   * índice à direita a chama — sem passar pelo disco, sem perder rascunho.
+   */
+  const replaceInOpenFile = useRef<
+    ((query: string, replacement: string, options: WsMatchOptions) => number) | null
+  >(null);
+
+  const registerReplaceInFile = useCallback(
+    (
+      fn:
+        | ((query: string, replacement: string, options: WsMatchOptions) => number)
+        | null,
+    ) => {
+      replaceInOpenFile.current = fn;
+    },
+    [],
+  );
+
+  const registerReplaceInOpenFile = useWorkspaceSearchStore(
+    (state) => state.registerReplaceInOpenFile,
+  );
+
+  /**
+   * Publica para o App — onde a paleta ⌘P mora agora — qual arquivo está em foco
+   * e como substituir no buffer dele. Sem esta ponte, o "Substituir neste
+   * arquivo" do modal não teria a quem pedir: o buffer só existe aqui.
+   */
+  useEffect(() => {
+    const file = target?.file;
+    if (!file || file.kind !== "live") {
+      registerReplaceInOpenFile(null);
+      return;
+    }
+    registerReplaceInOpenFile({
+      path: file.path,
+      run: (query, replacement, options) =>
+        replaceInOpenFile.current?.(query, replacement, options) ?? 0,
+    });
+    return () => registerReplaceInOpenFile(null);
+  }, [target, registerReplaceInOpenFile]);
+
+  /**
+   * A consulta do índice vira grifo no arquivo aberto. Fica no estado da aba
+   * porque os dois lados do split são irmãos: o campo mora na árvore, o
+   * editor mora no visualizador, e ninguém vê o outro sem passar por aqui.
+   */
+  const [searchHighlight, setSearchHighlight] = useState<{
+    query: string;
+    options: WsMatchOptions;
+  } | null>(null);
+
+  const handleHighlightQuery = useCallback(
+    (query: string, options: WsMatchOptions) => {
+      setSearchHighlight(query === "" ? null : { query, options });
+    },
+    [],
+  );
 
   const handleDirtyChange = useCallback((next: boolean) => {
     dirtyRef.current = next;
@@ -205,6 +275,63 @@ export function FoldersTab() {
     [openLiveFile],
   );
 
+  /**
+   * Abrir um resultado da busca já na linha clicada. A confirmação de descarte
+   * vem do `openLiveFile` — a mesma de qualquer troca de arquivo — e o modo
+   * volta para Arquivos: na leitura empilhada não há onde rolar dentro de um
+   * arquivo só.
+   */
+  const openAtLine = useCallback(
+    (filePath: string, line?: number) => {
+      if (!openLiveFile(filePath, false, "content")) return;
+      setLeftMode("files");
+      setTab("files");
+      // Um resultado do grupo Arquivos não tem linha: abre no topo, como a
+      // árvore. Só a ocorrência pede para rolar.
+      if (line != null) {
+        lineNonce.current += 1;
+        setRevealLine({ line, nonce: lineNonce.current });
+      }
+    },
+    [openLiveFile],
+  );
+
+  /**
+   * Alguém gravou em disco por fora (substituir em todos). Se foi o arquivo em
+   * foco, o visualizador releia — do contrário a tela mostraria o texto velho
+   * e o próximo save sobrescreveria a substituição.
+   */
+  const handleReplaced = useCallback((paths: string[]) => {
+    const current = targetRef.current;
+    if (current?.file.kind === "live" && paths.includes(current.file.path)) {
+      setViewerReload((n) => n + 1);
+    }
+  }, []);
+
+  /**
+   * O ⌘P subiu para o App (a paleta responde de qualquer aba), então o pedido
+   * chega pelo store. Aqui se atende a parte que só esta aba sabe fazer: abrir
+   * o arquivo no visualizador e rolar até a linha pedida.
+   */
+  const pendingFile = useWorkspaceSearchStore((state) => state.pending);
+  const handledFileRequest = useRef(0);
+
+  useEffect(() => {
+    if (!pendingFile || handledFileRequest.current === pendingFile.nonce) return;
+    handledFileRequest.current = pendingFile.nonce;
+    openAtLine(pendingFile.path, pendingFile.line);
+  }, [pendingFile, openAtLine]);
+
+  /** "Substituir em todos" pode ter gravado o arquivo aberto: o store avisa. */
+  const replacedFiles = useWorkspaceSearchStore((state) => state.replaced);
+  const handledReplaced = useRef(0);
+
+  useEffect(() => {
+    if (!replacedFiles || handledReplaced.current === replacedFiles.nonce) return;
+    handledReplaced.current = replacedFiles.nonce;
+    handleReplaced(replacedFiles.paths);
+  }, [replacedFiles, handleReplaced]);
+
   if (folders.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -215,7 +342,7 @@ export function FoldersTab() {
   }
 
   return (
-    <PanelGroup className="min-h-0 min-w-0 flex-1" direction="horizontal">
+  <PanelGroup className="min-h-0 min-w-0 flex-1" direction="horizontal">
       <Panel
         className="min-w-0"
         defaultSize={60}
@@ -240,7 +367,11 @@ export function FoldersTab() {
             lens={target?.lens ?? "content"}
             onDirtyChange={handleDirtyChange}
             onLensChange={handleLensChange}
+            onRegisterReplaceInFile={registerReplaceInFile}
             onToggleBrowser={toggleBrowser}
+            reloadToken={viewerReload}
+            revealLine={revealLine}
+            searchHighlight={searchHighlight}
             repoRoot={folders[0]}
             roots={folders}
           />
@@ -265,6 +396,9 @@ export function FoldersTab() {
             onFoldersChange={setFolders}
             onOpenCommitFile={openCommitFile}
             onRefreshChanges={() => setChangesReload((n) => n + 1)}
+            onOpenOccurrence={openAtLine}
+            onHighlightQuery={handleHighlightQuery}
+            onReplaced={handleReplaced}
             onReveal={handleReveal}
             onSelectFile={openLiveFile}
             onTabChange={handleTabChange}
@@ -275,6 +409,6 @@ export function FoldersTab() {
           />
         </Panel>
       )}
-    </PanelGroup>
+  </PanelGroup>
   );
 }

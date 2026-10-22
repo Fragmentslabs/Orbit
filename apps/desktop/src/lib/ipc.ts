@@ -1080,6 +1080,84 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:existDirs", dirs) as Promise<Record<string, boolean>>,
 }
 
+/** Um arquivo cujo NOME casa com a consulta. */
+export interface WsNameHit {
+  /** Caminho relativo à raiz do espaço. */
+  path: string
+  name: string
+  dir: string
+}
+
+/** Uma linha onde a consulta aparece. */
+export interface WsLineHit {
+  line: number
+  column: number
+  text: string
+  length: number
+}
+
+/** Ocorrências de um arquivo — `count` é o total, `lines` só as primeiras. */
+export interface WsFileHits {
+  path: string
+  count: number
+  lines: WsLineHit[]
+}
+
+export interface WsTextResult {
+  occurrences: WsFileHits[]
+  scanned: number
+  matches: number
+  truncated: boolean
+  invalidPattern?: boolean
+}
+
+export interface WsMatchOptions {
+  caseSensitive?: boolean
+  regex?: boolean
+  /** Só casa a palavra isolada: `file` não entra em `walkFiles`. */
+  wholeWord?: boolean
+  /** Na substituição, herda o formato do texto encontrado (File → Document). */
+  preserveCase?: boolean
+}
+
+export interface WsReplaceResult {
+  files: number
+  replacements: number
+  written: string[]
+  errors: { path: string; error: string }[]
+}
+
+/**
+ * A busca do espaço de trabalho — uma para o painel, o modal e a paleta do `@`.
+ *
+ * `names` responde da memória (o índice do main); `text` lê disco e por isso
+ * tem id e cancelamento: cada tecla nova aborta a varredura anterior.
+ */
+export const workspaceApi = {
+  names: (input: { root: string; query: string; refresh?: boolean }) =>
+    window.ipcRenderer.invoke("ws:names", input) as Promise<
+      | { ok: true; hits: WsNameHit[]; total: number; truncated: boolean }
+      | { ok: false; error: string }
+    >,
+  text: (input: { id: string; root: string; query: string } & WsMatchOptions) =>
+    window.ipcRenderer.invoke("ws:text", input) as Promise<
+      ({ ok: true } & WsTextResult) | { ok: false; error: string }
+    >,
+  cancel: (id: string) =>
+    window.ipcRenderer.invoke("ws:cancel", id) as Promise<boolean>,
+  replace: (
+    input: {
+      root: string
+      targets: string[]
+      query: string
+      replacement: string
+    } & WsMatchOptions,
+  ) =>
+    window.ipcRenderer.invoke("ws:replace", input) as Promise<
+      ({ ok: true } & WsReplaceResult) | { ok: false; error: string }
+    >,
+}
+
 export const searchApi = {
   sessions: (query: string) =>
     window.ipcRenderer.invoke("search:sessions", query) as Promise<SearchHit[]>,

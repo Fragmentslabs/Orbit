@@ -153,6 +153,14 @@ export function editorChrome(dark: boolean) {
       ".cm-searchMatch.cm-searchMatch-selected": {
         backgroundColor: "color-mix(in oklab, var(--primary) 40%, transparent)",
       },
+      // O grifo da busca do painel usa decoração própria (`findMatches`, no
+      // code-editor), mas pinta igual ao do Cmd+F: para quem lê o arquivo, é a
+      // mesma pergunta — "onde está isso aqui".
+      ".cm-findMatch": {
+        backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
+        boxShadow: "0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent)",
+        borderRadius: "2px",
+      },
       // Diagnósticos. O tema padrão do @codemirror/lint fixa fundo branco no
       // balão, o que fica ilegível no escuro — aqui tudo sai das vars do app.
       // O padrão do pacote é uma imagem SVG de onda embutida; `text-decoration`
@@ -193,18 +201,70 @@ export function editorChrome(dark: boolean) {
       ".cm-lint-marker-error": { color: palette.invalid },
       ".cm-lint-marker-warning": { color: palette.variable },
       ".cm-gutter-lint": { width: "0.75rem" },
+      // A busca do arquivo (Cmd+F). O painel do CodeMirror vem com a cara dele
+      // — inputs e botões de navegador —, então aqui ele veste os tokens do
+      // app: mesma altura de campo do resto da UI, mesma borda, mesmo fundo.
       ".cm-panels": {
-        backgroundColor: "var(--popover)",
-        color: "var(--popover-foreground)",
+        backgroundColor: "var(--card)",
+        color: "var(--card-foreground)",
         border: "none",
       },
-      ".cm-panel input, .cm-panel button": {
+      ".cm-panel.cm-search": {
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "0.25rem",
+        padding: "0.375rem 0.5rem",
+        borderBottom: "1px solid var(--border)",
+        fontFamily: "var(--font-sans)",
+        fontSize: "11px",
+      },
+      ".cm-panel.cm-search input.cm-textfield": {
+        height: "1.75rem",
+        minWidth: "9rem",
+        padding: "0 0.5rem",
         backgroundColor: "var(--background)",
         color: "var(--foreground)",
         border: "1px solid var(--border)",
         borderRadius: "0.375rem",
-        padding: "0.125rem 0.375rem",
+        fontSize: "12px",
+        outline: "none",
       },
+      ".cm-panel.cm-search input.cm-textfield:focus": {
+        borderColor: "var(--ring)",
+      },
+      ".cm-panel.cm-search button": {
+        height: "1.75rem",
+        padding: "0 0.5rem",
+        backgroundColor: "transparent",
+        color: "var(--muted-foreground)",
+        border: "1px solid var(--border)",
+        borderRadius: "0.375rem",
+        fontSize: "11px",
+        cursor: "pointer",
+      },
+      ".cm-panel.cm-search button:hover": {
+        backgroundColor: "var(--accent)",
+        color: "var(--accent-foreground)",
+      },
+      ".cm-panel.cm-search button[name=close]": {
+        marginLeft: "auto",
+        border: "none",
+        fontSize: "14px",
+        lineHeight: "1",
+      },
+      ".cm-panel.cm-search label": {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        padding: "0 0.25rem",
+        color: "var(--muted-foreground)",
+        fontSize: "10.5px",
+      },
+      // O CodeMirror separa busca de substituição com <br>: no flex isso vira
+      // uma linha nova, que é o comportamento desejado — só não pode sobrar
+      // um espaço em branco no fim da primeira.
+      ".cm-panel.cm-search br": { flexBasis: "100%", height: "0" },
     },
     { dark },
   )
