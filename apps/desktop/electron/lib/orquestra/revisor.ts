@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { OrchestrationPlan, OrchestrationSettings, OrchestrationTask } from '@shared/chat'
 import type { AcoesRevisao, PedidoRevisao, ResultadoWorker } from './execucao'
 import type { Verificacao } from './verificacoes'
+import { foraDaPosse } from './posse'
 
 /**
  * O orquestrador revisando: um agente curto, com ferramentas, em vez do JSON
@@ -14,6 +15,7 @@ import type { Verificacao } from './verificacoes'
 const PASSOS_MAX = 12
 const RESULTADO_MAX = 8000
 const DIFF_MAX = 20_000
+const FORA_MAX = 30
 
 export interface DepsRevisor {
   model: LanguageModel
@@ -30,6 +32,8 @@ export interface DepsRevisor {
    * houve como registrar o que os turnos escreveram.
    */
   diff(task: OrchestrationTask): Promise<string>
+  /** Arquivos que o worker mudou, relativos à pasta do chat (null = não deu para saber) */
+  arquivosTocados?(task: OrchestrationTask): Promise<string[] | null>
   /** Verificações do projeto disponíveis para a pasta do worker */
   verificacoes?(task: OrchestrationTask): Promise<Verificacao[]>
   rodarVerificacao?(task: OrchestrationTask, v: Verificacao): Promise<{ ok: boolean; saida: string }>
@@ -46,6 +50,7 @@ How to review:
 - pedir_ajuste with a concrete, actionable instruction (what is wrong, where, what to do) when something is missing or broken. The same worker continues in its own chat, so it remembers what it did.
 - marcar_falha when the task cannot be fixed within the budget or went in a wrong direction — say why, so the final answer can tell the user.
 - criar_worker only for work that is genuinely missing and belongs to no existing worker (it also costs budget).
+- Each task owns a list of files. When the review lists files changed OUTSIDE that list, judge them: a small, necessary touch (an import, an export, a shared string) is fine; reworking a file another task owns is not — pedir_ajuste to undo it or to explain why it was needed. In a shared folder, a file owned by another task may simply be that worker's change: check the diff before blaming this one.
 ${config.comportamento === 'rigoroso' ? '- RIGOROUS mode: before accepting a task that changed code, run at least one relevant verification with rodar_verificacao. A failing check means pedir_ajuste (or marcar_falha without budget), never aceitar.\n' : '- rodar_verificacao is available in this mode: run one of the project checks (typecheck, tests, lint) when the diff is unavailable or when reading the diff is not enough to decide.\n'}- Workers may share the same folder: a diff can include changes from other workers running at the same time. Judge only what belongs to this task.`
 
 function textoBudget(plan: OrchestrationPlan, config: OrchestrationSettings, task?: OrchestrationTask): string {
@@ -57,8 +62,22 @@ function textoBudget(plan: OrchestrationPlan, config: OrchestrationSettings, tas
 
 function resumoTarefas(plan: OrchestrationPlan): string {
   return plan.tasks
-    .map((t) => `- ${t.title} [${t.fase ?? t.status}]${t.extra ? ' (extra)' : ''}${t.notaRevisao ? ` — ${t.notaRevisao.slice(0, 200)}` : ''}`)
+    .map((t) => `- ${t.title} [${t.fase ?? t.status}]${t.extra ? ' (extra)' : ''}${t.arquivos?.length ? ` (files: ${t.arquivos.join(', ')})` : ''}${t.notaRevisao ? ` — ${t.notaRevisao.slice(0, 200)}` : ''}`)
     .join('\n')
+}
+
+/** Seção "mudou fora da lista" — vazia quando não há lista, não há o que apontar ou não deu para saber. */
+async function textoForaDaPosse(d: DepsRevisor, task: OrchestrationTask): Promise<string> {
+  if (!task.arquivos?.length || !d.arquivosTocados) return ''
+  const tocados = await d.arquivosTocados(task).catch(() => null)
+  if (!tocados) return ''
+  const fora = foraDaPosse(task, tocados, d.plan.tasks)
+  if (fora.length === 0) return ''
+  const linhas = fora
+    .slice(0, FORA_MAX)
+    .map((f) => `- ${f.arquivo}${f.dono ? ` (owned by "${f.dono.title}")` : ''}`)
+  if (fora.length > FORA_MAX) linhas.push(`- …and ${fora.length - FORA_MAX} more`)
+  return `## Files changed OUTSIDE its list\n${linhas.join('\n')}`
 }
 
 function cortar(texto: string, max: number): string {
@@ -163,6 +182,8 @@ export async function revisarComModelo(d: DepsRevisor, pedido: PedidoRevisao, ac
       ? [
           `## Original request\n${d.pedidoOriginal}`,
           `## Task under review: ${pedido.task.title}\n${pedido.task.prompt}`,
+          pedido.task.arquivos?.length ? `## Files it owns\n${pedido.task.arquivos.join(', ')}` : '',
+          await textoForaDaPosse(d, pedido.task),
           pedido.task.revisions ? `## Last adjustment you asked for\n${pedido.task.notaRevisao ?? ''}` : '',
           `## Worker's reply${pedido.resultado.error ? ` (ERROR: ${pedido.resultado.error})` : ''}\n${cortar(pedido.resultado.text || '(no reply)', RESULTADO_MAX)}`,
           `## Other tasks\n${resumoTarefas(plan)}`,

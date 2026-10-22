@@ -71,6 +71,13 @@ function terminal(t: OrchestrationTask): boolean {
 /** Prompt de quem depende de outras tarefas: o resumo delas vai junto. */
 function promptComDependencias(task: OrchestrationTask, plan: OrchestrationPlan, resultados: Map<string, ResultadoWorker>, avisos: string[]): string {
   const partes = [task.prompt]
+  if (task.arquivos?.length) {
+    partes.push(
+      '\n\n## Files this task owns\n' +
+        task.arquivos.map((a) => `- ${a}`).join('\n') +
+        '\nOther workers run at the same time on other files. Work within these; if you really must touch a file outside the list, keep that change minimal and say so in your summary.',
+    )
+  }
   const deps = (task.dependeDe ?? []).map((id) => plan.tasks.find((t) => t.id === id)).filter((t): t is OrchestrationTask => !!t)
   if (deps.length > 0) {
     partes.push(

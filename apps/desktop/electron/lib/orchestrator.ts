@@ -23,7 +23,7 @@ import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
 import { readJson, writeJson } from './storage'
-import { createSubagentTool, createTaskTool } from './tools/orchestration'
+import { createRemoveTaskTool, createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from './tools/files'
 import { createCodeTools } from './tools/code'
@@ -37,6 +37,7 @@ import { executarPlano } from './orquestra/execucao'
 import { revisarComModelo } from './orquestra/revisor'
 import { descobrirVerificacoes, rodarVerificacao } from './orquestra/verificacoes'
 import {
+  arquivosDoWorktree,
   commitarTrabalho,
   criarWorktreeDoWorker,
   diffDoWorktree,
@@ -350,17 +351,27 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     }
     const planTools: ToolSet = {
       create_task: createTaskTool(
-        (task) => {
+        (task, substitui) => {
+          const idx = substitui ? tasks.findIndex((t) => t.id === substitui) : -1
+          if (idx >= 0) {
+            tasks[idx] = task
+            return true
+          }
           if (tasks.length >= MAX_TASKS) return false
           tasks.push(task)
           return true
         },
         ceiling,
-        (title) => {
-          const key = normalizeTitle(title)
-          return existingTitles.has(key) || tasks.some((t) => normalizeTitle(t.title) === key)
+        // Só os planos anteriores: repetir um título DESTE plano substitui a tarefa.
+        (title) => existingTitles.has(normalizeTitle(title)),
+        () => tasks,
+      ),
+      remove_task: createRemoveTaskTool(
+        () => tasks,
+        (id) => {
+          const idx = tasks.findIndex((t) => t.id === id)
+          if (idx >= 0) tasks.splice(idx, 1)
         },
-        (title) => tasks.find((t) => normalizeTitle(t.title) === normalizeTitle(title))?.id,
       ),
       // Perguntar antes de dividir: só vale quando a resposta muda o plano,
       // mas sem a tool ele não tinha como fazer isso nem quando valia.
@@ -810,6 +821,21 @@ async function approvePlanTurn(
       const daPasta = await diffDaPasta(input.directory!)
       return [indisponivel, patch, daPasta].filter(Boolean).join('\n\n')
     }
+    /**
+     * Arquivos que o worker mudou, para conferir com os que são dele. Sem
+     * worktree vêm dos snapshots dos turnos; se algum turno não foi registrado
+     * a lista estaria incompleta, e uma lista incompleta não deve inocentar
+     * ninguém — aí não há conferência (null).
+     */
+    const arquivosDaTarefa = async (task: OrchestrationTask): Promise<string[] | null> => {
+      if (task.worktree) return arquivosDoWorktree(task.worktree)
+      if (!task.workerSessionId) return null
+      const snaps = (await loadMessages(task.workerSessionId))
+        .filter((m) => m.role === 'assistant' && m.snapshot)
+        .map((m) => m.snapshot!)
+      if (snaps.length === 0 || snaps.some((s) => s.failed || s.verified === 'unknown')) return null
+      return snaps.flatMap((s) => s.files ?? [])
+    }
 
     const workerResultados = await executarPlano({
       plan,
@@ -862,6 +888,7 @@ async function approvePlanTurn(
                   config,
                   signal: controller.signal,
                   diff: diffDaTarefa,
+                  arquivosTocados: arquivosDaTarefa,
                   verificacoes: (task) => descobrirVerificacoes(task.worktree?.pasta ?? input.directory!, task.worktree?.caminho ?? raizRepo),
                   rodarVerificacao: (_task, v) => rodarVerificacao(v, controller.signal),
                   aoUsar: (usage) => {

@@ -11,7 +11,7 @@ vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
 vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
 vi.mock('../app-settings', () => ({ getAppSettings: () => ({ worktrees: { local: 'padrao', pasta: null } }) }))
 
-const { commitarTrabalho, criarWorktreeDoWorker, diffDoWorktree, juntarBranches, removerWorktreeDoWorker } = await import('./worktrees')
+const { arquivosDoWorktree, commitarTrabalho, criarWorktreeDoWorker, diffDoWorktree, juntarBranches, removerWorktreeDoWorker } = await import('./worktrees')
 
 let tmp: string
 let repo: string
@@ -59,6 +59,19 @@ describe('worktree por worker', () => {
     await removerWorktreeDoWorker(wa, true)
     expect(fs.existsSync(wa.caminho)).toBe(false)
     expect(git(repo, 'branch', '--list', wa.branch)).toBe('')
+  })
+
+  it('arquivos do worker: commitados, não commitados e novos, relativos à subpasta do chat', async () => {
+    fs.mkdirSync(path.join(repo, 'app'))
+    fs.writeFileSync(path.join(repo, 'app', 'x.ts'), 'x\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-qm', 'app')
+    const { worktree } = await criarWorktreeDoWorker({ pastaDoChat: path.join(repo, 'app'), planId: 'plan_1', task: tarefa('a', 'A'), dependencias: [] })
+    fs.writeFileSync(path.join(worktree.pasta, 'x.ts'), 'mudou\n')
+    await commitarTrabalho(worktree, 'A')
+    fs.writeFileSync(path.join(worktree.pasta, 'novo.ts'), 'n\n')
+    fs.writeFileSync(path.join(worktree.caminho, 'a.txt'), 'fora da subpasta\n')
+    expect((await arquivosDoWorktree(worktree)).sort()).toEqual(['../a.txt', 'novo.ts', 'x.ts'])
   })
 
   it('dependente parte do branch da dependência', async () => {

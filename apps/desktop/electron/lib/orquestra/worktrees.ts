@@ -189,6 +189,19 @@ export async function removerWorktreeDoWorker(worktree: WorktreeDoWorker, apagar
   await descartarSnapshots(worktree.pasta).catch(() => {})
 }
 
+/**
+ * Arquivos que o worker mudou no worktree desde a base (commitados, não
+ * commitados e novos), relativos à pasta do chat dentro dele — o mesmo
+ * referencial dos `arquivos` da tarefa. O que fica fora da subpasta sai com "../".
+ */
+export async function arquivosDoWorktree(worktree: WorktreeDoWorker): Promise<string[]> {
+  const mudados = await git(worktree.caminho, ['diff', '--name-only', worktree.base]).catch(() => '')
+  const novos = await git(worktree.caminho, ['ls-files', '--others', '--exclude-standard']).catch(() => '')
+  return [...new Set(`${mudados}\n${novos}`.split('\n').map((l) => l.trim()).filter(Boolean))].map((f) =>
+    path.relative(worktree.pasta, path.join(worktree.caminho, f)).split(path.sep).join('/'),
+  )
+}
+
 /** Diff do worker no worktree: tudo desde a base, commitado ou não. */
 export async function diffDoWorktree(worktree: WorktreeDoWorker): Promise<string> {
   const arquivos = await git(worktree.caminho, ['status', '--porcelain']).catch(() => '')

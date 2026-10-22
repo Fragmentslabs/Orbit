@@ -1117,7 +1117,8 @@
     "approveRun": "Approve and run",
     "approveRunWithCount_one": "Approve and run ({{count}})",
     "approveRunWithCount_other": "Approve and run ({{count}})",
-    "dependsOn": "After: {{tarefas}}"
+    "dependsOn": "After: {{tarefas}}",
+    "ownsFiles": "Files: {{arquivos}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} done)",

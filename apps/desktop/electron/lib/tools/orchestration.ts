@@ -10,6 +10,7 @@ import { buildProviderOptions, reasoningPrepareStep } from '../reasoning'
 import type { ToolContext } from './context'
 import { buildToolSet } from './index'
 import { modoGlobal } from '../permission/modo-global'
+import { disputasDeArquivo, esperaPor, normalizarCaminho } from '../orquestra/posse'
 
 /**
  * Ferramentas de delegação:
@@ -128,6 +129,7 @@ export function createSubagentTool(
 export interface CreateTaskArgs {
   title: string
   prompt: string
+  files?: string[]
   research?: boolean
   browser?: boolean
   readonly?: boolean
@@ -135,6 +137,12 @@ export interface CreateTaskArgs {
   vision?: boolean
   subagents?: boolean
   dependsOn?: string[]
+}
+
+/** "Tela de Login " e "tela de login" são o mesmo nome na sidebar. */
+function tarefaPeloTitulo(tarefas: OrchestrationTask[], title: string): OrchestrationTask | undefined {
+  const chave = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
+  return tarefas.find((t) => chave(t.title) === chave(title))
 }
 
 /**
@@ -149,20 +157,29 @@ export interface TaskModeCeiling {
   subagents: boolean
 }
 
-/** Tool de planejamento do orquestrador: cada chamada vira uma OrchestrationTask. */
+/**
+ * Tool de planejamento do orquestrador: cada chamada vira uma OrchestrationTask.
+ * Chamar de novo com o título de uma tarefa DESTE plano a substitui (mesmo id,
+ * então quem depende dela continua dependendo) — é como o orquestrador corrige
+ * uma divisão depois do aviso de arquivos em disputa.
+ */
 export function createTaskTool(
-  register: (task: OrchestrationTask) => boolean,
+  /** `substitui`: id da tarefa deste plano que a nova toma o lugar. */
+  register: (task: OrchestrationTask, substitui?: string) => boolean,
   ceiling: TaskModeCeiling,
-  /** O título já é de outro worker (deste plano ou de um anterior)? Na
-   *  sidebar o título é a única coisa que separa um worker do outro. */
+  /** O título já é de um worker de um plano ANTERIOR? Na sidebar o título é
+   *  a única coisa que separa um worker do outro. */
   titleTaken: (title: string) => boolean = () => false,
-  /** Id de uma tarefa JÁ registrada neste plano, pelo título (dependsOn). */
-  taskIdByTitle: (title: string) => string | undefined = () => undefined,
+  /** Tarefas já registradas neste plano (dependsOn, substituição, disputas). */
+  planTasks: () => OrchestrationTask[] = () => [],
 ) {
+  const doPlano = (title: string) => tarefaPeloTitulo(planTasks(), title)
   return tool({
     description: [
       'Registers a subtask in the orchestration plan. Each task becomes an independent worker session',
       'running in the working folder, in parallel, with no access to this conversation.',
+      'Give each task the files it owns: tasks that touch different files run side by side without waiting.',
+      'Calling it again with the title of a task already in this plan replaces that task.',
       'Choose the modes each worker needs — they are not free: research and browser add latency,',
       'subagents multiply cost. Enable only what the task actually requires.',
     ].join(' '),
@@ -173,6 +190,14 @@ export function createTaskTool(
         + 'Never generic ("Implementação", "Análise", "Tarefa 1", "Backend") and never the same as another worker.',
       ),
       prompt: z.string().describe('Self-contained prompt for the worker, with all necessary context'),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Files or folders this task will change, relative to the working folder (globs allowed: "src/auth/**"). '
+          + 'The worker is told it owns them and that other workers own the rest. Keep each task\'s files apart from '
+          + 'the other parallel tasks — that is what lets them run at the same time. Omit for read-only tasks.',
+        ),
       research: z.boolean().optional().describe('Web search — only if the task needs information from the internet'),
       browser: z.boolean().optional().describe('JavaScript browser — only to open/test real web pages'),
       readonly: z.boolean().optional().describe('Worker reads and analyses but never edits files or runs commands'),
@@ -184,18 +209,23 @@ export function createTaskTool(
         .optional()
         .describe('Titles of tasks ALREADY registered in this plan that must be accepted before this one starts. Only for real order (tests after the feature, integration after its parts).'),
     }),
-    execute: async ({ title, prompt, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn }: CreateTaskArgs) => {
+    execute: async ({ title, prompt, files, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn }: CreateTaskArgs) => {
+      const anterior = doPlano(title)
       // Dependência só de tarefa já registrada: além de dar o id, isso torna
-      // ciclo impossível (ninguém depende de quem ainda não existe).
+      // ciclo impossível (ninguém depende de quem ainda não existe). Na
+      // substituição vale o mesmo, menos depender de si mesma.
       const dependeDe: string[] = []
       for (const titulo of dependsOn ?? []) {
-        const id = taskIdByTitle(titulo)
-        if (!id) {
-          return `Task "${title}" was NOT registered: "${titulo}" is not a task already registered in this plan. Register the prerequisites first and try again, using the exact title in dependsOn.`
+        const id = doPlano(titulo)?.id
+        if (!id || id === anterior?.id) {
+          return `Task "${title}" was NOT registered: "${titulo}" is not another task already registered in this plan. Register the prerequisites first and try again, using the exact title in dependsOn.`
+        }
+        if (anterior && esperaPor(planTasks().find((t) => t.id === id)!, anterior.id, planTasks())) {
+          return `Task "${title}" was NOT registered: "${titulo}" already waits for it, so depending on it would be a cycle.`
         }
         if (!dependeDe.includes(id)) dependeDe.push(id)
       }
-      if (titleTaken(title)) {
+      if (!anterior && titleTaken(title)) {
         return `A worker named "${title}" already exists in this conversation — the task was NOT registered. Call create_task again with a title that sets it apart (the specific area or deliverable), or use message_worker if the work continues that worker's.`
       }
       // Rebaixa o que passa do teto e conta para avisar o modelo.
@@ -207,8 +237,9 @@ export function createTaskTool(
         }
         return want
       }
-      const accepted = register({
-        id: newTaskId(),
+      const arquivos = [...new Set((files ?? []).map(normalizarCaminho).filter((f) => f.length > 0))]
+      const task: OrchestrationTask = {
+        id: anterior?.id ?? newTaskId(),
         title,
         prompt,
         options: {
@@ -221,12 +252,52 @@ export function createTaskTool(
         vision: clamp(vision, ceiling.vision, 'vision'),
         status: 'idle',
         ...(dependeDe.length > 0 ? { dependeDe } : {}),
-      })
-      if (!accepted) return 'Plan task limit reached — do not register more tasks.'
-      if (denied.length > 0) {
-        return `Task "${title}" registered, but without ${denied.join(', ')}: the user did not enable ${denied.length > 1 ? 'those modes' : 'that mode'} in this conversation. Adjust the task prompt if it depended on it.`
+        ...(arquivos.length > 0 ? { arquivos } : {}),
       }
-      return `Task "${title}" registered in the plan.`
+      if (!register(task, anterior?.id)) return 'Plan task limit reached — do not register more tasks.'
+      const avisos: string[] = []
+      if (denied.length > 0) {
+        avisos.push(`It runs without ${denied.join(', ')}: the user did not enable ${denied.length > 1 ? 'those modes' : 'that mode'} in this conversation. Adjust the task prompt if it depended on it.`)
+      }
+      // Aviso, não trava: às vezes dividir o mesmo arquivo é o certo. Mas o
+      // orquestrador precisa saber que essas duas vão se pisar (ou esperar).
+      const disputas = disputasDeArquivo(task, planTasks())
+      if (disputas.length > 0) {
+        avisos.push(
+          'It shares files with tasks that would run at the same time: '
+          + disputas.map((d) => `"${d.task.title}" (${d.arquivos.join(', ')})`).join('; ')
+          + '. Parallel workers editing the same files step on each other. Unless that is really intended, fix it now by '
+          + 're-registering with the same title: narrow the files so they no longer overlap, add dependsOn so one runs '
+          + 'after the other, or merge the work into one task (and remove_task the other).',
+        )
+      }
+      const feito = anterior ? `Task "${title}" replaced in the plan.` : `Task "${title}" registered in the plan.`
+      return avisos.length > 0 ? `${feito} ${avisos.join(' ')}` : feito
+    },
+  })
+}
+
+/** Tira uma tarefa do plano em montagem — o par do create_task para juntar duas. */
+export function createRemoveTaskTool(
+  planTasks: () => OrchestrationTask[],
+  remove: (id: string) => void,
+) {
+  return tool({
+    description: 'Removes a task registered in this plan (e.g. after merging its work into another task). Tasks that depended on it no longer wait for it.',
+    inputSchema: z.object({
+      title: z.string().describe('Exact title of the task to remove'),
+    }),
+    execute: async ({ title }: { title: string }) => {
+      const alvo = tarefaPeloTitulo(planTasks(), title)
+      if (!alvo) return `No task titled "${title}" in this plan.`
+      remove(alvo.id)
+      for (const t of planTasks()) {
+        if (!t.dependeDe?.includes(alvo.id)) continue
+        const resto = t.dependeDe.filter((id) => id !== alvo.id)
+        if (resto.length > 0) t.dependeDe = resto
+        else delete t.dependeDe
+      }
+      return `Task "${alvo.title}" removed from the plan.`
     },
   })
 }

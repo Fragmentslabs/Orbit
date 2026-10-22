@@ -138,6 +138,11 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
                   </span>
                 )
               })()}
+              {task.arquivos?.length ? (
+                <span className="block truncate text-[10px] text-muted-foreground" title={task.arquivos.join("\n")}>
+                  {t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}
+                </span>
+              ) : null}
             </span>
             <TaskChips task={task} t={t} />
           </div>

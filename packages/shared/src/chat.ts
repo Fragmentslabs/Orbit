@@ -910,6 +910,9 @@ export interface OrchestrationTask {
   fase?: FaseTarefaOrquestra
   /** Ids de tarefas que precisam ser aceitas antes desta começar */
   dependeDe?: string[]
+  /** Arquivos/pastas que a tarefa vai mexer, declarados pelo orquestrador.
+   *  É a "posse" que deixa os workers rodarem em paralelo sem se tocar. */
+  arquivos?: string[]
   /** Criada pelo orquestrador durante a revisão (não estava no plano aprovado) */
   extra?: boolean
   /** Última nota da revisão: o que foi pedido no ajuste, ou por que falhou */
