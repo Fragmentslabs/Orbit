@@ -6,7 +6,7 @@ import type { ChatMessage } from "@shared/chat"
 import { Button } from "@/components/ui/button"
 import { messageText } from "@/src/lib/message-utils"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
-import { scrollToMessage } from "@/src/lib/message-jump"
+import { scrollToMessage, clearTextHighlight, highlightTextIn } from "@/src/lib/message-jump"
 
 export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) {
   const { t } = useTranslation()
@@ -29,10 +29,27 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
     setMatchIndex(0)
   }, [query])
 
+  // O destaque do resultado é o PRÓPRIO termo grifado dentro da mensagem —
+  // nada de pintar a mensagem (ver highlightTextIn). O `flash` da rolagem
+  // fica desligado aqui justamente por isso.
   useEffect(() => {
     const current = matches[matchIndex]
-    if (current) void scrollToMessage(current.id)
-  }, [matches, matchIndex])
+    const term = query.trim()
+    if (!current || !term) {
+      clearTextHighlight()
+      return
+    }
+    let alive = true
+    void scrollToMessage(current.id, { flash: false }).then((el) => {
+      if (alive && el) highlightTextIn(el, term)
+    })
+    return () => {
+      alive = false
+    }
+  }, [matches, matchIndex, query])
+
+  // Fechar a busca apaga o grifo junto: o destaque é da busca, não da mensagem.
+  useEffect(() => clearTextHighlight, [])
 
   const goNext = () => matches.length > 0 && setMatchIndex((i) => (i + 1) % matches.length)
   const goPrev = () => matches.length > 0 && setMatchIndex((i) => (i - 1 + matches.length) % matches.length)
@@ -56,8 +73,14 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
       inteira: os botões existiam mas o clique caía na conversa. O z-index
       resolve o clique; a sombra e o véu resolvem a outra metade, que é a barra
       parecer perdida no meio do texto que passa por trás dela.
+
+      z-[70], e não z-30: a barra flutua no topo da conversa, mas o que é
+      flutuante ali está ACIMA dela — a persona do topo (z-40) e o header
+      (z-50, com os popovers presos nele em z-[60]) —, e o campo de digitação
+      acabava por baixo dessas peças. z-[70] fica acima de todas elas e ainda
+      abaixo dos modais (z-[80]) e dos menus portados (z-[999]).
     */
-    <div className="relative z-30 mx-auto w-full max-w-3xl px-1 pb-2">
+    <div className="relative z-[70] mx-auto w-full max-w-3xl px-1 pb-2">
       {/* Véu: escurece e apaga o que passa por baixo, terminando num degradê
           para a conversa não ser cortada por uma linha reta. Fica atrás do
           cartão, mas dentro do mesmo nível — por isso cobre as mensagens. */}
@@ -65,7 +88,7 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
         className="pointer-events-none absolute inset-x-0 -bottom-8 top-0 backdrop-blur-[2px]"
         style={{
           // Atrás do cartão, à frente da conversa: o z-index negativo vale
-          // dentro do contexto criado pelo z-30 do pai, então ele não escapa
+          // dentro do contexto criado pelo z-[70] do pai, então ele não escapa
           // para trás das mensagens.
           zIndex: -10,
           backgroundImage:

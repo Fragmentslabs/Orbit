@@ -215,7 +215,10 @@ const MessageItem = memo(
               )}
             </MessageAttachments>
           )}
-          <MessageContent>
+          {/* `data-msg-surface`: alvo do anel do pulo para a mensagem (busca,
+              galeria, artefato) — o anel vai na bolha, que é arredondada, e
+              não no wrapper da linha, que é retangular (ver message-jump). */}
+          <MessageContent data-msg-surface>
             <UserMessageText text={visibleMessageText(msg)} />
           </MessageContent>
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">

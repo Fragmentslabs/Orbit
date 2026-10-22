@@ -323,3 +323,13 @@
     opacity: 0;
   }
 }
+
+/* Grifo do termo buscado dentro da mensagem (ver highlightTextIn em
+   lib/message-jump.ts): marca SÓ o texto casado, sem caixa em volta da
+   mensagem. O amarelo é o --primary do tema numa camada translúcida, que
+   funciona tanto sobre a bolha do usuário quanto sobre o texto solto da
+   resposta. O grifo é registrado/apagado em CSS.highlights, então some
+   sozinho quando a busca fecha. */
+::highlight(orbit-search-hit) {
+  background-color: color-mix(in oklab, var(--primary) 45%, transparent);
+}

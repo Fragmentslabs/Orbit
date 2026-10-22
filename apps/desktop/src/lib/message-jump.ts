@@ -57,19 +57,167 @@ export async function revealMessage(messageId: string): Promise<HTMLElement | nu
   return null
 }
 
-/** Rola até a mensagem (centralizada) e pisca o destaque. */
-export async function scrollToMessage(messageId: string): Promise<void> {
+export interface ScrollToMessageOptions {
+  /** Pisca um anel na mensagem. A busca do chat desliga: lá o destaque é o
+   *  próprio termo grifado (ver highlightTextIn). */
+  flash?: boolean
+}
+
+/** Rola até a mensagem (centralizada) e, por padrão, pisca um anel nela. */
+export async function scrollToMessage(
+  messageId: string,
+  options: ScrollToMessageOptions = {},
+): Promise<HTMLElement | null> {
   const el = await revealMessage(messageId)
-  if (!el) return
+  if (!el) return null
   el.scrollIntoView({ behavior: "smooth", block: "center" })
-  const prevBg = el.style.backgroundColor
-  const prevTransition = el.style.transition
-  el.style.transition = "background-color 0.4s ease"
-  el.style.backgroundColor = "var(--accent)"
-  setTimeout(() => {
-    el.style.backgroundColor = prevBg
-    setTimeout(() => {
-      el.style.transition = prevTransition
-    }, 400)
-  }, 700)
+  if (options.flash !== false) flashMessage(el)
+  return el
+}
+
+/**
+ * Pisca um anel em volta da mensagem.
+ *
+ * Antes isto pintava o `background-color` do elemento — e o wrapper da
+ * mensagem ocupa a linha inteira, então o resultado era um retângulo quadrado
+ * atrás da bolha arredondada. O anel marca o mesmo lugar sem cobrir o que a
+ * mensagem tem dentro, e segue o raio do elemento que o recebe.
+ */
+function flashMessage(el: HTMLElement): void {
+  const surface = el.querySelector<HTMLElement>("[data-msg-surface]") ?? el
+  const prevOutline = surface.style.outline
+  const prevOffset = surface.style.outlineOffset
+  const prevTransition = surface.style.transition
+  surface.style.transition = "outline-color 0.4s ease"
+  surface.style.outline = "2px solid var(--primary)"
+  surface.style.outlineOffset = "3px"
+  window.setTimeout(() => {
+    surface.style.outlineColor = "transparent"
+  }, 600)
+  window.setTimeout(() => {
+    surface.style.outline = prevOutline
+    surface.style.outlineColor = ""
+    surface.style.outlineOffset = prevOffset
+    surface.style.transition = prevTransition
+  }, 1000)
+}
+
+/* ------------------------------------------------------------------ */
+/* Grifo do termo buscado                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A busca do chat NÃO pinta a mensagem: um fundo no wrapper vira bloco
+ * quadrado atrás da bolha e, pior, não aponta o que casou com a busca. Com a
+ * CSS Custom Highlight API (Chromium — é o que roda no Electron) o destaque
+ * são só os caracteres do termo: os ranges vão para `CSS.highlights` e o
+ * desenho vem da regra `::highlight(orbit-search-hit)` no index.css.
+ * Registrar e apagar é uma linha, então o grifo não sobrevive ao fechamento
+ * da busca.
+ */
+const SEARCH_HIGHLIGHT = "orbit-search-hit"
+
+/** Teto do texto varrido: uma resposta gigante não precisa ser grifada toda. */
+const MAX_WALK = 200_000
+
+const COMBINING = /[\u0300-\u036f]/g
+
+type HighlightCtor = new (...ranges: Range[]) => object
+
+interface HighlightRegistry {
+  set: (name: string, highlight: object) => void
+  delete: (name: string) => void
+}
+
+function highlightRegistry(): HighlightRegistry | null {
+  const registry = (globalThis as unknown as { CSS?: { highlights?: HighlightRegistry } }).CSS?.highlights
+  return registry && typeof registry.set === "function" ? registry : null
+}
+
+function highlightConstructor(): HighlightCtor | null {
+  const ctor = (globalThis as unknown as { Highlight?: unknown }).Highlight
+  return typeof ctor === "function" ? (ctor as HighlightCtor) : null
+}
+
+/** Apaga o grifo da busca. Chamado ao fechar a busca e antes de cada grifo novo. */
+export function clearTextHighlight(): void {
+  highlightRegistry()?.delete(SEARCH_HIGHLIGHT)
+}
+
+/** Minúscula e sem acento — a mesma comparação que a busca faz (normalizeText). */
+function foldChar(ch: string): string {
+  return ch.normalize("NFD").replace(COMBINING, "").toLowerCase()
+}
+
+function fold(text: string): string {
+  let out = ""
+  for (const ch of text) out += foldChar(ch)
+  return out
+}
+
+/**
+ * Texto dobrado + o mapa de volta para os índices do original (um caractere
+ * acentuado pode virar letras de tamanho diferente depois do NFD, então o
+ * offset do DOM não é o offset da busca).
+ */
+function foldWithMap(text: string): { folded: string; starts: number[]; ends: number[] } {
+  const chars: string[] = []
+  const starts: number[] = []
+  const ends: number[] = []
+  let offset = 0
+  for (const ch of text) {
+    const next = offset + ch.length
+    for (const folded of foldChar(ch)) {
+      chars.push(folded)
+      starts.push(offset)
+      ends.push(next)
+    }
+    offset = next
+  }
+  return { folded: chars.join(""), starts, ends }
+}
+
+/**
+ * Grifa `query` dentro do elemento da mensagem e devolve quantos trechos
+ * foram marcados. Substitui o grifo anterior: só o resultado atual fica
+ * aceso. Devolve 0 quando não há o que grifar (ou quando o runtime não tem a
+ * API — a rolagem continua valendo).
+ */
+export function highlightTextIn(el: HTMLElement, query: string): number {
+  clearTextHighlight()
+  const registry = highlightRegistry()
+  const HighlightCtor = highlightConstructor()
+  const term = fold(query.trim())
+  if (!registry || !HighlightCtor || !term) return 0
+
+  const ranges: Range[] = []
+  let walked = 0
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const text = node.nodeValue
+      if (!text || !text.trim()) return NodeFilter.FILTER_REJECT
+      // Rótulo de leitor de tela e script não são conteúdo visível.
+      if (node.parentElement?.closest("script, style, .sr-only")) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const textNode = node as Text
+    const value = textNode.nodeValue ?? ""
+    walked += value.length
+    if (walked > MAX_WALK) break
+    const { folded, starts, ends } = foldWithMap(value)
+    for (let at = folded.indexOf(term); at !== -1; at = folded.indexOf(term, at + term.length)) {
+      const start = starts[at]
+      const end = ends[at + term.length - 1]
+      if (start === undefined || end === undefined || end <= start) continue
+      const range = document.createRange()
+      range.setStart(textNode, start)
+      range.setEnd(textNode, end)
+      ranges.push(range)
+    }
+  }
+  if (ranges.length === 0) return 0
+  registry.set(SEARCH_HIGHLIGHT, new HighlightCtor(...ranges))
+  return ranges.length
 }
