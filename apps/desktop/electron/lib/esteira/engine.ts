@@ -579,8 +579,9 @@ function caminhosDoStatus(status: string): string[] {
 /**
  * Gera a mensagem do commit final com uma chamada one-shot (sem tools), no
  * modelo padrão da esteira. O prompt do sistema é o `commitPrompt` da esteira
- * ou o default (preferências de commits na memória; fallback Conventional
- * Commits). Falha da chamada NÃO falha o commit: cai no título da task.
+ * ou o default (o que a task pedir; sem isso, o estilo do último commit; sem
+ * histórico, preferências na memória; fallback Conventional Commits). Falha da
+ * chamada NÃO falha o commit: cai no título da task.
  */
 async function gerarMensagemCommit(
   raiz: string,
@@ -612,16 +613,27 @@ async function gerarMensagemCommit(
   const commitPrefs = await buscarMemoria({ query: 'commit', kinds: ['general'], limit: 5 }).catch(() => [])
   const memorias = [...ctx.general, ...commitPrefs.filter((m) => !ctx.general.includes(m))]
 
-  // Estilo real do repo: os últimos commits são a preferência de fato.
+  // Estilo real do repo: o commit mais recente é a preferência de fato; a lista
+  // de headers serve de padrão quando o último não basta para inferir formato.
   let log = ''
+  let ultimoCommit = ''
   try {
-    const { stdout } = await execFileAsync('git', ['log', '--oneline', '-20'], {
-      cwd: raiz,
-      env: userShellEnv(),
-      timeout: 15_000,
-      signal,
-    })
-    log = stdout.trim()
+    const [lista, ultimo] = await Promise.all([
+      execFileAsync('git', ['log', '--oneline', '-20'], {
+        cwd: raiz,
+        env: userShellEnv(),
+        timeout: 15_000,
+        signal,
+      }),
+      execFileAsync('git', ['log', '-1', '--format=%B'], {
+        cwd: raiz,
+        env: userShellEnv(),
+        timeout: 15_000,
+        signal,
+      }),
+    ])
+    log = lista.stdout.trim()
+    ultimoCommit = ultimo.stdout.trim().slice(0, 4000)
   } catch {
     // repo sem commits ainda — segue sem o bloco de estilo
   }
@@ -646,7 +658,12 @@ async function gerarMensagemCommit(
         model,
         system: esteira.commitPrompt?.trim() || ESTEIRA_COMMIT_PROMPT_PADRAO,
         messages: normalizeMessages(
-          [{ role: 'user', content: montarPromptCommit({ esteira, task, pastas, status, memorias, log }) }],
+          [
+            {
+              role: 'user',
+              content: montarPromptCommit({ esteira, task, pastas, status, memorias, log, ultimoCommit }),
+            },
+          ],
           interleavedReasoningField(provider, fase.modelId),
         ),
         abortSignal: signal,
@@ -678,6 +695,7 @@ function montarPromptCommit(ctx: {
   status: string
   memorias: Memory[]
   log: string
+  ultimoCommit: string
 }): string {
   const partes: string[] = []
   partes.push(`# Task: ${ctx.task.titulo}`)
@@ -713,14 +731,20 @@ function montarPromptCommit(ctx: {
 
   partes.push(`\n## Changed files (working tree)\n${ctx.status.trim() || '(none)'}`)
 
-  if (ctx.memorias.length > 0) {
+  // Precedência do estilo, na mesma ordem do prompt padrão: o que a task pedir
+  // (brief, no topo), o commit mais recente do repo, os headers e, por último,
+  // as preferências da memória — só quando não há commit acima para imitar.
+  if (ctx.ultimoCommit) {
     partes.push(
-      `\n## User's commit preferences (from memory — follow them)\n${ctx.memorias.map((m) => `- ${m.text}`).join('\n')}`,
+      `\n## Most recent commit in this repository (match its language, format and scope)\n${ctx.ultimoCommit}`,
     )
   }
   if (ctx.log) {
+    partes.push(`\n## Recent commit headers (pattern reference)\n${ctx.log}`)
+  }
+  if (ctx.memorias.length > 0) {
     partes.push(
-      `\n## Recent commits in this repository (imitate the style when the preferences above don't specify)\n${ctx.log}`,
+      `\n## User's commit preferences (from memory — use them only when there is no commit above to imitate)\n${ctx.memorias.map((m) => `- ${m.text}`).join('\n')}`,
     )
   }
   return partes.join('\n')

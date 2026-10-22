@@ -466,8 +466,9 @@ export function EsteiraCreateDialog({
         onConfirm={() => excluindo && void removerTemplate(excluindo.id)}
       />
 
-      {/* Prompt do commit final: vazio = padrão (preferências do usuário na
-          memória; fallback Conventional Commits). */}
+      {/* Prompt do commit final: vazio = padrão (o que a task pedir; sem isso,
+          estilo do último commit; sem histórico, memória; fallback
+          Conventional Commits). */}
       <Dialog open={promptAberto} onOpenChange={setPromptAberto}>
         <DialogContent className="max-w-xl">
           <DialogTitle>{t("esteira.commitPromptTitulo")}</DialogTitle>

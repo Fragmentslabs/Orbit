@@ -147,8 +147,9 @@ export interface Esteira {
   commitAoFinal: boolean
   /**
    * Prompt do agente que escreve a mensagem do commit final. Ausente = o
-   * default (ESTEIRA_COMMIT_PROMPT_PADRAO): seguir as preferências de commits
-   * do usuário na memória; sem elas, Conventional Commits com header e body.
+   * default (ESTEIRA_COMMIT_PROMPT_PADRAO): o que a task pedir sobre o commit;
+   * sem isso, o estilo do commit mais recente do repositório; sem histórico,
+   * as preferências de commits na memória; sem elas, Conventional Commits.
    */
   commitPrompt?: string
   /**
@@ -403,14 +404,20 @@ export const ESTEIRA_RETRY_PADRAO = 3
 
 /**
  * Prompt padrão do agente que escreve a mensagem do commit final (D10). É o
- * valor de `Esteira.commitPrompt` quando o usuário não customiza: segue as
- * preferências de commits dele salvas nas memórias; sem elas, Conventional
- * Commits com header + body de tópicos resumidos. O contexto (task, anotações
- * das fases, arquivos alterados) vai na mensagem do usuário, como nas fases.
+ * valor de `Esteira.commitPrompt` quando o usuário não customiza. Precedência:
+ * o que a task pedir sobre o commit; sem isso, o estilo do commit mais recente
+ * do repositório; sem histórico, as preferências de commits na memória; sem
+ * elas, Conventional Commits com header + body de tópicos resumidos. O contexto
+ * (task, anotações das fases, arquivos alterados, último commit) vai na
+ * mensagem do usuário, como nas fases.
  */
 export const ESTEIRA_COMMIT_PROMPT_PADRAO = `Write the git commit message for the final state of this pipeline task.
 
-Follow the user's commit preferences from memory when they exist (language, format, scope). If there are none, fall back to Conventional Commits: a concise header "type: subject" plus a body with the summarized topics of what changed.
+Follow this precedence:
+1. What the task asks about the commit (language, format, scope): if the task description or the notes specify it, follow it exactly.
+2. Otherwise, the style of the most recent commit in this repository (in the context below): match its language, format and scope.
+3. With no commit history, follow the user's commit preferences from memory when they exist.
+4. With none, fall back to Conventional Commits: a concise header "type: subject" plus a body with the summarized topics of what changed.
 
 Base the message ONLY on the actual changes in the context below (task description, notes from the phases, changed files) — never invent work that was not done. The header must be short; the body lists the main topics, not a file-by-file log.
 

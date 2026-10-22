@@ -474,8 +474,9 @@ function FormEsteiraCorpo({
         />
       )}
 
-      {/* Prompt do commit final: vazio = padrão (preferências do usuário na
-          memória; fallback Conventional Commits). */}
+      {/* Prompt do commit final: vazio = padrão (o que a task pedir; sem isso,
+          estilo do último commit; sem histórico, memória; fallback
+          Conventional Commits). */}
       <BottomSheet
         aberto={promptAberto}
         aoFechar={() => setPromptAberto(false)}

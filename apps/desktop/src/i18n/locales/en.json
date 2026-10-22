@@ -2237,8 +2237,8 @@
     "nenhumaTask": "No task found",
     "commit": "Create a commit when finishing",
     "commitPromptTitulo": "Final commit message",
-    "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase and the changed files — exactly the same context a phase gets. Empty uses the default: follow the user's commit preferences from memory, falling back to Conventional Commits (header + body of summarized topics).",
-    "commitPromptVazio": "Empty = default prompt (memory preferences → Conventional Commits).",
+    "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
+    "commitPromptVazio": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
     "commitFalhou": "Final commit failed"
   },
   "rotinas": {
