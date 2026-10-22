@@ -302,6 +302,18 @@ export const MESSAGES = {
     'pt-BR': 'Script: capturando {{name}}',
     en: 'Script: capturing {{name}}',
   },
+  'panel.activity.recordStart': {
+    'pt-BR': 'Gravando {{url}}',
+    en: 'Recording {{url}}',
+  },
+  'panel.activity.recordStep': {
+    'pt-BR': 'Gravando: {{label}}',
+    en: 'Recording: {{label}}',
+  },
+  'panel.activity.recordSave': {
+    'pt-BR': 'Codificando o vídeo da gravação',
+    en: 'Encoding the recording',
+  },
   'panel.activity.fullPage': {
     'pt-BR': 'Capturando a página inteira',
     en: 'Capturing the full page',

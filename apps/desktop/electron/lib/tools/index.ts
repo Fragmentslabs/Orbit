@@ -11,6 +11,7 @@ import { createPdfOpsTools } from './pdf'
 import { createSvgTools } from './svg'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
+import { createBrowserRecordTools } from './browser-record'
 import { createEsteiraTools } from './esteira'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
@@ -322,6 +323,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       Object.assign(tools, panelTools)
       // Automação em lote: roda numa janela oculta, sem disputar o painel.
       Object.assign(tools, createBrowserScriptTools(ctx))
+      // Gravação de um roteiro em vídeo (mesma janela oculta, captura por CDP).
+      // Não pede permissão e não abre janela — mas só deve ser chamada quando o
+      // usuário pede uma gravação (ver a descrição da tool).
+      Object.assign(tools, createBrowserRecordTools(ctx))
     } else {
       // show_image também mostra imagens do projeto e da galeria — isso não é
       // usar o navegador, então fica.

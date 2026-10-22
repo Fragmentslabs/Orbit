@@ -40,7 +40,7 @@ export const BROWSER_PARTITION = 'persist:orbit-browser'
 
 /** Altura máxima de uma captura fullPage (evita estourar memória em páginas infinitas). */
 const MAX_FULL_PAGE_HEIGHT = 8000
-const DEFAULT_VIEWPORT = { width: 1280, height: 800 }
+export const DEFAULT_VIEWPORT = { width: 1280, height: 800 }
 const DEFAULT_TIMEOUT_MS = 120_000
 const LOAD_TIMEOUT_MS = 20_000
 const MAX_LOGS = 200
@@ -204,8 +204,8 @@ interface DoneMessage {
   error?: string
 }
 
-/** Cria a janela oculta de captura. */
-function createHiddenWindow(viewport: { width: number; height: number }): BrowserWindow {
+/** Cria a janela oculta de captura (usada aqui e pela gravação — browser-record). */
+export function createHiddenWindow(viewport: { width: number; height: number }): BrowserWindow {
   return new BrowserWindow({
     show: false,
     width: viewport.width,

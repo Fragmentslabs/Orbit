@@ -2091,7 +2091,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             // Vídeo renderizado/mostrado: player na resposta. O arquivo segue
             // no projeto; o resultado traz a URL orbit-video:// já registrada.
-            if (part.toolName === 'video_render' || part.toolName === 'motion_render' || part.toolName === 'show_video') {
+            if (
+              part.toolName === 'video_render' ||
+              part.toolName === 'motion_render' ||
+              part.toolName === 'browser_record' ||
+              part.toolName === 'show_video'
+            ) {
               const output = part.output as { videoUrl?: string; title?: string; durationMs?: number; path?: string } | string
               if (typeof output === 'object' && output?.videoUrl) {
                 upsertPart({

@@ -104,6 +104,11 @@ const NATIVE_TOOLS = new Set([
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',
   'capture_batch',
+  // Gravação de um roteiro: navega numa janela oculta com as MESMAS ferramentas
+  // de browser já liberadas acima e grava o framebuffer. Não pede permissão de
+  // gravação do sistema (o CDP captura a página, não a tela) e não escreve no
+  // projeto — o MP4 vai para a galeria do Orbit.
+  'browser_record',
   // Browser do modo chat (toggle "Browser") — tools nativas do toggle,
   // não MCP; caíam no catch-all "_" e pediam permissão como servidor "browser"
   'browser_open',

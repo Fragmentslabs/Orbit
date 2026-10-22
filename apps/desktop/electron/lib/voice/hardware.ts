@@ -1,5 +1,5 @@
-import os from "node:os"
 import type { VoiceEngineId, VoiceHardwareInfo } from "@shared/voice"
+import { detectMachine } from "../machine"
 import { STT_MODELS } from "./stt"
 import { modelInfo } from "./manifest"
 import { preferredWhisperModelId } from "./catalog"
@@ -63,10 +63,10 @@ function mb(bytes: number): number {
 }
 
 export function detectHardware(options: HardwareOptions = {}): VoiceHardwareInfo {
-  const platform = process.platform
-  const arch = os.arch()
-  const totalMemGb = Math.round((os.totalmem() / 1024 ** 3) * 10) / 10
-  const cpus = Math.max(1, os.cpus().length || 1)
+  // Números da máquina vêm do detector comum (`lib/machine.ts`): a gravação de
+  // vídeo usa os mesmos, e duas contas diferentes para "quantos GB tem esta
+  // máquina" acabariam divergindo.
+  const { platform, arch, totalMemGb, cpus } = detectMachine()
   const baixados = new Set(options.downloadedIds ?? [])
   const warnings: string[] = []
 
