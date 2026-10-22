@@ -1195,6 +1195,29 @@ export interface CatalogModel {
   >
 }
 
+/**
+ * Dialeto de fio de um provedor FORA do models.dev (provedor personalizado).
+ * No catálogo quem decide o SDK é o `npm`; aqui o usuário escolhe o protocolo,
+ * porque um gateway que fala Anthropic Messages não funciona pelo adaptador
+ * openai-compatible.
+ */
+export type ProviderProtocol = 'openai-completions' | 'openai-responses' | 'anthropic-messages'
+
+/**
+ * Ajustes de gateway que o models.dev não tem como descrever. Todos opcionais:
+ * ausentes, valem os padrões do protocolo.
+ */
+export interface ProviderCompat {
+  /** Campo que carrega o teto de tokens de saída (APIs OpenAI-like). */
+  maxTokensField?: 'max_tokens' | 'max_completion_tokens'
+  /**
+   * `deepseek`: o raciocínio volta em `reasoning_content` e precisa ser
+   * reenviado em todas as mensagens de assistente (o DeepSeek devolve 400 em
+   * conversa multi-turno sem ele). `none`: nunca injeta o campo.
+   */
+  thinkingFormat?: 'deepseek' | 'none'
+}
+
 export interface CatalogProvider {
   id: string
   name: string
@@ -1202,6 +1225,62 @@ export interface CatalogProvider {
   npm?: string
   api?: string
   models: Record<string, CatalogModel>
+  /** Só em provedores personalizados (ver ProviderProtocol). */
+  protocol?: ProviderProtocol
+  /** Só em provedores personalizados (ver ProviderCompat). */
+  compat?: ProviderCompat
+  /**
+   * Só em provedores personalizados, e só na resposta do `list`: a chave está
+   * salva (auth.json) ou a variável de ambiente existe. Não é persistido no
+   * arquivo de provedores.
+   */
+  hasKey?: boolean
+}
+
+/** Modelo declarado num provedor personalizado — o models.dev não o conhece. */
+export interface CustomModelInput {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  /** Ausente = inferido do id (ver inferReasoning em custom-providers.ts). */
+  reasoning?: boolean
+}
+
+/** Provedor personalizado criado pelo usuário (fora da listagem do models.dev). */
+export interface CustomProviderInput {
+  /** Slug sem o prefixo `custom:` (ex: "meu-gateway"). */
+  id: string
+  name: string
+  baseURL: string
+  /** Vai para o auth.json; nunca volta pelo IPC. */
+  apiKey?: string
+  /** Em vez de guardar a chave, lê de uma variável de ambiente. */
+  keyEnv?: string
+  protocol?: ProviderProtocol
+  compat?: ProviderCompat
+  models?: CustomModelInput[]
+}
+
+/** Alteração de um provedor personalizado — campo ausente fica como está. */
+export interface CustomProviderPatch {
+  name?: string
+  baseURL?: string
+  apiKey?: string
+  /** `null`/vazio = deixa de usar variável de ambiente. */
+  keyEnv?: string | null
+  protocol?: ProviderProtocol
+  compat?: ProviderCompat | null
+  /** Substitui a lista inteira quando presente. */
+  models?: CustomModelInput[]
+}
+
+/** Modelo encontrado ao consultar o `GET /models` de um servidor. */
+export interface DiscoveredModel {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
 }
 
 export type Catalog = Record<string, CatalogProvider>

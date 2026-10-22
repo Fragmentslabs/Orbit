@@ -2,7 +2,11 @@ import type {
   Catalog,
   CatalogProvider,
   ChatEvent,
+  CustomProviderInput,
+  CustomProviderPatch,
+  DiscoveredModel,
   ModelRotation,
+  ProviderProtocol,
   RotationConfig,
   SearchHit,
   ReasoningConfig,
@@ -168,12 +172,23 @@ export interface DetectResult {
 
 export const customProvidersApi = {
   list: () => window.ipcRenderer.invoke("custom-providers:list") as Promise<CatalogProvider[]>,
-  add: (id: string, name: string, baseURL: string, apiKey?: string) =>
-    window.ipcRenderer.invoke("custom-providers:add", id, name, baseURL, apiKey) as Promise<CatalogProvider>,
+  add: (input: CustomProviderInput) =>
+    window.ipcRenderer.invoke("custom-providers:add", input) as Promise<CatalogProvider>,
   remove: (id: string) => window.ipcRenderer.invoke("custom-providers:remove", id) as Promise<void>,
-  update: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) =>
+  update: (id: string, patch: CustomProviderPatch) =>
     window.ipcRenderer.invoke("custom-providers:update", id, patch) as Promise<CatalogProvider>,
   detect: () => window.ipcRenderer.invoke("custom-providers:detect") as Promise<DetectResult[]>,
+  /** Consulta o /models do servidor sem gravar nada (o diálogo só salva no fim). */
+  discover: (opts: {
+    baseURL: string
+    apiKey?: string
+    protocol?: ProviderProtocol
+    /** Em edição: reaproveita a chave já salva do provedor. */
+    providerId?: string
+  }) => window.ipcRenderer.invoke("custom-providers:discover", opts) as Promise<DiscoveredModel[]>,
+  /** Consulta o /models e grava no provedor (card: "buscar modelos"). */
+  refreshModels: (id: string) =>
+    window.ipcRenderer.invoke("custom-providers:refresh", id) as Promise<CatalogProvider>,
 }
 
 export interface ProcessInfo {

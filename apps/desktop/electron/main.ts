@@ -49,7 +49,9 @@ import { checkWritePath } from './lib/file-write-guard'
 import { recordManualSave } from './lib/manual-saves'
 import { lintFile, stopLintWorkers } from './lib/eslint-service'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
-import { detectLocal } from './lib/detect-local'
+import { detectLocal, discoverProviderModels, refreshProviderModels } from './lib/detect-local'
+import { discoverModels, type DiscoverOptions } from './lib/discover-models'
+import type { CustomProviderInput, CustomProviderPatch } from '@shared/chat'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
@@ -2869,12 +2871,19 @@ app.whenReady().then(() => {
 
   // Custom providers (locais / user-defined)
   ipcMain.handle('custom-providers:list', () => listCustomProviders())
-  ipcMain.handle('custom-providers:add', (_event, id: string, name: string, baseURL: string, apiKey?: string) =>
-    addCustomProvider(id, name, baseURL, apiKey))
+  ipcMain.handle('custom-providers:add', (_event, input: CustomProviderInput) =>
+    addCustomProvider(input))
   ipcMain.handle('custom-providers:remove', (_event, id: string) => removeCustomProvider(id))
-  ipcMain.handle('custom-providers:update', (_event, id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) =>
+  ipcMain.handle('custom-providers:update', (_event, id: string, patch: CustomProviderPatch) =>
     updateCustomProvider(id, patch))
   ipcMain.handle('custom-providers:detect', () => detectLocal())
+  // Descoberta sem gravar: o diálogo mostra os modelos e só persiste no salvar.
+  // Com `providerId`, reaproveita a chave que já está salva no provedor.
+  ipcMain.handle('custom-providers:discover', (_event, opts: DiscoverOptions) =>
+    opts.providerId ? discoverProviderModels(opts.providerId, opts) : discoverModels(opts))
+  // Descoberta + gravação no provedor (botão "buscar modelos" do card).
+  ipcMain.handle('custom-providers:refresh', (_event, id: string) =>
+    refreshProviderModels(id))
 
   // Abertura fria via "Abrir com Orbit": a pasta chega em argv e fica pendente
   // até o renderer montar (a janela ainda está carregando aqui).

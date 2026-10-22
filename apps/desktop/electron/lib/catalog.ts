@@ -5,6 +5,7 @@ import { modelSupportsVision } from '@shared/chat'
 import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
 import { listCustomProviders, seedCustomProviders } from './custom-providers'
+import { providerRuntimeNpm } from './provider-npm'
 
 /**
  * Catálogo de provedores/modelos vindo do models.dev — a mesma fonte usada
@@ -44,20 +45,25 @@ async function readCache(): Promise<{ catalog: Catalog; fetchedAt: number } | nu
  * Enriquece cada modelo com metadados de reasoning (variants disponíveis e
  * flag de "sempre pensa") para o renderer montar a UI sem conhecer payloads.
  */
-function enrichCatalog(catalog: Catalog): Catalog {
-  for (const providerId in catalog) {
-    const provider = catalog[providerId]
-    for (const modelId in provider.models) {
-      const model = provider.models[modelId]
-      if (!model.reasoning) continue
-      const input = toModelInput(providerId, provider.npm, model, provider.api)
-      model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
-      model.variants = Object.keys(generateVariants(input)).map((id) => ({
-        id,
-        label: variantLabel(id),
-      }))
-    }
+function enrichProvider(providerId: string, provider: CatalogProvider): CatalogProvider {
+  for (const modelId in provider.models) {
+    const model = provider.models[modelId]
+    if (!model.reasoning) continue
+    // O npm efetivo (não só o do catálogo) mantém a UI alinhada ao SDK que o
+    // resolveModel vai usar de fato — inclusive nos provedores personalizados,
+    // cujo protocolo escolhe o SDK.
+    const input = toModelInput(providerId, providerRuntimeNpm(provider), model, provider.api)
+    model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
+    model.variants = Object.keys(generateVariants(input)).map((id) => ({
+      id,
+      label: variantLabel(id),
+    }))
   }
+  return provider
+}
+
+function enrichCatalog(catalog: Catalog): Catalog {
+  for (const providerId in catalog) enrichProvider(providerId, catalog[providerId])
   return catalog
 }
 
@@ -124,10 +130,14 @@ export async function getCatalog(): Promise<Catalog> {
 export async function getMergedCatalog(): Promise<Catalog> {
   const catalog = await getCatalog()
   const custom = await listCustomProviders()
-  for (const provider of custom) {
-    catalog[provider.id] = provider
-  }
-  return catalog
+  if (custom.length === 0) return catalog
+
+  // Cópia, não escrita no cache: `cached` é o módulo inteiro. Escrever os
+  // personalizados nele fazia um provedor removido continuar no catálogo até
+  // reiniciar o app, e apagava a distinção entre catálogo e cadastro local.
+  const merged: Catalog = { ...catalog }
+  for (const provider of custom) merged[provider.id] = enrichProvider(provider.id, provider)
+  return merged
 }
 
 export async function getProvider(providerId: string): Promise<CatalogProvider | undefined> {

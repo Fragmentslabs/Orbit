@@ -3,6 +3,7 @@ import type { CatalogProvider, SendMessageInput } from '@shared/chat'
 import { closestVariant, findCatalogModel } from '@shared/chat'
 import { getProvider } from '../catalog'
 import { isServedByOpenAiCompatible } from '../providers'
+import { providerRuntimeNpm } from '../provider-npm'
 import { mergeOptions } from './merge'
 import { buildBaseOptions } from './options'
 import { generateVariants, toModelInput } from './variants'
@@ -51,7 +52,7 @@ export async function buildProviderOptions(
   const model = found.model
   if (!model.reasoning) return undefined
 
-  const modelInput = toModelInput(input.providerId, provider.npm, model, provider.api)
+  const modelInput = toModelInput(input.providerId, providerRuntimeNpm(provider), model, provider.api)
   const variants = generateVariants(modelInput)
 
   // Nível salvo que o modelo não tem vira o vizinho mais próximo; sem nível
@@ -80,7 +81,19 @@ export function interleavedReasoningField(
   provider: CatalogProvider | undefined,
   modelId: string,
 ): string | undefined {
-  if (isServedByOpenAiCompatible(provider?.npm) && modelId.toLowerCase().includes('deepseek')) {
+  // Ajuste explícito do provedor personalizado: um gateway pode servir um
+  // modelo DeepSeek com nome que não contém "deepseek" (ds-v3), ou servir um
+  // modelo de outro fornecedor que também exige o campo.
+  const format = provider?.compat?.thinkingFormat
+  if (format === 'none') return undefined
+
+  const servedByOpenAiCompatible = isServedByOpenAiCompatible(providerRuntimeNpm(provider))
+  // `reasoning_content` é campo do dialeto openai-compatible (e o
+  // normalizeMessages reescreve providerOptions.openaiCompatible): num
+  // protocolo Anthropic/Responses o campo não existe.
+  if (!servedByOpenAiCompatible) return undefined
+
+  if (format === 'deepseek' || modelId.toLowerCase().includes('deepseek')) {
     return 'reasoning_content'
   }
   return undefined

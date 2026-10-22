@@ -12,6 +12,7 @@ import { resolveApiKey } from './auth'
 import { findCatalogModel } from '@shared/chat'
 import { getProvider } from './catalog'
 import { ProviderResolutionError } from './provider-errors'
+import { providerRuntimeNpm } from './provider-npm'
 import {
   SESSION_HEADER,
   SESSION_HEADER_PROVIDERS,
@@ -163,7 +164,9 @@ export async function resolveModel(
   // (que o gateway às vezes ainda aceita, mas com outro comportamento).
   modelId = findCatalogModel({ [provider.id]: provider }, provider.id, modelId)?.modelId ?? modelId
 
-  const npm = provider.npm ?? '@ai-sdk/openai-compatible'
+  // Provedor personalizado não tem `npm` no catálogo: quem decide o SDK é o
+  // `protocol` do cadastro (ver provider-npm.ts).
+  const npm = providerRuntimeNpm(provider)
 
   // SDKs que usam auth própria do ambiente (gcloud ADC, AWS credentials, etc.)
   if (npm === '@ai-sdk/google-vertex' || npm === '@ai-sdk/amazon-bedrock') {
@@ -190,6 +193,29 @@ export async function resolveModel(
     ? providerFetch(sessionIdFor(opts), rotateSession)
     : undefined
 
+  // Protocolo explícito de um provedor fora do models.dev: o gateway fala
+  // Anthropic Messages ou o endpoint /responses, e o adaptador
+  // openai-compatible não serve para nenhum dos dois.
+  if (provider.protocol === 'anthropic-messages') {
+    const sdk = createAnthropic({
+      apiKey,
+      ...(provider.api ? { baseURL: provider.api } : {}),
+      ...(headers ? { headers } : {}),
+      ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    })
+    return sdk(modelId)
+  }
+
+  if (provider.protocol === 'openai-responses') {
+    const sdk = createOpenAI({
+      apiKey,
+      ...(provider.api ? { baseURL: provider.api } : {}),
+      ...(headers ? { headers } : {}),
+      ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    })
+    return sdk.responses(modelId)
+  }
+
   if (factory && npm !== '@ai-sdk/openai-compatible') {
     const sdk = (factory as SdkFactory)({
       apiKey,
@@ -214,6 +240,20 @@ export async function resolveModel(
     includeUsage: true,
     ...(headers ? { headers } : {}),
     ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    ...(provider.compat?.maxTokensField === 'max_completion_tokens'
+      ? { transformRequestBody: renameMaxTokensField }
+      : {}),
   })
   return sdk(modelId)
+}
+
+/**
+ * Gateways que só aceitam `max_completion_tokens` (modelos da família o-series
+ * atrás de um proxy). O adaptador openai-compatible sempre manda `max_tokens`;
+ * aqui o campo é renomeado sem tocar no resto do corpo.
+ */
+function renameMaxTokensField(body: Record<string, unknown>): Record<string, unknown> {
+  if (!('max_tokens' in body)) return body
+  const { max_tokens, ...rest } = body
+  return { ...rest, max_completion_tokens: max_tokens }
 }

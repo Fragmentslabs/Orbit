@@ -44,7 +44,9 @@ function legacyVisionDefault(): boolean {
 
 function loadModes(key: string, fallback: ActiveModeDefaults): ActiveModeDefaults {
   const stored = loadJson<Partial<ActiveModeDefaults>>(key, fallback)
-  if (stored && typeof stored === "object" && "vision" in stored) return stored as ActiveModeDefaults
+  // O merge com o fallback é o que faz um campo NOVO nascer com o default em
+  // vez de undefined para quem já tinha prefs gravadas.
+  if (stored && typeof stored === "object" && "vision" in stored) return { ...fallback, ...stored }
   // Prefs gravadas antes do campo vision existir → aplica o default legado
   return { ...fallback, ...stored, vision: legacyVisionDefault() }
 }

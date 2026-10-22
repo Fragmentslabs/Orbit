@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Bell, BookOpen, Database, Globe, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, Volume2, X, Pencil, Info } from "lucide-react"
+import { Bell, BookOpen, Database, Globe, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, Volume2, X, Pencil, Info, ChevronDown, Loader2 } from "lucide-react"
+import type { CatalogProvider, ProviderProtocol } from "@shared/chat"
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ import { AboutPanel } from "@/src/components/about-panel"
 import { BrowserPanel } from "@/src/components/browser-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { customProvidersApi, windowApi } from "@/src/lib/ipc"
+import { isLocalEndpoint } from "@/src/lib/provider-endpoint"
 import { cn } from "@/lib/utils"
 
 import { useSettingsUi, type SettingsTab } from "@/src/stores/settings-ui"
@@ -216,34 +218,136 @@ const ProviderRow = memo(function ProviderRow({
   )
 })
 
+/** Modelo em edição no diálogo (o enabled é estado só da UI, não vai ao disco). */
+interface ModelDraft {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  reasoning?: boolean
+  enabled: boolean
+}
+
+type KeyMode = "key" | "env" | "none"
+
+function modelsFromProvider(provider: CatalogProvider | undefined): ModelDraft[] {
+  if (!provider) return []
+  return Object.values(provider.models).map((model) => ({
+    id: model.id,
+    name: model.name,
+    contextWindow: model.limit?.context,
+    maxTokens: model.limit?.output,
+    reasoning: model.reasoning,
+    enabled: true,
+  }))
+}
+
+/** Precisa bater com defaultEnvName do main (custom-providers.ts). */
+function defaultEnvName(providerId: string): string {
+  const slug = providerId.replace(/^custom:/, "").toUpperCase().replace(/[^A-Z0-9_]/g, "_")
+  return `CUSTOM_${slug}_KEY`
+}
+
+function keyModeOf(provider: CatalogProvider | undefined): KeyMode {
+  const env = provider?.env[0]
+  if (!env) return "none"
+  return env === defaultEnvName(provider.id) ? "key" : "env"
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+  return slug || "provedor"
+}
+
+/**
+ * Servidores locais conhecidos. O clique só preenche a URL e dispensa a chave:
+ * o formulário continua editável, e o "Buscar modelos" segue sendo o passo que
+ * confirma que o servidor está no ar e quais modelos ele tem. As duas primeiras
+ * URLs são as mesmas dos seeds (`custom-providers.ts`), para o card criado à
+ * mão e o detectado apontarem para o mesmo lugar.
+ */
+const LOCAL_PRESETS = [
+  { id: "ollama", name: "Ollama", baseURL: "http://localhost:11434/v1" },
+  { id: "lmstudio", name: "LM Studio", baseURL: "http://localhost:1234/v1" },
+  { id: "vllm", name: "vLLM", baseURL: "http://localhost:8000/v1" },
+  { id: "llamacpp", name: "llama.cpp", baseURL: "http://localhost:8080/v1" },
+] as const
+
 function CustomProviderCard({
   provider,
   onEdit,
   onRemove,
 }: {
-  provider: { id: string; name: string; api?: string }
+  provider: CatalogProvider
   onEdit: () => void
   onRemove: () => void
 }) {
   const { t } = useTranslation()
-  const connected = useProviderStore((s) => s.connectedProviders.includes(provider.id))
+  const refreshProviderModels = useProviderStore((s) => s.refreshProviderModels)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState("")
+
+  const count = Object.keys(provider.models).length
+  // `env` com nome e `hasKey` falso = espera chave que ainda não existe.
+  const missingKey = provider.env.length > 0 && provider.hasKey === false
+  const local = isLocalEndpoint(provider.api)
+
+  const refresh = async () => {
+    setRefreshing(true)
+    setError("")
+    try {
+      await refreshProviderModels(provider.id)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex items-center gap-2">
-        <Server className="size-4 shrink-0 text-muted-foreground" />
+        <span
+          className="shrink-0"
+          title={local ? t("providers.local.groupLocal") : t("providers.local.groupRemote")}
+        >
+          {local ? (
+            <Server className="size-4 text-muted-foreground" />
+          ) : (
+            <Globe className="size-4 text-muted-foreground" />
+          )}
+        </span>
         <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
-        {connected ? (
-          <Badge variant="secondary" className="gap-1 text-[10px]">
-            <Wifi className="size-3" />
-            {t("providers.connected")}
+        {count === 0 ? (
+          <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
+            {t("providers.local.noModels")}
           </Badge>
         ) : (
-          <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
-            <WifiOff className="size-3" />
-            {t("providers.local.notConnected")}
+          <Badge variant="secondary" className="gap-1 text-[10px]">
+            {t("providers.local.models", { count })}
           </Badge>
         )}
+        {missingKey && (
+          <Badge variant="outline" className="gap-1 text-[10px] text-destructive">
+            <KeyRound className="size-3" />
+            {t("providers.local.noKey")}
+          </Badge>
+        )}
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          title={t("providers.local.refresh")}
+          disabled={refreshing || !provider.api}
+          onClick={() => void refresh()}
+        >
+          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+        </Button>
         <Button size="icon-sm" variant="ghost" title={t("providers.local.edit")} onClick={onEdit}>
           <Pencil className="size-3.5" />
         </Button>
@@ -252,8 +356,18 @@ function CustomProviderCard({
         </Button>
       </div>
       {provider.api && (
-        <p className="truncate text-[11px] text-muted-foreground">{provider.api}</p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {provider.api}
+          {provider.protocol && provider.protocol !== "openai-completions" && (
+            <span className="ml-2 text-muted-foreground/70">
+              {provider.protocol === "anthropic-messages"
+                ? t("providers.dialog.protocolAnthropic")
+                : t("providers.dialog.protocolResponses")}
+            </span>
+          )}
+        </p>
       )}
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
     </div>
   )
 }
@@ -262,54 +376,180 @@ function CustomProviderDialog({
   open,
   onOpenChange,
   editProvider,
+  initialName = "",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  editProvider?: { id: string; name: string; api?: string }
+  editProvider?: CatalogProvider
+  /** Nome sugerido ao criar (vem da busca da nuvem, ex.: o que foi digitado). */
+  initialName?: string
 }) {
   const { t } = useTranslation()
   const addCustomProvider = useProviderStore((s) => s.addCustomProvider)
   const updateCustomProvider = useProviderStore((s) => s.updateCustomProvider)
 
   const isEdit = !!editProvider
-  const rawId = editProvider ? editProvider.id.replace(/^custom:/, "") : ""
 
-  const [id, setId] = useState(rawId)
-  const [name, setName] = useState(editProvider?.name ?? "")
-  const [baseURL, setBaseURL] = useState(editProvider?.api ?? "http://localhost:11434/v1")
+  const [name, setName] = useState("")
+  const [baseURL, setBaseURL] = useState("")
+  const [keyMode, setKeyMode] = useState<KeyMode>("key")
   const [apiKey, setApiKey] = useState("")
+  const [keyEnv, setKeyEnv] = useState("")
+  const [protocol, setProtocol] = useState<ProviderProtocol>("openai-completions")
+  const [maxTokensField, setMaxTokensField] = useState<"max_tokens" | "max_completion_tokens">("max_tokens")
+  const [thinking, setThinking] = useState<"auto" | "deepseek" | "none">("auto")
+  const [models, setModels] = useState<ModelDraft[]>([])
+  const [manualId, setManualId] = useState("")
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverError, setDiscoverError] = useState("")
+  const [advanced, setAdvanced] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (open && editProvider) {
-      setId(editProvider.id.replace(/^custom:/, ""))
-      setName(editProvider.name)
-      setBaseURL(editProvider.api ?? "http://localhost:11434/v1")
-      setApiKey("")
-      setError("")
-    } else if (open) {
-      setId("")
-      setName("")
-      setBaseURL("http://localhost:11434/v1")
-      setApiKey("")
-      setError("")
+    if (!open) return
+    const provider = editProvider
+    setName(provider?.name ?? initialName)
+    setBaseURL(provider?.api ?? "")
+    setKeyMode(keyModeOf(provider))
+    setApiKey("")
+    setKeyEnv(provider && keyModeOf(provider) === "env" ? (provider.env[0] ?? "") : "")
+    setProtocol(provider?.protocol ?? "openai-completions")
+    setMaxTokensField(provider?.compat?.maxTokensField ?? "max_tokens")
+    setThinking(provider?.compat?.thinkingFormat ?? "auto")
+    setModels(modelsFromProvider(provider))
+    setManualId("")
+    setDiscovering(false)
+    setDiscoverError("")
+    setAdvanced(provider?.protocol !== undefined || provider?.compat !== undefined)
+    setError("")
+  }, [open, editProvider, initialName])
+
+  const enabledModels = models.filter((model) => model.enabled)
+  const keyRequired =
+    keyMode === "key" &&
+    !apiKey.trim() &&
+    !(isEdit && editProvider?.hasKey && keyModeOf(editProvider) === "key")
+  const envRequired = keyMode === "env" && !keyEnv.trim()
+  const canSave =
+    !!name.trim() && !!baseURL.trim() && enabledModels.length > 0 && !keyRequired && !envRequired && !saving
+
+  const toggleModel = (id: string) =>
+    setModels((current) =>
+      current.map((model) => (model.id === id ? { ...model, enabled: !model.enabled } : model)),
+    )
+
+  const addManual = () => {
+    const id = manualId.trim()
+    if (!id) return
+    setModels((current) =>
+      current.some((model) => model.id === id)
+        ? current
+        : [...current, { id, enabled: true }],
+    )
+    setManualId("")
+  }
+
+  /** Preenche o cadastro a partir de um servidor local conhecido. */
+  const applyPreset = (preset: (typeof LOCAL_PRESETS)[number]) => {
+    setBaseURL(preset.baseURL)
+    // Servidor local não pede chave: sem isto o "salvar" fica bloqueado
+    // esperando uma credencial que não existe.
+    setKeyMode("none")
+    setProtocol("openai-completions")
+    if (!name.trim()) setName(preset.name)
+  }
+
+  /**
+   * Consulta o /models do servidor e marca tudo como disponível. Roda sem
+   * gravar nada: o cadastro só é escrito no "salvar" (o resultado parcial não
+   * vira um provedor fantasma).
+   */
+  const handleDiscover = async () => {
+    if (!baseURL.trim()) return
+    setDiscovering(true)
+    setDiscoverError("")
+    try {
+      const found = await customProvidersApi.discover({
+        baseURL: baseURL.trim(),
+        ...(keyMode === "key" && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        protocol,
+        // Em edição o provedor já pode ter a chave salva: sem isto o
+        // "buscar modelos" tomaria 401 mesmo com a credencial gravada.
+        ...(editProvider ? { providerId: editProvider.id } : {}),
+      })
+      setModels((current) => {
+        const byId = new Map(current.map((model) => [model.id, model]))
+        const next: ModelDraft[] = found.map((item) => {
+          const existing = byId.get(item.id)
+          return existing
+            ? {
+                ...existing,
+                name: item.name ?? existing.name,
+                contextWindow: item.contextWindow ?? existing.contextWindow,
+                maxTokens: item.maxTokens ?? existing.maxTokens,
+              }
+            : {
+                id: item.id,
+                name: item.name,
+                contextWindow: item.contextWindow,
+                maxTokens: item.maxTokens,
+                enabled: true,
+              }
+        })
+        // Mantém o que foi adicionado à mão e não apareceu na listagem.
+        for (const model of current) {
+          if (!next.some((item) => item.id === model.id)) next.push(model)
+        }
+        return next
+      })
+    } catch (err) {
+      setDiscoverError((err as Error).message)
+    } finally {
+      setDiscovering(false)
     }
-  }, [open, editProvider])
+  }
 
   const handleSave = async () => {
-    if (!id.trim() || !name.trim() || !baseURL.trim()) return
+    if (!canSave) return
     setSaving(true)
     setError("")
+    const payloadModels = enabledModels.map(({ id, name, contextWindow, maxTokens, reasoning }) => ({
+      id,
+      ...(name ? { name } : {}),
+      ...(contextWindow ? { contextWindow } : {}),
+      ...(maxTokens ? { maxTokens } : {}),
+      ...(reasoning !== undefined ? { reasoning } : {}),
+    }))
+    const compat = {
+      ...(maxTokensField === "max_completion_tokens" ? { maxTokensField } : {}),
+      ...(thinking !== "auto" ? { thinkingFormat: thinking } : {}),
+    }
+    const authPayload = {
+      ...(keyMode === "env" ? { keyEnv: keyEnv.trim() } : {}),
+      ...(keyMode === "key" && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+    }
     try {
-      if (isEdit) {
-        await updateCustomProvider(rawId, {
+      if (isEdit && editProvider) {
+        await updateCustomProvider(editProvider.id, {
           name: name.trim(),
           baseURL: baseURL.trim(),
-          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+          protocol,
+          compat,
+          models: payloadModels,
+          ...authPayload,
+          ...(keyMode === "none" ? { keyEnv: null } : {}),
         })
       } else {
-        await addCustomProvider(id.trim(), name.trim(), baseURL.trim(), apiKey.trim() || undefined)
+        await addCustomProvider({
+          id: slugify(name),
+          name: name.trim(),
+          baseURL: baseURL.trim(),
+          protocol,
+          compat,
+          models: payloadModels,
+          ...authPayload,
+        })
       }
       onOpenChange(false)
     } catch (err) {
@@ -328,46 +568,219 @@ function CustomProviderDialog({
             {t("providers.dialog.description")}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground">{t("providers.dialog.id")}</label>
-              <Input
-                value={id}
-                placeholder="ollama-local"
-                disabled={isEdit}
-                onChange={(e) => setId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
-              />
+
+        <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto pr-1">
+          {!isEdit && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">{t("providers.dialog.presets")}</label>
+              <div className="flex flex-wrap gap-1">
+                {LOCAL_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.id}
+                    size="sm"
+                    variant={baseURL.trim() === preset.baseURL ? "secondary" : "outline"}
+                    onClick={() => applyPreset(preset)}
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="flex-[2]">
-              <label className="text-xs text-muted-foreground">{t("providers.dialog.name")}</label>
-              <Input value={name} placeholder={t("providers.dialog.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
-            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">{t("providers.dialog.name")}</label>
+            <Input value={name} placeholder={t("providers.dialog.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div>
+
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">{t("providers.dialog.baseUrl")}</label>
-            <Input value={baseURL} placeholder="http://localhost:11434/v1" onChange={(e) => setBaseURL(e.target.value)} />
+            <Input value={baseURL} placeholder={t("providers.dialog.baseUrlPlaceholder")} onChange={(e) => setBaseURL(e.target.value)} />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">
-              {t("providers.dialog.apiKey")} <span className="text-muted-foreground/50">{t("providers.dialog.optional")}</span>
-            </label>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">{t("providers.dialog.auth")}</label>
+            <select
+              value={keyMode}
+              onChange={(e) => setKeyMode(e.target.value as KeyMode)}
+              className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:border-ring"
+            >
+              <option value="key" className="bg-popover text-popover-foreground">{t("providers.dialog.authKey")}</option>
+              <option value="env" className="bg-popover text-popover-foreground">{t("providers.dialog.authEnv")}</option>
+              <option value="none" className="bg-popover text-popover-foreground">{t("providers.dialog.authNone")}</option>
+            </select>
+          </div>
+
+          {keyMode === "key" && (
+            <div className="flex flex-col gap-1">
+              <Input
+                type="password"
+                value={apiKey}
+                placeholder={isEdit ? t("providers.dialog.apiKeyPlaceholder") : t("providers.dialog.apiKey")}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">{t("providers.dialog.keyHint")}</p>
+            </div>
+          )}
+
+          {keyMode === "env" && (
             <Input
-              type="password"
-              value={apiKey}
-              placeholder={t("providers.dialog.apiKeyPlaceholder")}
-              onChange={(e) => setApiKey(e.target.value)}
+              value={keyEnv}
+              placeholder={t("providers.dialog.envNamePlaceholder")}
+              onChange={(e) => setKeyEnv(e.target.value)}
             />
+          )}
+
+          <div className="flex flex-col gap-1.5 border-t pt-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium">{t("providers.dialog.models")}</label>
+              <span className="text-[11px] text-muted-foreground">
+                {t("providers.dialog.modelsSelected", { count: enabledModels.length })}
+              </span>
+              <div className="flex-1" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                disabled={!baseURL.trim() || discovering}
+                onClick={() => void handleDiscover()}
+              >
+                {discovering ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                {discovering ? t("providers.dialog.discovering") : t("providers.dialog.discover")}
+              </Button>
+            </div>
+
+            {models.length > 0 && (
+              <div className="flex flex-col rounded-md border">
+                {models.map((model) => (
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => toggleModel(model.id)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-left hover:bg-muted/40"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded border",
+                        model.enabled && "border-primary bg-primary text-primary-foreground",
+                      )}
+                    >
+                      {model.enabled && <Check className="size-3" />}
+                    </span>
+                    <span className="flex-1 truncate text-xs">{model.name ?? model.id}</span>
+                    {model.contextWindow ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {Math.round(model.contextWindow / 1024)}k ctx
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {models.length === 0 && !discoverError && (
+              <p className="text-[11px] text-muted-foreground">{t("providers.dialog.discoverHint")}</p>
+            )}
+            {models.length > 0 && enabledModels.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">{t("providers.dialog.modelsEmpty")}</p>
+            )}
+            {discoverError && (
+              <p className="text-[11px] text-destructive">
+                {t("providers.dialog.discoverError", { error: discoverError })}
+              </p>
+            )}
+
+            <div className="flex gap-1.5">
+              <Input
+                value={manualId}
+                placeholder={t("providers.dialog.manualPlaceholder")}
+                className="h-7 text-xs"
+                onChange={(e) => setManualId(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    addManual()
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                disabled={!manualId.trim()}
+                onClick={addManual}
+              >
+                <Plus className="size-3" />
+                {t("providers.dialog.manualAdd")}
+              </Button>
+            </div>
           </div>
+
+          <div className="border-t pt-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setAdvanced((value) => !value)}
+            >
+              <ChevronDown className={cn("size-3 transition-transform", advanced && "rotate-180")} />
+              {t("providers.dialog.advanced")}
+            </button>
+
+            {advanced && (
+              <div className="mt-2 flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">{t("providers.dialog.protocol")}</label>
+                  <select
+                    value={protocol}
+                    onChange={(e) => setProtocol(e.target.value as ProviderProtocol)}
+                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:border-ring"
+                  >
+                    <option value="openai-completions" className="bg-popover text-popover-foreground">{t("providers.dialog.protocolOpenai")}</option>
+                    <option value="openai-responses" className="bg-popover text-popover-foreground">{t("providers.dialog.protocolResponses")}</option>
+                    <option value="anthropic-messages" className="bg-popover text-popover-foreground">{t("providers.dialog.protocolAnthropic")}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">{t("providers.dialog.maxTokensField")}</label>
+                  <select
+                    value={maxTokensField}
+                    onChange={(e) => setMaxTokensField(e.target.value as "max_tokens" | "max_completion_tokens")}
+                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:border-ring"
+                  >
+                    <option value="max_tokens" className="bg-popover text-popover-foreground">{t("providers.dialog.maxTokensDefault")}</option>
+                    <option value="max_completion_tokens" className="bg-popover text-popover-foreground">{t("providers.dialog.maxTokensCompletion")}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">{t("providers.dialog.thinking")}</label>
+                  <select
+                    value={thinking}
+                    onChange={(e) => setThinking(e.target.value as "auto" | "deepseek" | "none")}
+                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:border-ring"
+                  >
+                    <option value="auto" className="bg-popover text-popover-foreground">{t("providers.dialog.thinkingAuto")}</option>
+                    <option value="deepseek" className="bg-popover text-popover-foreground">{t("providers.dialog.thinkingDeepseek")}</option>
+                    <option value="none" className="bg-popover text-popover-foreground">{t("providers.dialog.thinkingNone")}</option>
+                  </select>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">{t("providers.dialog.protocolHint")}</p>
+              </div>
+            )}
+          </div>
+
           {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button size="sm" disabled={!id.trim() || !name.trim() || !baseURL.trim() || saving} onClick={() => void handleSave()}>
-              {isEdit ? t("common.save") : t("common.add")}
-            </Button>
-          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button size="sm" disabled={!canSave} onClick={() => void handleSave()}>
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : isEdit ? t("common.save") : t("providers.dialog.add")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -380,10 +793,13 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   const customProviders = useProviderStore((s) => s.customProviders)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const removeCustomProvider = useProviderStore((s) => s.removeCustomProvider)
+  const refreshCustomProviders = useProviderStore((s) => s.refreshCustomProviders)
 
   const [query, setQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editProvider, setEditProvider] = useState<{ id: string; name: string; api?: string } | undefined>(undefined)
+  const [editProvider, setEditProvider] = useState<CatalogProvider | undefined>(undefined)
+  /** Nome que o cadastro abre preenchido (vem da busca sem resultado). */
+  const [newProviderName, setNewProviderName] = useState("")
   const [detecting, setDetecting] = useState(false)
   const [detectResults, setDetectResults] = useState<DetectResult[] | null>(null)
   /**
@@ -417,6 +833,38 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
 
   const customIds = useMemo(() => new Set(customProviders.map((p) => p.id)), [customProviders])
 
+  /**
+   * Personalizados separados por "roda neste computador" e "está na rede ou na
+   * nuvem". A classificação sai da URL (nada persistido), então trocar o
+   * endereço na edição move o card de grupo sozinho.
+   */
+  const customGroups = useMemo(
+    () =>
+      [
+        {
+          id: "local",
+          label: t("providers.local.groupLocal"),
+          items: customProviders.filter((p) => isLocalEndpoint(p.api)),
+        },
+        {
+          id: "remote",
+          label: t("providers.local.groupRemote"),
+          items: customProviders.filter((p) => !isLocalEndpoint(p.api)),
+        },
+      ].filter((group) => group.items.length > 0),
+    [customProviders, t],
+  )
+
+  /**
+   * Abre o cadastro já com um nome sugerido — é o que liga a busca da nuvem
+   * ("não achei esse provedor") ao cadastro de um provedor próprio.
+   */
+  const openNewProvider = (name = "") => {
+    setNewProviderName(name)
+    setEditProvider(undefined)
+    setDialogOpen(true)
+  }
+
   const providerIds = useMemo(() => {
     const all = Object.keys(catalog).filter((id) => !customIds.has(id))
     if (query.trim()) {
@@ -437,6 +885,11 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
     try {
       const results = await customProvidersApi.detect()
       setDetectResults(results)
+      // O main adota os modelos encontrados no provedor correspondente;
+      // recarregar aqui faz os cards (e o seletor) refletirem isso na hora.
+      if (results.some((result) => result.detected && result.models.length > 0)) {
+        await refreshCustomProviders()
+      }
     } finally {
       setDetecting(false)
     }
@@ -460,7 +913,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
           disabled={detecting} onClick={() => void handleDetect()}>
           <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
         </Button>
-        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => { setEditProvider(undefined); setDialogOpen(true) }}>
+        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => openNewProvider()}>
           <Plus className="size-3" />
           {t("providers.local.add")}
         </Button>
@@ -494,20 +947,25 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        {customProviders.map((p) => (
-          <CustomProviderCard
-            key={p.id}
-            provider={p}
-            onEdit={() => {
-              setEditProvider(p)
-              setDialogOpen(true)
-            }}
-            onRemove={() => {
-              const id = p.id.replace(/^custom:/, "")
-              void removeCustomProvider(id)
-            }}
-          />
+      <div className="flex flex-col gap-3">
+        {customGroups.map((group) => (
+          <div key={group.id} className="flex flex-col gap-2">
+            <p className="text-[11px] font-medium text-muted-foreground/80">{group.label}</p>
+            {group.items.map((p) => (
+              <CustomProviderCard
+                key={p.id}
+                provider={p}
+                onEdit={() => {
+                  setEditProvider(p)
+                  setDialogOpen(true)
+                }}
+                onRemove={() => {
+                  const id = p.id.replace(/^custom:/, "")
+                  void removeCustomProvider(id)
+                }}
+              />
+            ))}
+          </div>
         ))}
         {customProviders.length === 0 && (
           <p className="py-2 text-center text-xs text-muted-foreground">
@@ -537,11 +995,31 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
           />
         ))}
         {providerIds.length === 0 && (
-          <p className="py-4 text-center text-xs text-muted-foreground">{t("providers.cloud.none")}</p>
+          <div className="flex flex-col items-center gap-2 py-4">
+            <p className="text-center text-xs text-muted-foreground">{t("providers.cloud.none")}</p>
+            {/*
+              A busca sem resultado é o momento em que o usuário descobre que o
+              provedor dele não está no catálogo — daí a oferta de cadastrar.
+            */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 text-xs"
+              onClick={() => openNewProvider(query.trim())}
+            >
+              <Plus className="size-3" />
+              {t("providers.cloud.addOwn")}
+            </Button>
+          </div>
         )}
       </div>
 
-      <CustomProviderDialog open={dialogOpen} onOpenChange={setDialogOpen} editProvider={editProvider} />
+      <CustomProviderDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editProvider={editProvider}
+        initialName={newProviderName}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import i18n from "@/src/i18n"
 import { create } from "zustand"
-import type { Catalog, CatalogModel, CatalogProvider, OrchestrationSettings, ReasoningConfig } from "@shared/chat"
+import type { Catalog, CatalogModel, CatalogProvider, CustomProviderInput, CustomProviderPatch, OrchestrationSettings, ReasoningConfig } from "@shared/chat"
 import { modelSupportsVision, normalizeOrchestrationSettings } from "@shared/chat"
 import { authApi, catalogApi, customProvidersApi } from "@/src/lib/ipc"
 
@@ -69,9 +69,11 @@ interface ProviderState {
   setVisionModel: (model: SelectedModel | null) => void
   setVisionConfigOpen: (open: boolean) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
-  addCustomProvider: (id: string, name: string, baseURL: string, apiKey?: string) => Promise<void>
-  updateCustomProvider: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) => Promise<void>
+  addCustomProvider: (input: CustomProviderInput) => Promise<void>
+  updateCustomProvider: (id: string, patch: CustomProviderPatch) => Promise<void>
   removeCustomProvider: (id: string) => Promise<void>
+  /** Pede ao main para consultar o /models do provedor e gravar o resultado. */
+  refreshProviderModels: (id: string) => Promise<void>
   refreshCustomProviders: () => Promise<void>
   /** Recarrega o catálogo do main (ex: depois da atualização em segundo plano) */
   reloadCatalog: () => Promise<void>
@@ -83,6 +85,19 @@ function mergeIntoCatalog(catalog: Catalog, custom: CatalogProvider[]): Catalog 
     merged[provider.id] = provider
   }
   return merged
+}
+
+/**
+ * Provedor personalizado não tem "conectar": ele existe porque o usuário o
+ * criou. O que o habilita no seletor é ter modelo — o seletor descarta grupo
+ * sem modelos. Antes só quem tinha chave salva entrava na lista, então Ollama
+ * e LM Studio (sem chave por natureza) nunca apareciam, mesmo depois de
+ * detectados. Os seeds vazios ficam de fora e não atrapalham a primeira
+ * execução (useNoProviderConnected).
+ */
+function connectedWithCustom(credentialProviders: string[], custom: CatalogProvider[]): string[] {
+  const withModels = custom.filter((p) => Object.keys(p.models).length > 0).map((p) => p.id)
+  return [...new Set([...credentialProviders, ...withModels])]
 }
 
 export const useProviderStore = create<ProviderState>((set, get) => ({
@@ -102,12 +117,13 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
   initialize: async () => {
     try {
-      const [catalog, connectedProviders, customProviders] = await Promise.all([
+      const [catalog, credentialProviders, customProviders] = await Promise.all([
         catalogApi.get(),
         authApi.list(),
         customProvidersApi.list(),
       ])
       const merged = mergeIntoCatalog(catalog, customProviders)
+      const connectedProviders = connectedWithCustom(credentialProviders, customProviders)
       set({ catalog: merged, customProviders, connectedProviders, loading: false, error: null })
 
       const { workerModel, workerReasoning } = get()
@@ -175,7 +191,12 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   removeApiKey: async (providerId) => {
     await authApi.remove(providerId)
     set((state) => ({
-      connectedProviders: state.connectedProviders.filter((id) => id !== providerId),
+      // Personalizado conectado por modelo continua conectado sem chave
+      // (servidor local); só os do catálogo caem da lista.
+      connectedProviders: connectedWithCustom(
+        state.connectedProviders.filter((id) => id !== providerId),
+        state.customProviders,
+      ),
     }))
     const { selectedModel } = get()
     if (selectedModel?.providerId === providerId) {
@@ -232,33 +253,56 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
   getModel: (providerId, modelId) => get().catalog[providerId]?.models[modelId],
 
-  addCustomProvider: async (id, name, baseURL, apiKey) => {
-    const provider = await customProvidersApi.add(id, name, baseURL, apiKey)
+  addCustomProvider: async (input) => {
+    const provider = await customProvidersApi.add(input)
     set((state) => {
       const custom = [...state.customProviders, provider]
       return {
         customProviders: custom,
         catalog: { ...state.catalog, [provider.id]: provider },
-        connectedProviders: apiKey
-          ? state.connectedProviders.includes(provider.id)
-            ? state.connectedProviders
-            : [...state.connectedProviders, provider.id]
-          : state.connectedProviders,
+        connectedProviders: connectedWithCustom(state.connectedProviders, custom),
       }
     })
   },
 
   updateCustomProvider: async (id, patch) => {
     const provider = await customProvidersApi.update(id, patch)
-    set((state) => ({
-      customProviders: state.customProviders.map((p) => (p.id === provider.id ? provider : p)),
-      catalog: { ...state.catalog, [provider.id]: provider },
-    }))
+    set((state) => {
+      const custom = state.customProviders.map((p) => (p.id === provider.id ? provider : p))
+      return {
+        customProviders: custom,
+        catalog: { ...state.catalog, [provider.id]: provider },
+        connectedProviders: connectedWithCustom(state.connectedProviders, custom),
+      }
+    })
+  },
+
+  refreshProviderModels: async (id) => {
+    const provider = await customProvidersApi.refreshModels(id)
+    set((state) => {
+      const custom = state.customProviders.map((p) => (p.id === provider.id ? provider : p))
+      return {
+        customProviders: custom,
+        catalog: { ...state.catalog, [provider.id]: provider },
+        connectedProviders: connectedWithCustom(state.connectedProviders, custom),
+      }
+    })
+    // O modelo escolhido pode ter saído do servidor — cai para o primeiro que
+    // restou em vez de deixar o chat apontando para um modelo inexistente.
+    const { selectedModel } = get()
+    if (selectedModel?.providerId === provider.id && !provider.models[selectedModel.modelId]) {
+      const modelId = Object.keys(provider.models)[0]
+      if (modelId) get().selectModel(provider.id, modelId)
+      else {
+        localStorage.removeItem(SELECTED_MODEL_KEY)
+        set({ selectedModel: null })
+      }
+    }
   },
 
   removeCustomProvider: async (id) => {
     await customProvidersApi.remove(id)
-    const providerId = `custom:${id}`
+    const providerId = id.startsWith("custom:") ? id : `custom:${id}`
     set((state) => {
       const custom = state.customProviders.filter((p) => p.id !== providerId)
       const catalog = { ...state.catalog }
@@ -290,6 +334,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     set((state) => ({
       customProviders: custom,
       catalog: mergeIntoCatalog(state.catalog, custom),
+      connectedProviders: connectedWithCustom(state.connectedProviders, custom),
     }))
   },
 }))
