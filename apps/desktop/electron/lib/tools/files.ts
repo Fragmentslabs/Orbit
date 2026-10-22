@@ -11,6 +11,7 @@ import {
   pageLocator,
   pageWindow,
 } from '../documents'
+import { afterEditNote } from './code'
 
 /**
  * Ferramentas de arquivo portadas do opencode (read/write/edit/ls/glob/grep)
@@ -84,7 +85,7 @@ export function createWriteTool(ctx: ToolContext) {
       const file = resolveSafePath(ctx, filePath)
       await fs.mkdir(path.dirname(file), { recursive: true })
       await fs.writeFile(file, content, 'utf8')
-      return `File written: ${file} (${content.length} characters)`
+      return `File written: ${file} (${content.length} characters)${await afterEditNote(ctx, file)}`
     },
   })
 }
@@ -140,7 +141,7 @@ export function createEditTool(ctx: ToolContext) {
         if (next === null) throw new Error('oldString not found in the file')
       }
       await fs.writeFile(file, next, 'utf8')
-      return `File edited: ${file}`
+      return `File edited: ${file}${await afterEditNote(ctx, file)}`
     },
   })
 }

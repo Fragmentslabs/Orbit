@@ -24,6 +24,7 @@ import {
   createReadTool,
   createWriteTool,
 } from './files'
+import { createCodeTools } from './code'
 import { createSkillTool } from './create-skill'
 import { createSkillReadTool } from './skill-read'
 import { createMcpTools } from './mcp'
@@ -271,6 +272,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     tools.ls = createListTool(ctx)
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
+    // Índice de símbolos: acha o trecho certo (arquivo:linha + código + quem
+    // usa) numa chamada, no lugar da rodada grep → read → read.
+    Object.assign(tools, createCodeTools(ctx))
     tools.todowrite = createTodoTool()
     // Leitura do estado do turno: verify_changes confere o que foi escrito;
     // session_context traz metadados dos turnos recentes. Ambas são leitura
