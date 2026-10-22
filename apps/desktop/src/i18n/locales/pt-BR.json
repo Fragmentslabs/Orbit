@@ -821,6 +821,117 @@
       "codeTitle": "Pronto para programar",
       "codeSubtitle": "Selecione a pasta do projeto e descreva a tarefa"
     },
+    "start": {
+      "resume": "Retomar: {{title}}",
+      "link": "O que o Orbit faz?",
+      "title": "O que o Orbit faz",
+      "subtitle": "Cada exemplo preenche o campo — nada é enviado até você apertar Enter.",
+      "tryIt": "Experimentar",
+      "howTo": "No campo de mensagem",
+      "enable": {
+        "tts": "Ativar narração",
+        "stt": "Ativar transcrição",
+        "browser": "Ativar navegador"
+      },
+      "disabledHint": "Desligado nas Preferências — ative para o agente poder usar",
+      "groups": {
+        "create": "Criar",
+        "media": "Mídia",
+        "work": "Trabalho"
+      },
+      "items": {
+        "design": {
+          "label": "Crie um logo",
+          "desc": "Canvas de artboards: logo, tela, protótipo. Várias telas lado a lado, camadas e fontes — fica salvo para continuar depois.",
+          "example": "Crie um logo para o meu projeto e me mostre três caminhos no canvas de design"
+        },
+        "artifact": {
+          "label": "Monte um dashboard",
+          "desc": "Uma página só, que abre pronta no chat e se clica — dashboard, calculadora, protótipo rápido. Não é um canvas para editar depois.",
+          "example": "Monte um dashboard interativo dos meus gastos do mês"
+        },
+        "document": {
+          "label": "Escreva um PDF",
+          "desc": "Relatório, proposta, ata — em PDF ou Word, pronto para enviar.",
+          "example": "Escreva uma proposta de duas páginas em PDF"
+        },
+        "presentation": {
+          "label": "Monte uma apresentação",
+          "desc": "Tópicos soltos viram slides.",
+          "example": "Transforme estes tópicos em uma apresentação de dez slides"
+        },
+        "diagram": {
+          "label": "Desenhe um diagrama",
+          "desc": "Fluxo, arquitetura, esquema — desenhado, não descrito.",
+          "example": "Desenhe a arquitetura deste projeto em um diagrama"
+        },
+        "motion": {
+          "label": "Faça um motion",
+          "desc": "Animação em vídeo montada do zero, com prévia ao vivo.",
+          "example": "Crie um motion de abertura de 5 segundos com o nome do meu projeto"
+        },
+        "vector": {
+          "label": "Crie um SVG",
+          "desc": "Ícone, logo, marca — vetor que não pixeliza.",
+          "example": "Desenhe um ícone de engrenagem em SVG"
+        },
+        "photo": {
+          "label": "Edite uma foto",
+          "desc": "Fundo, corte, texto, formato — sem trocar a foto.",
+          "example": "Tire o fundo desta foto e salve em PNG"
+        },
+        "video": {
+          "label": "Edite um vídeo",
+          "desc": "Corte nos pontos certos, legenda queimada, formato vertical.",
+          "example": "Corte os melhores 15 segundos deste vídeo e legende"
+        },
+        "record": {
+          "label": "Grave um vídeo",
+          "desc": "Um roteiro roda num navegador oculto e sai em MP4: cliques, digitação e rolagem — dura o tempo das ações, não o do raciocínio.",
+          "example": "Grave um vídeo de 20 segundos mostrando o cadastro do meu app"
+        },
+        "docx": {
+          "label": "Mexa num .docx",
+          "desc": "Altera o texto mantendo fonte, tabela e numeração.",
+          "example": "Ajuste este contrato mantendo a formatação"
+        },
+        "audio": {
+          "label": "Gere um áudio",
+          "desc": "Narração ou mensagem de voz com a voz das Preferências.",
+          "example": "Monte um motion de 15 segundos apresentando o app e narre com voz em português"
+        },
+        "transcript": {
+          "label": "Transcreva um áudio",
+          "desc": "Reunião, ditado ou chamada gravada — com os tempos de cada fala.",
+          "example": "Transcreva esta gravação da reunião com os tempos de cada fala"
+        },
+        "voice": {
+          "label": "Converse por voz",
+          "desc": "Chamada em tempo real: fale e ouça, sem digitar.",
+          "howTo": "No botão de telefone, ao lado do Enviar"
+        },
+        "dictation": {
+          "label": "Dite em vez de digitar",
+          "desc": "O microfone do campo transcreve o que você fala.",
+          "howTo": "No botão de microfone, ao lado do Enviar"
+        },
+        "memory": {
+          "label": "Use a memória",
+          "desc": "O que o Orbit já aprendeu sobre este projeto.",
+          "example": "O que você já sabe sobre este projeto?"
+        },
+        "routine": {
+          "label": "Veja as rotinas",
+          "desc": "O que rodou sozinho hoje, e o que falhou.",
+          "example": "O que as rotinas fizeram hoje?"
+        },
+        "board": {
+          "label": "Abra a esteira",
+          "desc": "Fila de tarefas que roda fase por fase, sem você.",
+          "example": "Crie uma tarefa na esteira para revisar o checkout"
+        }
+      }
+    },
     "suggestions": {
       "chat": [
         "O que você pode fazer?",

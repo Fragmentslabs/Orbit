@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, PaperclipIcon, Plug } from "lucide-react"
+import { ChevronRight, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -18,7 +18,13 @@ import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { chatApi, docsApi } from "@/src/lib/ipc"
+import { chatApi, docsApi, mediaApi } from "@/src/lib/ipc"
+import { cn } from "@/lib/utils"
+import { mediaKind, type MediaKind } from "@shared/media"
+import { CapabilitiesDialog } from "@/src/components/capabilities-dialog"
+import { CapabilityIcon } from "@/src/components/capability-icon"
+import { buildStartSuggestions, type StartSuggestion } from "@/src/lib/start-suggestions"
+import { useDraftInput } from "@/src/stores/draft-input"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -49,13 +55,13 @@ import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { pastasAposTroca, useWorktreeStore } from "@/src/stores/worktree-store"
-import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore, useNoProviderConnected, useProvidersLoading } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { detectUserName } from "@shared/user-name"
+import { VOICE_DEFAULTS } from "@shared/voice"
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
 const NO_MESSAGES: ChatMessage[] = []
@@ -621,6 +627,9 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
 let entranceWakeDone = false
 const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("entrance")
 
+/** O ponto dourado do link "O que o Orbit faz?" some depois da primeira vez. */
+const CAPABILITIES_SEEN_KEY = "orbit-capabilities-seen"
+
 /** `embedded`: o chat está numa aba do painel lateral. Lá o espaço vertical é
  *  curto e a aba já diz qual chat é, então persona do topo e breadcrumb saem. */
 export function ChatView({ sessionId, embedded = false }: { sessionId?: string; embedded?: boolean } = {}) {
@@ -918,25 +927,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     if (session) stopStreaming(session.id)
   }, [session, stopStreaming])
 
-  const handleSuggestion = useCallback(
-    (suggestion: string) => {
-      if (viewMode === "chat") {
-        // Sem provedor configurado: mostra o card de configuração em vez de
-        // mandar a mensagem para o engine (que falharia com erro genérico)
-        if (noProvider) {
-          setProviderHintVisible(true)
-          return
-        }
-        handleChatSend(suggestion, { simple: simpleMode, brain: brainEnabledFor(session?.id, useModelModePrefs.getState().chatActiveModes.brain) })
-      }
-    },
-    [viewMode, handleChatSend, simpleMode, session?.id, noProvider],
-  )
-
   const { t } = useTranslation()
   const openSettings = useSettingsUi((s) => s.openSettings)
-  const chatSuggestions = t("chat.suggestions.chat", { returnObjects: true }) as string[]
-  const codeSuggestions = t("chat.suggestions.code", { returnObjects: true }) as string[]
 
   // A abertura falada: ocupa o lugar do título e sai quando o convite entra.
   const introGreetings = [
@@ -956,15 +948,146 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   // explicar.
   const showProviderSetup = noProvider
 
-  const suggestions = viewMode === "chat" ? chatSuggestions : codeSuggestions
   const baseSubtitle = viewMode === "chat" ? t("chat.empty.chatSubtitle") : t("chat.empty.codeSubtitle")
   const emptyState = {
     title: t("chat.empty.startTitle"),
     subtitle: showProviderSetup ? t("chat.empty.providerSubtitle") : baseSubtitle,
-    // Na tela de primeiro uso não há sugestões: o espaço é do aviso e do botão.
-    suggestions: showProviderSetup ? [] : suggestions,
     cta: showProviderSetup ? (t("chat.empty.providerCta") as string | null) : (null as string | null),
   }
+
+  // --- Sugestões da abertura -------------------------------------------------
+  // Três pills: retomar o que ficou aberto, e duas capacidades — priorizando a
+  // família que a pessoa nunca produziu (motion, áudio, vídeo), que é
+  // exatamente o que fica escondido atrás da conversa.
+  const sessions = useSessionStore((s) => s.sessions)
+  const [usedKinds, setUsedKinds] = useState<MediaKind[]>([])
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false)
+  const [capabilitiesSeen, setCapabilitiesSeen] = useState(() => {
+    try {
+      return window.localStorage.getItem(CAPABILITIES_SEEN_KEY) === "1"
+    } catch {
+      return false
+    }
+  })
+
+  // O que a galeria já tem decide qual capacidade é novidade. Uma leitura por
+  // montagem; se falhar, a rotação por dia continua funcionando sozinha.
+  useEffect(() => {
+    let alive = true
+    mediaApi
+      .list()
+      .then((entries) => {
+        if (alive) setUsedKinds([...new Set(entries.map((entry) => mediaKind(entry)))])
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const startDay = useMemo(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+  }, [])
+
+  const lastSessionForStart = useMemo(() => {
+    const directory = folders[0]
+    let recent: (typeof sessions)[number] | undefined
+    for (const item of sessions) {
+      if (item.archived || item.parentId || item.mode !== viewMode) continue
+      // No código, retomar só faz sentido na pasta aberta: uma sessão de outro
+      // repositório levaria a um contexto que não é o desta tela.
+      if (viewMode === "code" && item.directory !== directory) continue
+      // A sessão aberta não é "retomar" — mas ela não derruba o convite: ele
+      // passa para a sessão anterior, que é justamente o que a pessoa quer
+      // quando está num chat novo e vazio.
+      if (item.id === session?.id) continue
+      if (!recent || item.updatedAt > recent.updatedAt) recent = item
+    }
+    if (!recent) return undefined
+    return { id: recent.id, title: recent.title, mode: recent.mode }
+  }, [sessions, viewMode, folders, session?.id])
+
+  // Recurso desligado é tool ausente no turno: a pill pularia para uma
+  // promessa vazia. O painel "O que o Orbit faz?" é quem oferece o botão de
+  // ativar — aqui a linha simplesmente não aparece.
+  const ttsEnabled = useAppSettings((s) => s.settings.voice?.tts?.enabled ?? VOICE_DEFAULTS.tts.enabled)
+  const sttEnabled = useAppSettings((s) => s.settings.voice?.stt?.enabled ?? VOICE_DEFAULTS.stt.enabled)
+  const browserToolsEnabled = useAppSettings((s) => s.settings.browser.agentTools)
+
+  const startSuggestions = useMemo(
+    () =>
+      showProviderSetup
+        ? []
+        : buildStartSuggestions(
+            {
+              mode: viewMode,
+              directory: folders[0],
+              lastSession: lastSessionForStart,
+              usedKinds,
+              features: { tts: ttsEnabled, stt: sttEnabled, browser: browserToolsEnabled },
+              day: startDay,
+            },
+            t,
+          ),
+    [
+      showProviderSetup,
+      viewMode,
+      folders,
+      lastSessionForStart,
+      usedKinds,
+      ttsEnabled,
+      sttEnabled,
+      browserToolsEnabled,
+      startDay,
+      t,
+    ],
+  )
+
+  /**
+   * A lista da abertura congela no instante em que ela começa a sair.
+   *
+   * Entrar numa sessão troca a sessão ativa no mesmo tick em que o centro
+   * começa o fade de saída — e o "Retomar" daquela sessão deixaria de existir
+   * ali mesmo. O card sumia com a tela ainda visível, e as pills reflowavam
+   * na frente de quem acabou de clicar. Enquanto a abertura está de pé, o
+   * conteúdo não muda; ela só é recalculada quando a tela volta ao repouso.
+   */
+  const [welcomeSuggestions, setWelcomeSuggestions] = useState(startSuggestions)
+  useEffect(() => {
+    if (!hasChat) setWelcomeSuggestions(startSuggestions)
+  }, [hasChat, startSuggestions])
+
+  const handleStartSuggestion = useCallback(
+    (suggestion: StartSuggestion) => {
+      if (suggestion.action.kind === "fill") {
+        // Preenche, não envia: quem aperta Enter é a pessoa.
+        useDraftInput.getState().setDraft(session?.id ?? null, suggestion.action.text)
+        return
+      }
+      if (suggestion.action.mode !== mode) setMode(suggestion.action.mode)
+      void selectSession(suggestion.action.mode, suggestion.action.sessionId)
+    },
+    [mode, session?.id, setMode, selectSession],
+  )
+
+  const openCapabilities = useCallback(() => {
+    setCapabilitiesOpen(true)
+    setCapabilitiesSeen(true)
+    try {
+      window.localStorage.setItem(CAPABILITIES_SEEN_KEY, "1")
+    } catch {
+      // localStorage indisponível não pode impedir o painel de abrir
+    }
+  }, [])
+
+  const handleCapabilityPick = useCallback(
+    (example: string) => {
+      useDraftInput.getState().setDraft(session?.id ?? null, example)
+      setCapabilitiesOpen(false)
+    },
+    [session?.id],
+  )
 
   // Cada linha da abertura entra sozinha, depois da persona: título →
   // subtítulo → botão. O atraso vive no transition-delay porque a transição
@@ -1088,20 +1211,66 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                   </span>
                 )}
               </div>
-              {emptyState.suggestions.length > 0 && (
+              {!showProviderSetup && (
                 /* As sugestões entram depois do subtítulo, no mesmo passo: sem
                     isto elas apareciam fixas enquanto a persona ainda
                     dormia, e a tela ficava com os botões antes de qualquer
                     texto. */
                 <div
-                  className={`grid w-full max-w-md grid-cols-2 justify-center gap-2 ${introLine}`}
+                  className={`flex w-full max-w-md flex-col items-center gap-1 ${introLine}`}
                   style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS * 2}ms` : "0ms" }}
                 >
-                  {emptyState.suggestions.map((s) => (
-                    <Suggestion key={s} onClick={handleSuggestion} suggestion={s} />
-                  ))}
+                  {welcomeSuggestions.length > 0 && (
+                    <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                      {welcomeSuggestions.map((suggestion) => (
+                        <Suggestion
+                          key={suggestion.id}
+                          suggestion={suggestion.label}
+                          onClick={() => handleStartSuggestion(suggestion)}
+                          className={cn(
+                            "h-auto justify-start gap-2 py-1.5 text-left leading-snug whitespace-normal",
+                            suggestion.action.kind === "open" && "sm:col-span-2",
+                          )}
+                          title={suggestion.action.kind === "fill" ? suggestion.action.text : undefined}
+                        >
+                          {suggestion.action.kind === "open" ? (
+                            <History className="size-3.5 shrink-0" />
+                          ) : suggestion.capability ? (
+                            <CapabilityIcon capability={suggestion.capability} className="size-3.5 shrink-0" />
+                          ) : null}
+                          <span className="min-w-0 flex-1">{suggestion.label}</span>
+                          {/* Capacidade de uma família que a pessoa ainda não
+                              produziu — o convite é para experimentar, não um
+                              selo de novidade. */}
+                          {suggestion.fresh && (
+                            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
+                          )}
+                        </Suggestion>
+                      ))}
+                    </div>
+                  )}
+                  {/* Meta-navegação, não uma quarta sugestão: o mapa das
+                      capacidades é pequeno de propósito e não compete com as
+                      pills. */}
+                  <button
+                    type="button"
+                    onClick={openCapabilities}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Sparkles className="size-3.5" />
+                    {t("chat.start.link")}
+                    {!capabilitiesSeen && (
+                      <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+                    )}
+                  </button>
                 </div>
               )}
+              <CapabilitiesDialog
+                open={capabilitiesOpen}
+                onOpenChange={setCapabilitiesOpen}
+                mode={viewMode}
+                onPick={handleCapabilityPick}
+              />
             </div>
           </div>
         </div>

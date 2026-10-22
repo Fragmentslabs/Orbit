@@ -821,6 +821,117 @@
       "codeTitle": "Ready to code",
       "codeSubtitle": "Select the project folder and describe the task"
     },
+    "start": {
+      "resume": "Resume: {{title}}",
+      "link": "What can Orbit do?",
+      "title": "What Orbit can do",
+      "subtitle": "Every example fills the field — nothing is sent until you press Enter.",
+      "tryIt": "Try it",
+      "howTo": "In the message field",
+      "enable": {
+        "tts": "Turn on narration",
+        "stt": "Turn on transcription",
+        "browser": "Turn on browser"
+      },
+      "disabledHint": "Off in Settings — turn it on so the agent can use it",
+      "groups": {
+        "create": "Create",
+        "media": "Media",
+        "work": "Work"
+      },
+      "items": {
+        "design": {
+          "label": "Design a logo",
+          "desc": "Artboard canvas: logo, screen, prototype. Several screens side by side, layers and fonts — saved so you can keep editing later.",
+          "example": "Design a logo for my project and show me three directions on the design canvas"
+        },
+        "artifact": {
+          "label": "Build a dashboard",
+          "desc": "A single page that opens ready in the chat and you can click — dashboard, calculator, quick prototype. Not a canvas to edit later.",
+          "example": "Build an interactive dashboard of my monthly spending"
+        },
+        "document": {
+          "label": "Write a PDF",
+          "desc": "Report, proposal, minutes — as PDF or Word, ready to send.",
+          "example": "Write a two-page proposal as a PDF"
+        },
+        "presentation": {
+          "label": "Build a deck",
+          "desc": "Loose topics become slides.",
+          "example": "Turn these topics into a ten-slide presentation"
+        },
+        "diagram": {
+          "label": "Draw a diagram",
+          "desc": "Flow, architecture, schema — drawn, not described.",
+          "example": "Draw this project's architecture as a diagram"
+        },
+        "motion": {
+          "label": "Make a motion piece",
+          "desc": "Video animation built from scratch, with a live preview.",
+          "example": "Create a 5-second opening motion with my project's name"
+        },
+        "vector": {
+          "label": "Draw an SVG",
+          "desc": "Icon, logo, mark — vector that never pixelates.",
+          "example": "Draw a gear icon as an SVG"
+        },
+        "photo": {
+          "label": "Edit a photo",
+          "desc": "Background, crop, text, format — the same photo, changed.",
+          "example": "Remove the background from this photo and save it as PNG"
+        },
+        "video": {
+          "label": "Edit a video",
+          "desc": "Cuts on the right beats, burned-in subtitles, vertical format.",
+          "example": "Cut the best 15 seconds of this video and add subtitles"
+        },
+        "record": {
+          "label": "Record a video",
+          "desc": "A screenplay runs in a hidden browser and comes out as MP4: clicks, typing and scrolling — it lasts the actions, not the thinking.",
+          "example": "Record a 20-second video showing my app's signup flow"
+        },
+        "docx": {
+          "label": "Work on a .docx",
+          "desc": "Changes the text while keeping fonts, tables and numbering.",
+          "example": "Adjust this contract while keeping the formatting"
+        },
+        "audio": {
+          "label": "Generate audio",
+          "desc": "Narration or voice message with the voice from Settings.",
+          "example": "Build a 15-second motion introducing the app and narrate it with voice in English"
+        },
+        "transcript": {
+          "label": "Transcribe audio",
+          "desc": "Meeting, dictation or recorded call — with timestamps.",
+          "example": "Transcribe this meeting recording with timestamps for each line"
+        },
+        "voice": {
+          "label": "Talk by voice",
+          "desc": "Real-time call: speak and listen, no typing.",
+          "howTo": "On the phone button, next to Send"
+        },
+        "dictation": {
+          "label": "Dictate instead of typing",
+          "desc": "The field's microphone transcribes what you say.",
+          "howTo": "On the microphone button, next to Send"
+        },
+        "memory": {
+          "label": "Use memory",
+          "desc": "What Orbit has already learned about this project.",
+          "example": "What do you already know about this project?"
+        },
+        "routine": {
+          "label": "Check routines",
+          "desc": "What ran on its own today, and what failed.",
+          "example": "What did the routines do today?"
+        },
+        "board": {
+          "label": "Open the board",
+          "desc": "A task queue that runs phase by phase, without you.",
+          "example": "Create a board task to review the checkout"
+        }
+      }
+    },
     "suggestions": {
       "chat": [
         "What can you do?",
