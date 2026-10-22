@@ -1192,6 +1192,7 @@
     }
   },
   "diff": {
+    "open": "Ver diff",
     "noChanges": "Nenhuma alteração encontrada",
     "noChangesInMessage": "Nenhuma alteração nesta mensagem",
     "filesCount_one": "{{count}} arquivo",

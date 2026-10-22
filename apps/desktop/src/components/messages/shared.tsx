@@ -50,6 +50,7 @@ import {
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
 import { OrbitUiHostContext } from "@/src/components/ai/generative-ui"
+import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { MessageUsage } from "@/src/components/messages/message-usage"
 import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
@@ -540,18 +541,28 @@ export function ReplyAction({ message, sessionId }: { message: ChatMessage; sess
   )
 }
 
-/** Barra de ações do assistente: copiar + responder + falar + horário + tokens/custo. */
+/**
+ * Barra de ações do assistente: copiar + responder + falar + horário +
+ * tokens/custo à esquerda, e o selo de diff (+N -N) no canto direito.
+ *
+ * O selo fica aqui, e não no cabeçalho do acordeon de ações, porque esta linha
+ * é a única que está sempre lá depois que o turno termina: recolhido, o
+ * acordeon esconde justamente o balanço do que mudou em disco.
+ */
 export function AssistantMessageActions({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
-    <Actions className="mt-1 items-center">
-      <CopyAction text={messageText(message)} />
-      <ReplyAction message={message} sessionId={sessionId} />
-      {/* A fala lê a RESPOSTA FINAL (ver speakableText), não o conteúdo todo
-          que o copiar leva — anexo, raciocínio e narração ficam de fora. */}
-      <SpeakAction text={speakableText(message)} />
-      <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
-      {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
-      {message.tokens && <MessageUsage tokens={message.tokens} />}
+    <Actions className="mt-1 w-full items-center justify-between">
+      <div className="flex items-center gap-1">
+        <CopyAction text={messageText(message)} />
+        <ReplyAction message={message} sessionId={sessionId} />
+        {/* A fala lê a RESPOSTA FINAL (ver speakableText), não o conteúdo todo
+            que o copiar leva — anexo, raciocínio e narração ficam de fora. */}
+        <SpeakAction text={speakableText(message)} />
+        <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
+        {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
+        {message.tokens && <MessageUsage tokens={message.tokens} />}
+      </div>
+      <DiffBadge patch={message.snapshot?.patch} parts={message.parts} sessionId={sessionId} messageId={message.id} />
     </Actions>
   )
 }

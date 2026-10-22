@@ -1,11 +1,10 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { AudioPartView } from "@/src/components/messages/audio-part"
 import { VideoPartView } from "@/src/components/messages/video-part"
 import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
-import { usePanelStore } from "@/src/stores/panel-store"
 import { useSetting } from "@/src/stores/app-settings"
 import {
   arrangeForView,
@@ -21,6 +20,7 @@ import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { MotionPartView } from "@/src/components/ai/motion-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
@@ -69,13 +69,17 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
 
 const MAX_VISIBLE = 5
 
-function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat }: {
+function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff }: {
   parts: ToolPart[]
   /** Modo detalhado: título e todas as ações abertas, sem acordeon. */
   flat?: boolean
   snapshot?: { patch?: string; files?: string[] }
   sessionId?: string
   messageId?: string
+  /** Selo "+N -N" no cabeçalho do grupo. O chat principal o desliga: ali ele
+   *  é renderizado no rodapé da mensagem, que fica sempre visível (ver
+   *  DiffBadge e AssistantMessageActions). */
+  showDiff?: boolean
   /** A mensagem é a última e o turno ainda está em streaming — só nesse caso
    *  uma part "running" é de verdade. Sem isto, uma mensagem antiga com uma
    *  tool-call que nunca recebeu resultado (abort, conexão caída) ficava
@@ -112,28 +116,6 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat }: {
   // Reseta showAll quando o grupo muda (nova mensagem)
   useEffect(() => { setShowAll(false) }, [parts.length])
 
-  // Conta +/- do snapshot se disponível
-  const diffCounts = useMemo(() => {
-    if (!snapshot?.patch) return null
-    let added = 0
-    let removed = 0
-    for (const line of snapshot.patch.split("\n")) {
-      if (line.startsWith("+") && !line.startsWith("+++")) added++
-      else if (line.startsWith("-") && !line.startsWith("---")) removed++
-    }
-    return { added, removed }
-  }, [snapshot?.patch])
-
-  const hasFileOps = parts.some((p) => p.tool === "write" || p.tool === "edit")
-  const showBadge = !working && diffCounts && hasFileOps && sessionId && messageId
-
-  const handleOpenDiff = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (sessionId && messageId) {
-      usePanelStore.getState().openDiff(sessionId, messageId, "Diff")
-    }
-  }, [sessionId, messageId])
-
   const title = working
     ? t("chat.code.working")
     : errors > 0
@@ -150,21 +132,18 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat }: {
     )
   })
 
+  // Só o chat do browser-tab ainda usa o selo no cabeçalho (lá não há rodapé);
+  // no chat principal ele sai no rodapé da mensagem — ver diffInFooter.
+  const diffBadge = showDiff && !working && (
+    <DiffBadge patch={snapshot?.patch} parts={parts} sessionId={sessionId} messageId={messageId} />
+  )
+
   if (flat) {
     return (
       <div className="not-prose my-2 flex w-full flex-col gap-1">
         <div className="flex w-full items-center gap-2 text-sm text-muted-foreground">
           {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
-          {showBadge && (
-            <button
-              type="button"
-              onClick={handleOpenDiff}
-              className="ml-auto flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors hover:bg-accent"
-            >
-              {diffCounts!.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{diffCounts!.added}</span>}
-              {diffCounts!.removed > 0 && <span className="text-red-600 dark:text-red-400">-{diffCounts!.removed}</span>}
-            </button>
-          )}
+          {diffBadge && <div className="ml-auto">{diffBadge}</div>}
         </div>
         {items}
       </div>
@@ -176,19 +155,14 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat }: {
       <TaskTrigger title={title}>
         <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
           {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
-          {showBadge && (
-            <button
-              type="button"
-              onClick={handleOpenDiff}
-              className="ml-auto flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors hover:bg-accent"
-            >
-              {diffCounts!.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{diffCounts!.added}</span>}
-              {diffCounts!.removed > 0 && <span className="text-red-600 dark:text-red-400">-{diffCounts!.removed}</span>}
-            </button>
-          )}
-          <ChevronDownIcon
-            className={cn("size-4 transition-transform", open ? "rotate-0" : "-rotate-90")}
-          />
+          {/* O canto direito é do chevron: o selo, quando aparece, entra ao lado
+              dele sem disputar o `ml-auto`. */}
+          <div className="ml-auto flex items-center gap-2">
+            {diffBadge}
+            <ChevronDownIcon
+              className={cn("size-4 transition-transform", open ? "rotate-0" : "-rotate-90")}
+            />
+          </div>
         </div>
       </TaskTrigger>
       <TaskContent>
@@ -252,7 +226,7 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
+export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry, diffInFooter }: {
   message: ChatMessage
   sessionId?: string
   isLast: boolean
@@ -260,6 +234,9 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui o padrão */
   busyLabel?: string
   onRetry?: () => void
+  /** O selo "+N -N" sai no rodapé da mensagem (junto de copiar/falar/gastos)
+   *  em vez do cabeçalho das ações — ver AssistantMessageActions. */
+  diffInFooter?: boolean
 }) {
   const { t } = useTranslation()
   const view = useSetting("chatView")
@@ -300,6 +277,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             messageId={message.id}
             live={isLast && isBusy}
             flat={flat}
+            showDiff={!diffInFooter}
           />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />

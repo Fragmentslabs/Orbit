@@ -151,7 +151,6 @@ const MessageItem = memo(
     messages: ChatMessage[]
     index: number
   }) {
-  const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
   const { t } = useTranslation()
 
   const handleRetry = useCallback(() => {
@@ -228,15 +227,29 @@ const MessageItem = memo(
 
   return (
     <Message from="assistant" data-msg-id={msg.id} data-msg-role="assistant">
-      <MessageContent>
-        <AssistantMessage
-          message={msg}
-          sessionId={sessionId}
-          isLast={isLast}
-          isBusy={isBusy}
-          busyLabel={busyLabel}
-          onRetry={handleRetry}
-        />
+      <MessageContent data-msg-surface>
+        {mode === "chat" ? (
+          <ChatAssistantMessage
+            message={msg}
+            sessionId={sessionId}
+            isLast={isLast}
+            isBusy={isBusy}
+            busyLabel={busyLabel}
+            onRetry={handleRetry}
+          />
+        ) : (
+          // `diffInFooter`: o "+N -N" sai no rodapé da mensagem, junto das
+          // outras ações — e não no cabeçalho do acordeon, que recolhe.
+          <CodeAssistantMessage
+            message={msg}
+            sessionId={sessionId}
+            isLast={isLast}
+            isBusy={isBusy}
+            busyLabel={busyLabel}
+            onRetry={handleRetry}
+            diffInFooter
+          />
+        )}
       </MessageContent>
       {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
     </Message>
