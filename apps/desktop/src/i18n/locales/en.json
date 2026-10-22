@@ -122,7 +122,8 @@
       "vision": {
         "label": "Vision",
         "description": "When ON, images and screenshots are described by the vision model — the image never enters the context, only the description."
-      }
+      },
+      "configureHint": "Right-click to open the settings."
     },
     "slash": {
       "searchDescription": "Toggles web search (websearch/webfetch)",

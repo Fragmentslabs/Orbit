@@ -10,8 +10,9 @@ import { useBrainPrefs } from "@/src/stores/brain-prefs"
  * vivem no localStorage dele), empurra o mapa inteiro para o main a cada
  * mudança e aplica os toggles que chegam do celular.
  *
- * Os seis modos do mode-overrides viajam junto de 'simple' e 'brain', que têm
- * store próprio — o mapa é achatado em modo → (sessionId → ativo).
+ * Os modos do mode-overrides viajam junto de 'simple' e 'brain', que têm store
+ * próprio — o mapa é achatado em modo → (sessionId → ativo). Só entra o que os
+ * companions conhecem (`ChatModeKey`), que é o que cabe no payload.
  */
 
 /** O rascunho é por aparelho: "draft" aqui é um chat novo diferente do "draft"
@@ -22,6 +23,8 @@ function withoutDraft(bySession: Record<string, boolean>): Record<string, boolea
   return Object.fromEntries(Object.entries(bySession).filter(([key]) => key !== DRAFT_KEY))
 }
 
+/** Só os modos que os companions conhecem (`ChatModeKey`) — é o que cabe no
+ *  payload compartilhado. */
 const MODE_OVERRIDE_KEYS: OverridableMode[] = [
   "search",
   "browser",

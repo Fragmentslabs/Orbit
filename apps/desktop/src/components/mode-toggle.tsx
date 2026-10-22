@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +12,9 @@ import { cn } from "@/lib/utils"
  * `iconOnly={false}`, o label só aparece em containers largos (`@lg` — o
  * wrapper do input tem `@container`): em telas/containers estreitos o modo
  * icon-only é forçado para a fileira nunca estourar.
+ *
+ * `onConfig` (modos que têm configuração) abre o modal do modo com o botão
+ * DIREITO — o esquerdo continua só ligando/desligando.
  */
 export function ModeToggle({
   icon: Icon,
@@ -18,6 +22,7 @@ export function ModeToggle({
   description,
   active,
   onToggle,
+  onConfig,
   disabled,
   iconOnly,
 }: {
@@ -26,9 +31,12 @@ export function ModeToggle({
   description: string
   active: boolean
   onToggle: () => void
+  /** Abre a configuração do modo (clique direito) */
+  onConfig?: () => void
   disabled?: boolean
   iconOnly?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <TooltipProvider delay={300}>
       <Tooltip>
@@ -38,6 +46,14 @@ export function ModeToggle({
               type="button"
               disabled={disabled}
               onClick={onToggle}
+              onContextMenu={
+                onConfig
+                  ? (e) => {
+                      e.preventDefault()
+                      onConfig()
+                    }
+                  : undefined
+              }
               aria-label={iconOnly ? label : undefined}
               className={cn(
                 "flex items-center rounded-md text-xs transition-colors",
@@ -57,6 +73,9 @@ export function ModeToggle({
         </TooltipTrigger>
         <TooltipContent side="top" align="center" sideOffset={6}>
           {description}
+          {onConfig && (
+            <span className="mt-1 block opacity-70">{t("input.modes.configureHint")}</span>
+          )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

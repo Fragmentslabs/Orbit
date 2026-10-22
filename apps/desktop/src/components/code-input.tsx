@@ -59,6 +59,7 @@ import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
+import { useToolsServers } from "@/src/stores/session-tools"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
@@ -246,7 +247,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         if (v && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, v)
       },
-      onConfig: () => setVisionConfigOpen(true),
+      onConfig: () => {
+        setAddMenuOpen(false)
+        setVisionConfigOpen(true)
+      },
     },
   ], [search, plan, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
@@ -653,6 +657,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                   maybePromptWorkerConfig("subagents")
                 }
               }}
+              onConfig={() => setConfigKind("subagents")}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -672,6 +677,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                   maybePromptWorkerConfig("orchestra")
                 }
               }}
+              onConfig={() => setConfigKind("orchestra")}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -683,6 +689,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               active={loop && !orchestra}
               disabled={orchestra}
               onToggle={() => setLoop((v) => !v)}
+              onConfig={() => setLoopConfigOpen(true)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -697,6 +704,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 else if (visionModel) setModeActive("vision", sessionId, true)
                 else setVisionConfigOpen(true)
               }}
+              onConfig={() => setVisionConfigOpen(true)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}

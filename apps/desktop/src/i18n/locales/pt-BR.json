@@ -122,7 +122,8 @@
       "vision": {
         "label": "Visão",
         "description": "Com o modo ativo, imagens e screenshots são descritas pelo modelo de visão — a imagem não entra no contexto, apenas a descrição."
-      }
+      },
+      "configureHint": "Clique com o botão direito para abrir as configurações."
     },
     "slash": {
       "searchDescription": "Alterna busca web (websearch/webfetch)",

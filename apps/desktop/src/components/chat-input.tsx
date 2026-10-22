@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
@@ -53,6 +53,7 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
+import { useToolsServers } from "@/src/stores/session-tools"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { closestVariant } from "@shared/chat"
 import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
@@ -110,6 +111,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
   // servidores esta conversa enxerga (as tools em si não têm liga/desliga).
   const toolsServers = useToolsServers(sessionId)
+  // Menu "+" controlado para poder FECHAR antes de abrir um modal de
+  // configuração: o popup do menu vive acima dos modais e os cobriria.
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -138,7 +142,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         if (v && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, v)
       },
-      onConfig: () => setVisionConfigOpen(true),
+      onConfig: () => {
+        setAddMenuOpen(false)
+        setVisionConfigOpen(true)
+      },
     },
   ], [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
@@ -311,7 +318,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">
-            <DropdownMenu>
+            <DropdownMenu open={addMenuOpen} onOpenChange={setAddMenuOpen}>
               <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
