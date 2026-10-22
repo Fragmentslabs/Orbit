@@ -557,6 +557,12 @@ export function FileBrowser({
   );
   const [dirCache, setDirCache] = useState<Record<string, DirEntryInfo[]>>({});
   const loadingRef = useRef<Set<string>>(new Set());
+  /**
+   * Número da última leitura pedida de cada diretório. Uma resposta que chega
+   * depois de uma leitura mais nova é descartada — sem isso, o refresh perderia
+   * para a listagem que já estava em voo e a árvore ficaria com o dado antigo.
+   */
+  const loadSeqRef = useRef<Map<string, number>>(new Map());
   const entryIsDirRef = useRef<Map<string, boolean>>(new Map());
 
   // ── Repositórios desta pasta de trabalho ──────────────────────────────
@@ -629,13 +635,17 @@ export function FileBrowser({
   } | null>(null);
   const [criarRepoOpen, setCriarRepoOpen] = useState(false);
 
-  const loadDir = useCallback(async (dirPath: string) => {
-    if (loadingRef.current.has(dirPath)) return;
+  const loadDir = useCallback(async (dirPath: string, force = false) => {
+    if (!force && loadingRef.current.has(dirPath)) return;
+    const seq = (loadSeqRef.current.get(dirPath) ?? 0) + 1;
+    loadSeqRef.current.set(dirPath, seq);
     loadingRef.current.add(dirPath);
     const result = (await window.ipcRenderer.invoke(
       "fs:readdir",
       dirPath,
     )) as ReaddirResult;
+    // Resposta velha: já existe uma leitura mais nova deste diretório a caminho.
+    if (loadSeqRef.current.get(dirPath) !== seq) return;
     loadingRef.current.delete(dirPath);
     if (result.ok) {
       for (const e of result.entries)
@@ -644,18 +654,30 @@ export function FileBrowser({
     }
   }, []);
 
-  const reloadRootDir = useCallback(
-    (dir: string) => {
-      setDirCache((prev) => {
-        if (!prev[dir]) return prev;
-        const next = { ...prev };
-        delete next[dir];
-        return next;
-      });
-      loadDir(dir);
-    },
-    [loadDir],
-  );
+  /**
+   * Relê a árvore inteira à vista: as raízes e toda pasta aberta.
+   *
+   * Antes só a raiz era relida, e o arquivo criado fora dela — dentro de uma
+   * subpasta aberta, que é onde se salva quase sempre — continuava sumido,
+   * porque a listagem da subpasta vinha do cache e nada a invalidava. O cache
+   * das pastas FECHADAS é descartado, e não relido: ao abrir, elas leem do
+   * disco, que é o que se espera de uma árvore recém-atualizada.
+   *
+   * O que está aberto NÃO é apagado antes da releitura: a listagem antiga fica
+   * na tela até a nova chegar, em vez de a pasta piscar vazia.
+   */
+  const reloadTree = useCallback(() => {
+    const visible = new Set<string>(folders);
+    for (const p of expandedPaths) visible.add(p);
+    setDirCache((prev) => {
+      const next = { ...prev };
+      for (const dir of Object.keys(next)) {
+        if (!visible.has(dir)) delete next[dir];
+      }
+      return next;
+    });
+    for (const dir of visible) void loadDir(dir, true);
+  }, [folders, expandedPaths, loadDir]);
 
   // ── Status do espaço, não de um repo só ───────────────────────────────
   // A árvore e a lista de alterações mostram o ESPAÇO: num workspace com
@@ -830,7 +852,8 @@ export function FileBrowser({
 
   useEffect(() => {
     if (!currentBranch || folders.length === 0) return;
-    reloadRootDir(folders[0]);
+    // Trocar de branch muda o conteúdo de qualquer subpasta, não só da raiz.
+    reloadTree();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBranch]);
 
@@ -899,8 +922,10 @@ export function FileBrowser({
     if (!repo || refreshing) return;
     setRefreshing(true);
     try {
-      // A árvore é da pasta de trabalho inteira; o status é do repo ativo.
-      reloadRootDir(folders[0] ?? repo);
+      // A árvore é da pasta de trabalho inteira: raízes E pastas abertas — o
+      // arquivo criado à mão numa subpasta não aparecia quando só a raiz era
+      // relida.
+      reloadTree();
       onRefreshChanges();
       await Promise.all([loadGitStatus(), loadNumstat()]);
       // O botão é o único "atualizar" do painel e vale para as três abas: no
@@ -911,9 +936,8 @@ export function FileBrowser({
     }
   }, [
     repo,
-    folders,
     refreshing,
-    reloadRootDir,
+    reloadTree,
     loadGitStatus,
     loadNumstat,
     onRefreshChanges,
@@ -935,7 +959,8 @@ export function FileBrowser({
     setSyncStatus(null);
     const result = await pullChanges(repo);
     if (result.ok) {
-      reloadRootDir(folders[0] ?? repo);
+      // O pull pode trazer arquivos para qualquer pasta aberta.
+      reloadTree();
       void loadGitStatus();
       void loadNumstat();
       setCommitsReload((n) => n + 1);
@@ -945,10 +970,9 @@ export function FileBrowser({
     }
   }, [
     repo,
-    folders,
     syncBusyDir,
     pullChanges,
-    reloadRootDir,
+    reloadTree,
     loadGitStatus,
     loadNumstat,
     syncErrorMessage,
