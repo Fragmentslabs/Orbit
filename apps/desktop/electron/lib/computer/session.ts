@@ -143,39 +143,51 @@ function releaseShortcut(): void {
   shortcutOn = false
 }
 
-function overlayHtml(text: string): string {
-  const safe = text.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)
-  // Amarelo primário do Orbit (--primary do tema escuro). A janela é mais alta
-  // do que a faixa para caber o anel e a sombra, e o body ocupa a janela toda:
-  // com a altura do conteúdo, o overflow:hidden dele cortava o anel numa linha
-  // reta rente à base da faixa.
+/** Link do botão Parar da faixa: o main intercepta a navegação (a página é um data: sem preload). */
+const STOP_URL = 'orbit-computer://stop'
+/** Respiro em volta da faixa para o anel amarelo e a sombra caberem na janela. */
+const OVERLAY_PAD_X = 12
+const OVERLAY_HEIGHT = 52
+
+function overlayHtml(text: string, stop: string): string {
+  const esc = (value: string) => value.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c)
+  // Amarelo primário do Orbit (--primary do tema escuro). O body ocupa a
+  // janela toda: com a altura do conteúdo, o overflow:hidden dele cortava o
+  // anel numa linha reta rente à base da faixa.
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:600 12px -apple-system,system-ui,sans-serif}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:600 12px -apple-system,system-ui,sans-serif;-webkit-user-select:none;cursor:default}
 body{padding-top:8px;box-sizing:border-box}
-.bar{margin:0 auto;width:max-content;max-width:96vw;display:flex;gap:8px;align-items:center;padding:6px 14px;border-radius:999px;
+.bar{margin:0 auto;width:max-content;max-width:96vw;display:flex;gap:10px;align-items:center;padding:4px 4px 4px 14px;border-radius:999px;
 background:rgba(16,16,20,.86);color:#fff;box-shadow:0 0 0 2px oklch(0.795 0.184 86.047),0 4px 12px rgba(0,0,0,.3)}
 .dot{width:8px;height:8px;border-radius:50%;background:oklch(0.852 0.199 91.936);animation:p 1.2s ease-in-out infinite}
 @keyframes p{50%{opacity:.35}}
-</style></head><body><div class="bar"><span class="dot"></span><span>${safe}</span></div></body></html>`
+.stop{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;background:oklch(0.852 0.199 91.936);color:oklch(0.421 0.095 57.708);text-decoration:none;cursor:pointer}
+.stop:hover{background:oklch(0.795 0.184 86.047)}
+.sq{width:7px;height:7px;border-radius:1.5px;background:currentColor}
+kbd{font:600 10px -apple-system,system-ui,sans-serif;opacity:.7}
+</style></head><body><div class="bar"><span class="dot"></span><span>${esc(text)}</span>
+<a class="stop" href="${STOP_URL}" draggable="false"><span class="sq"></span>${esc(stop)}<kbd>⌘⇧.</kbd></a></div></body></html>`
 }
 
 /**
- * Faixa no topo da tela enquanto o agente controla o computador. Atravessável
- * pelo mouse e sem foco: ela não pode virar alvo de clique nem roubar teclado
- * do app que o agente está usando. Também nunca aparece no screenshot — a
- * captura é da janela alvo, não da tela.
+ * Faixa no topo da tela enquanto o agente controla o computador, com o botão
+ * Parar. Painel não ativador e sem foco: clicar em Parar não traz o Orbit para
+ * a frente nem rouba o teclado do app que o agente está usando. A janela
+ * encolhe até o tamanho da faixa, para não bloquear cliques ao redor. Nunca
+ * aparece no screenshot — a captura é da janela alvo, não da tela.
  */
 function showOverlay(): void {
   const apps = [...new Set([...live.values()].map((l) => l.activity.app))].join(', ')
   const text = tNow('computer.overlay', { apps })
   if (!overlay || overlay.isDestroyed()) {
     const area = screen.getPrimaryDisplay().workArea
-    const width = Math.min(640, area.width)
+    const width = Math.min(720, area.width)
     overlay = new BrowserWindow({
       x: Math.round(area.x + (area.width - width) / 2),
       y: area.y,
       width,
-      height: 64,
+      height: OVERLAY_HEIGHT,
+      ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
       frame: false,
       transparent: true,
       resizable: false,
@@ -188,8 +200,13 @@ function showOverlay(): void {
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
     })
     overlay.setAlwaysOnTop(true, 'screen-saver')
-    overlay.setIgnoreMouseEvents(true)
     overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    // O botão é um link: a navegação nunca acontece, vira o Parar.
+    overlay.webContents.on('will-navigate', (event, url) => {
+      event.preventDefault()
+      if (url.startsWith(STOP_URL)) stopComputer()
+    })
+    overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     overlay.on('closed', () => {
       overlay = null
       overlayText = null
@@ -198,9 +215,26 @@ function showOverlay(): void {
   // Recarregar a cada ação faria a faixa piscar: só quando o texto muda.
   if (text === overlayText) return
   overlayText = text
-  void overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(text))}`).then(() => {
-    if (overlay && !overlay.isDestroyed() && !overlay.isVisible()) overlay.showInactive()
-  })
+  const target = overlay
+  void target
+    .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(text, tNow('computer.overlayStop')))}`)
+    .then(() => fitOverlay(target))
+    .then(() => {
+      if (!target.isDestroyed() && !target.isVisible()) target.showInactive()
+    })
+    .catch(() => undefined)
+}
+
+/** Ajusta a janela à largura da faixa, centralizada no topo da tela. */
+async function fitOverlay(target: BrowserWindow): Promise<void> {
+  if (target.isDestroyed()) return
+  const width = (await target.webContents
+    .executeJavaScript('Math.ceil(document.querySelector(".bar").getBoundingClientRect().width)')
+    .catch(() => null)) as number | null
+  if (!width || target.isDestroyed()) return
+  const area = screen.getPrimaryDisplay().workArea
+  const w = Math.min(area.width, width + OVERLAY_PAD_X * 2)
+  target.setBounds({ x: Math.round(area.x + (area.width - w) / 2), y: area.y, width: w, height: OVERLAY_HEIGHT })
 }
 
 function hideOverlay(): void {

@@ -112,7 +112,8 @@ não tenha funcionado.
   `<screen_content untrusted="true">`, e o prompt diz que isso é dado e nunca
   instrução. Ação que a tela pede e o usuário não pediu: parar e perguntar.
 - **Visibilidade e parada.** Enquanto o agente controla, aparecem a faixa
-  laranja no topo da tela (sem foco e atravessável pelo mouse) e o chip
+  amarela no topo da tela, com o botão **Parar** (painel não ativador, sem
+  foco, do tamanho da faixa: clicar não traz o Orbit para a frente), e o chip
   "Controlando <app>" no header, com **Parar**. O atalho global
   **⌘⇧.** (ou ⌘⇧Esc) para tudo. Os atalhos, a faixa e os painéis duram o
   turno inteiro: com o vencimento antigo de 20 s sem ação, o agente pensando

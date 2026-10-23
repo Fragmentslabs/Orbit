@@ -358,8 +358,12 @@ export const MESSAGES = {
   },
   // ── Computer Use: faixa no topo da tela enquanto o agente controla um app ──
   'computer.overlay': {
-    'pt-BR': 'Orbit está controlando {{apps}} — ⌘⇧. para parar',
-    en: 'Orbit is controlling {{apps}} — ⌘⇧. to stop',
+    'pt-BR': 'Orbit está controlando {{apps}}',
+    en: 'Orbit is controlling {{apps}}',
+  },
+  'computer.overlayStop': {
+    'pt-BR': 'Parar',
+    en: 'Stop',
   },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
