@@ -758,6 +758,9 @@ export interface PermissionClaim {
   /** Pergunta mesmo no modo irrestrito (ex.: remover worktree): trocar o modo
    *  para irrestrito não aprova este pedido sozinho. */
   alwaysAsk?: boolean
+  /** A aprovação dura no máximo a conversa: sem "sempre permitir" global
+   *  (controle do computador). */
+  sessionOnly?: boolean
 }
 
 /** Pergunta estruturada da tool question */
@@ -845,6 +848,9 @@ export interface SendMessageOptions {
   research?: boolean
   /** Habilita ferramentas de browser nativo */
   browser?: boolean
+  /** Controle do computador nesta conversa (vale só com o interruptor das
+   *  Preferências → Computador ligado). Nunca vem do celular nem de rotinas. */
+  computer?: boolean
   /** Modo plano: apenas ferramentas de leitura, saída em formato de plano */
   plan?: boolean
   /** Ao aceitar um plano: sinaliza para o backend usar o prompt de implementação */

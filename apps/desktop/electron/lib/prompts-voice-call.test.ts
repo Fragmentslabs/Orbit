@@ -16,6 +16,7 @@ vi.mock('./app-settings', async () => {
   const { DEFAULT_APP_SETTINGS } = await import('@shared/app-settings')
   return {
     agentMayUseBrowser: () => false,
+    agentMayControlComputer: () => false,
     getAppSettings: () => ({
       ...DEFAULT_APP_SETTINGS,
       voice: {

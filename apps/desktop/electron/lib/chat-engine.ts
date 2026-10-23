@@ -76,6 +76,7 @@ import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
+import { endActivity } from './computer/session'
 import { designNameFromInputJson, openDesignLive } from './tools/design-chat'
 import { openMotionLive } from './tools/motion-chat'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
@@ -1770,7 +1771,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 ],
                 interleavedReasoningField(provider, primary.modelId),
               ),
-        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks) : undefined,
+        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks, modelVision) : undefined,
         toolApproval,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
@@ -2518,6 +2519,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
   } finally {
     clearTurnImages(sessionId)
+    // Fim do turno = fim do controle do computador: some o indicador, solta o
+    // atalho de pânico e devolve as flags de acessibilidade dos apps.
+    endActivity(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
     activeBashCommands.delete(sessionId)

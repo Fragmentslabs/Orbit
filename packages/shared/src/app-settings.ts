@@ -44,6 +44,16 @@ export type CookieRetention = 'persistent' | 'until-quit'
  */
 export type LocalWorktrees = 'padrao' | 'projeto' | 'personalizada'
 
+/**
+ * Como o agente entrega clique e teclado ao controlar o computador.
+ *  - `directed`: direto para o app (por pid), sem mover o cursor do usuário;
+ *  - `global`: pelo ponteiro real — move o cursor, e é o único que arrasta.
+ */
+export type ComputerPointer = 'directed' | 'global'
+
+/** Lados máximos oferecidos para o screenshot (px). */
+export const COMPUTER_SCREENSHOT_EDGES = [1024, 1280, 1600] as const
+
 export interface AppSettings {
   /** Modelo para tarefas auxiliares (título, compactação, sugestões). null = o modelo da conversa. */
   auxModel: { providerId: string; modelId: string } | null
@@ -86,6 +96,14 @@ export interface AppSettings {
   }
   /** Núcleo de voz (TTS local e ditado/STT). Ver voice.ts. */
   voice: VoiceSettings
+  /** Controle do computador (Preferências → Computador). */
+  computer: {
+    /** Interruptor geral — sem ele as tools nem existem, mesmo com o modo ligado na conversa. */
+    enabled: boolean
+    pointer: ComputerPointer
+    /** Lado maior do screenshot enviado ao modelo */
+    maxScreenshotEdge: number
+  }
 }
 
 /** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
@@ -130,6 +148,12 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // Cópia própria dos padrões: o objeto do voice.ts é constante compartilhada e
   // não pode virar o alvo de uma edição acidental da UI.
   voice: { tts: { ...VOICE_DEFAULTS.tts }, stt: { ...VOICE_DEFAULTS.stt }, call: { ...VOICE_DEFAULTS.call } },
+  // Controlar o computador é opt-in explícito; o ponteiro real, outro opt-in.
+  computer: {
+    enabled: false,
+    pointer: 'directed',
+    maxScreenshotEdge: 1280,
+  },
 }
 
 export const AUTO_ARCHIVE_DAY_OPTIONS = [2, 3, 7, 14, 30, 90] as const
@@ -262,5 +286,15 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       return local === 'personalizada' && !pasta ? { local: d.worktrees.local, pasta: null } : { local, pasta }
     })(),
     voice: voiceSettings(value.voice, d.voice),
+    computer: (() => {
+      const c = (value.computer && typeof value.computer === 'object' ? value.computer : {}) as Partial<AppSettings['computer']>
+      return {
+        enabled: typeof c.enabled === 'boolean' ? c.enabled : d.computer.enabled,
+        pointer: oneOf(c.pointer, ['directed', 'global'], d.computer.pointer),
+        maxScreenshotEdge: (COMPUTER_SCREENSHOT_EDGES as readonly number[]).includes(c.maxScreenshotEdge as number)
+          ? (c.maxScreenshotEdge as number)
+          : d.computer.maxScreenshotEdge,
+      }
+    })(),
   }
 }

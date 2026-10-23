@@ -2,6 +2,8 @@ import path from 'node:path'
 import { readFileSync, statSync } from 'node:fs'
 import { dataDir } from '../storage'
 import { isMcpServerName } from '../mcp'
+import { computerRegistry } from '../computer/registry'
+import { approvalKey, isDeniedQuery } from '../computer/safety'
 import type { PermissionClaim } from '@shared/chat'
 
 export interface Assessment {
@@ -12,6 +14,8 @@ export interface Assessment {
    * ações destrutivas que o usuário precisa ver uma a uma.
    */
   sempre?: boolean
+  /** A aprovação vale no máximo para a conversa: "sempre permitir" global não existe. */
+  sessionOnly?: boolean
 }
 
 function shorten(text: string, max = 80): string {
@@ -212,7 +216,53 @@ const NATIVE_TOOLS = new Set([
   'video_transcribe',
   'video_timeline',
   'video_render',
+  // Computer Use — leitura: listar apps, observar (screenshot + árvore), buscar
+  // e ver permissões. Só existem com o interruptor das Preferências E o modo
+  // da conversa ligados, e a denylist vale também aqui (isForbidden). Agir
+  // (cu_computer) passa pelo gate — ver assessComputer.
+  'cu_apps',
+  'cu_observe',
+  'cu_query',
+  'cu_permissions',
 ])
+
+/**
+ * Agir na tela: aprovação por app (por site, nos navegadores), só para a
+ * conversa — "sempre permitir" global não existe para isto. O detalhe mostra
+ * o app, a janela/URL vista e a ação, para o usuário saber o que está liberando.
+ */
+function assessComputer(args: Record<string, unknown>): Assessment | null {
+  const action = typeof args.action === 'string' ? args.action : '?'
+  if (action === 'wait') return null
+  const query = typeof args.app === 'string' ? args.app : ''
+  const target = query ? computerRegistry.lastTargetFor(query) : null
+  const app = target?.bundleId ?? (query || '?')
+  const name = target?.name ?? (query || '?')
+  const ruleId = approvalKey(app, target?.url)
+  const host = ruleId.includes('@') ? ruleId.split('@')[1] : null
+  const what =
+    action === 'type' || action === 'set_value'
+      ? `${action}: ${shorten(String(args.text ?? ''), 60)}`
+      : action === 'key'
+        ? `key: ${String(args.key ?? '')}`
+        : action === 'open_app'
+          ? 'abrir / trazer para a frente'
+          : args.element !== undefined
+            ? `${action} no elemento ${String(args.element)}`
+            : `${action}${args.x !== undefined ? ` em (${String(args.x)}, ${String(args.y)})` : ''}`
+  return {
+    ruleId,
+    sessionOnly: true,
+    claim: {
+      tool: 'cu_computer',
+      title: host ? `Controlar ${name} em ${host}` : `Controlar ${name}`,
+      detail:
+        `O agente quer agir no app ${name}${host ? ` (site ${host})` : ''} — ${what}. ` +
+        'Aprovar vale para este app nesta conversa; outro app ou outro site pede de novo.',
+      sessionOnly: true,
+    },
+  }
+}
 
 const USER_RULES_FILE = () => path.join(dataDir(), 'permissions.json')
 
@@ -305,6 +355,13 @@ function assessBash(command: string, dir: string | null): Assessment | null {
       }
     }
 
+    // Controle de tela pelo bash: osascript com System Events (keystroke,
+    // click, key code) dirige qualquer app por fora do Computer Use — sem a
+    // denylist, sem a aprovação por app, sem a recusa de campo de senha.
+    if (cmd === 'osascript' && /system events|keystroke|key code|click at/i.test(command)) {
+      found.push(claim('bash:gui-automation', 'controla outros apps pela interface (osascript/System Events)'))
+    }
+
     if (cmd.startsWith('npx') || cmd.startsWith('npm') || cmd.startsWith('pnpm') || cmd.startsWith('yarn') || cmd.startsWith('bun')) {
       const install = tokens.some((t) => t === 'install' || t === 'add' || t === 'remove' || t === 'link')
       if (install) {
@@ -352,6 +409,7 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
     return assessFileWrite(toolName, args.filePath)
   }
+  if (toolName === 'cu_computer') return assessComputer(args)
   // Remover worktree apaga a pasta e o que não foi commitado nela: pergunta
   // sempre, mesmo no modo total (a regra do plano de worktrees nos chats).
   if (toolName === 'worktree_remove') {
@@ -411,6 +469,11 @@ export function isForbidden(toolName: string, input: unknown, dir: string | null
     const normalized = args.filePath.replace(/\\/g, '/')
     if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) return true
   }
+
+  // Cofres de senha, ajustes do sistema e prompts de segurança: nem observar,
+  // nem agir — em qualquer modo de permissão. A tool confere de novo depois de
+  // resolver o app (o modelo pode mandar um pid), esta é a primeira barreira.
+  if (toolName.startsWith('cu_') && typeof args.app === 'string' && isDeniedQuery(args.app)) return true
 
   return false
 }

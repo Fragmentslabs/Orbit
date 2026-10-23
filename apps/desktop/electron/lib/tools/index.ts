@@ -40,7 +40,9 @@ import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
 import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
-import { agentMayUseBrowser, getAppSettings } from '../app-settings'
+import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from '../app-settings'
+import { isComputerAvailable } from '../computer'
+import { createComputerTools } from './computer'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
@@ -64,8 +66,27 @@ export type { ImageToolHooks } from './image'
  * `imageHooks` liga o image_delete ao estado vivo da resposta em andamento
  * (chat-engine) — sem ele a tool ainda existe mas se recusa a apagar nada.
  */
-export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, imageHooks?: ImageToolHooks): ToolSet {
+export function buildToolSet(
+  input: SendMessageInput,
+  ctx: ToolContext | null,
+  imageHooks?: ImageToolHooks,
+  /** Visão do modelo do turno — no chat não há ctx para carregá-la */
+  modelVision?: boolean,
+): ToolSet {
   const tools: ToolSet = {}
+  // Controle do computador: duas chaves (Preferências + modo da conversa),
+  // só a sessão principal e só onde há driver. Desligado, as tools nem
+  // existem — o prompt explica ao agente como ligar.
+  if (agentMayControlComputer(input, isComputerAvailable())) {
+    Object.assign(
+      tools,
+      createComputerTools({
+        sessionId: input.sessionId,
+        modelVision: modelVision ?? ctx?.modelVision !== false,
+        visionModel: input.visionModel,
+      }),
+    )
+  }
   // Skills: no prompt entram com a descrição; o conteúdo completo vem sob
   // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
   // em todo turno. Não expõe capacidade nova — só lê o que o agente já vê.

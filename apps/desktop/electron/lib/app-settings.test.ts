@@ -82,3 +82,46 @@ describe('agentMayUseBrowser', () => {
     expect(agentMayUseBrowser(input(true))).toBe(true)
   })
 })
+
+describe('computer', () => {
+  it('desligado por padrão, ponteiro dirigido e 1280 px', () => {
+    expect(normalizeAppSettings(undefined).computer).toEqual({ enabled: false, pointer: 'directed', maxScreenshotEdge: 1280 })
+  })
+
+  it('só aceita os valores oferecidos na tela', () => {
+    expect(normalizeAppSettings({ computer: { enabled: true, pointer: 'global', maxScreenshotEdge: 1600 } }).computer).toEqual({
+      enabled: true,
+      pointer: 'global',
+      maxScreenshotEdge: 1600,
+    })
+    expect(normalizeAppSettings({ computer: { pointer: 'mouse', maxScreenshotEdge: 999 } }).computer).toEqual({
+      enabled: false,
+      pointer: 'directed',
+      maxScreenshotEdge: 1280,
+    })
+  })
+})
+
+describe('agentMayControlComputer', () => {
+  const pedido = (over: Partial<SendMessageInput> = {}, computer = true): SendMessageInput => ({
+    ...input(),
+    ...over,
+    options: { computer },
+  })
+
+  it('precisa das duas chaves: Preferências e o modo da conversa', async () => {
+    const { agentMayControlComputer } = await import('./app-settings')
+    await setAppSettings({ computer: { enabled: false } })
+    expect(agentMayControlComputer(pedido(), true)).toBe(false)
+    await setAppSettings({ computer: { enabled: true } })
+    expect(agentMayControlComputer(pedido({}, false), true)).toBe(false)
+    expect(agentMayControlComputer(pedido(), true)).toBe(true)
+  })
+
+  it('nunca em worker nem onde não há driver', async () => {
+    const { agentMayControlComputer } = await import('./app-settings')
+    await setAppSettings({ computer: { enabled: true } })
+    expect(agentMayControlComputer(pedido({ orchestrationRole: 'worker' }), true)).toBe(false)
+    expect(agentMayControlComputer(pedido(), false)).toBe(false)
+  })
+})

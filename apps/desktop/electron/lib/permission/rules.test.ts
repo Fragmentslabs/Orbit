@@ -43,3 +43,50 @@ describe('assess — nativas x MCP', () => {
     expect(claim?.ruleId).toBe('mcp:Nodara')
   })
 })
+
+describe('computer use', () => {
+  it('leitura não pede; agir pede por app, só para a conversa', async () => {
+    const { isForbidden } = await import('./rules')
+    expect(assess('cu_observe', { app: 'com.apple.TextEdit' }, null)).toBeNull()
+    expect(assess('cu_apps', {}, null)).toBeNull()
+    const pedido = assess('cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 3 }, null)
+    expect(pedido).toMatchObject({ ruleId: 'cu:app:com.apple.TextEdit', sessionOnly: true, claim: { tool: 'cu_computer', sessionOnly: true } })
+    expect(pedido?.claim.detail).toContain('elemento 3')
+    expect(assess('cu_computer', { action: 'wait', seconds: 1 }, null)).toBeNull()
+    expect(isForbidden('cu_computer', { action: 'left_click', app: 'TextEdit' }, null)).toBe(false)
+  })
+
+  it('cofres de senha e ajustes do sistema são bloqueio duro, inclusive para observar', async () => {
+    const { isForbidden } = await import('./rules')
+    expect(isForbidden('cu_observe', { app: 'com.1password.1password' }, null)).toBe(true)
+    expect(isForbidden('cu_computer', { action: 'type', app: 'System Settings' }, null)).toBe(true)
+    expect(isForbidden('cu_query', { app: 'Keychain Access', text: 'x' }, null)).toBe(true)
+  })
+
+  it('navegador: a aprovação é pelo site que foi observado', async () => {
+    const { computerRegistry } = await import('../computer/registry')
+    computerRegistry.record({
+      id: 'obs_x',
+      sessionId: 's1',
+      createdAt: Date.now(),
+      app: { pid: 321, bundleId: 'com.apple.Safari', name: 'Safari', active: true, hidden: false },
+      window: { id: 1, pid: 321, title: 'Banco', frame: [0, 0, 10, 10] },
+      geometry: { frame: [0, 0, 10, 10], width: 10, height: 10 },
+      hasScreenshot: true,
+      url: 'https://banco.com.br/extrato',
+      elements: new Map(),
+      digest: null,
+    })
+    const pedido = assess('cu_computer', { action: 'left_click', app: 'Safari', x: 1, y: 1 }, null)
+    expect(pedido?.ruleId).toBe('cu:app:com.apple.Safari@banco.com.br')
+    expect(pedido?.claim.title).toBe('Controlar Safari em banco.com.br')
+  })
+})
+
+describe('controle de tela pelo bash', () => {
+  it('osascript com System Events pede aprovação — passa por fora do Computer Use', () => {
+    const pedido = assess('bash', { command: `osascript -e 'tell application "TextEdit" to activate' -e 'tell application "System Events" to keystroke "oi"'` }, '/repo')
+    expect(pedido?.ruleId).toBe('bash:gui-automation')
+    expect(assess('bash', { command: 'osascript -e \'display notification "ok"\'' }, '/repo')).toBeNull()
+  })
+})

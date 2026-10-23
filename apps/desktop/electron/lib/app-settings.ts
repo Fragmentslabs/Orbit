@@ -44,6 +44,16 @@ export function agentMayUseBrowser(input: SendMessageInput): boolean {
   return current.browser.agentTools || input.options.fromBrowser === true
 }
 
+/**
+ * O agente pode controlar o computador neste turno? Exige as duas chaves: o
+ * interruptor das Preferências e o modo ligado nesta conversa. Workers ficam
+ * de fora — quem age na tela do usuário é a sessão que fala com ele.
+ * `available` é a plataforma (macOS fora da App Store), resolvida por quem chama.
+ */
+export function agentMayControlComputer(input: SendMessageInput, available: boolean): boolean {
+  return available && current.computer.enabled && input.options.computer === true && input.orchestrationRole !== 'worker'
+}
+
 export function onAppSettingsChange(listener: (next: AppSettings, prev: AppSettings) => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

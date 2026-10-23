@@ -356,6 +356,11 @@ export const MESSAGES = {
     'pt-BR': 'documento',
     en: 'document',
   },
+  // ── Computer Use: faixa no topo da tela enquanto o agente controla um app ──
+  'computer.overlay': {
+    'pt-BR': 'Orbit está controlando {{apps}} — ⌘⇧. para parar',
+    en: 'Orbit is controlling {{apps}} — ⌘⇧. to stop',
+  },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
 export type MainMessageKey = keyof typeof MESSAGES
