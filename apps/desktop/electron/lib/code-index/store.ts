@@ -19,7 +19,7 @@ import { extractFacts, UseKind, type FileFacts, type SymbolDef } from './extract
 const execFileAsync = promisify(execFile)
 
 /** Muda quando o formato persistido ou a extração mudam — força re-extrair tudo. */
-const FORMAT = 3
+const FORMAT = 4
 const MAX_FILES = 30_000
 const MAX_FILE_BYTES = 1024 * 1024
 /** Abaixo disso, consultas seguidas reusam o último refresh. */

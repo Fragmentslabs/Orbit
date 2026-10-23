@@ -23,6 +23,8 @@ export interface SymbolDef {
   sig: string
   /** Comentário logo acima — entra na busca, não na saída. */
   doc: string
+  /** Faz parte da API pública do arquivo (export, pub, public, nome exportado em Go). */
+  exported?: true
 }
 
 /** Como o nome foi usado: chamada/valor simples, acesso a membro (`x.foo`) ou tipo (`: Foo`). */
@@ -50,6 +52,8 @@ export interface FileFacts {
 
 const MAX_SIG = 200
 const MAX_DOC = 240
+/** Linhas guardadas por (quem usa, nome): o bastante para listar cada chamada sem inchar o índice. */
+const MAX_LINES_PER_USE = 30
 
 /** Palavras que os extratores de linha confundiriam com identificador. */
 const NOISE = new Set([
@@ -103,6 +107,7 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
   const locals = new Set<string>()
   let currentImport: { to: number; spec: string } | null = null
   const seenUse = new Set<string>()
+  const useCount = new Map<string, number>()
   const nameNodes = new Set<number>()
   const frames: Frame[] = []
   let scopeDepth = 0
@@ -133,6 +138,7 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
           let kind = kindFor(node, rule)
           if (kind === 'function' && parent >= 0 && isTypeLike(defs[parent].kind)) kind = 'method'
           const line = lineAt(starts, node.from)
+          const sig = signature(node, spec, source)
           defs.push({
             name,
             qual: [...scope, name].join('.'),
@@ -140,8 +146,9 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
             line,
             end: lineAt(starts, Math.max(node.from, node.to - 1)),
             parent,
-            sig: signature(node, spec, source),
+            sig,
             doc: docAbove(lines, line - 1),
+            ...(isExported(spec.id, node, name, sig, parent) ? { exported: true as const } : {}),
           })
           frames.push({ from: node.from, to: node.to, type: node.name, def: defs.length - 1, name })
         }
@@ -160,10 +167,16 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
       if (name.length > 1 && !NOISE.has(name)) {
         const owner = ownerDef()
         const kind = kindOfUse(spec, node)
+        // Cada linha conta: `createVideoTools` chama resolveSafePath em 11
+        // lugares, e o agente precisa de todos — não só do primeiro.
+        const line = lineAt(starts, node.from)
         const key = `${owner}\0${kind}\0${name}`
-        if (!seenUse.has(key)) {
-          seenUse.add(key)
-          uses.push([name, owner, lineAt(starts, node.from), kind])
+        const lineKey = `${key}\0${line}`
+        const count = useCount.get(key) ?? 0
+        if (!seenUse.has(lineKey) && count < MAX_LINES_PER_USE) {
+          seenUse.add(lineKey)
+          useCount.set(key, count + 1)
+          uses.push([name, owner, line, kind])
         }
       }
     }
@@ -194,6 +207,31 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
         return { lang: spec.id, lines: starts.length, defs, uses, imports, importNames, locals: [...locals] }
       }
     }
+  }
+}
+
+/**
+ * API pública por convenção de cada linguagem. Sem regra (C/C++), nada é
+ * marcado — o outline não afirma o que não sabe.
+ */
+function isExported(lang: string, node: SyntaxNode, name: string, sig: string, parent: number): boolean {
+  switch (lang) {
+    case 'typescript':
+    case 'tsx':
+    case 'javascript':
+      return node.parent?.name === 'ExportDeclaration'
+    case 'go':
+      return parent < 0 && /^[A-Z]/.test(name)
+    case 'rust':
+      return /^pub\b/.test(sig)
+    case 'java':
+      return /\bpublic\b/.test(sig)
+    case 'php':
+      return !/\b(private|protected)\b/.test(sig)
+    case 'python':
+      return parent < 0 && !name.startsWith('_')
+    default:
+      return false
   }
 }
 
@@ -345,6 +383,7 @@ function extractByLines(lang: string, source: string, lineCount: number): FileFa
       parent,
       sig: text.trim().replace(/\s*[{:=]\s*$/, '').slice(0, MAX_SIG),
       doc: docAbove(lines, i),
+      ...(/\b(public|open|export|pub)\b/.test(text) ? { exported: true as const } : {}),
     })
     open.push({ def: defs.length - 1, indent })
   }
@@ -365,7 +404,7 @@ function extractByLines(lang: string, source: string, lineCount: number): FileFa
       const name = match[0]
       if (name.length < 2 || NOISE.has(name)) continue
       owner ??= ownerAt(i + 1)
-      const key = `${owner}\0${name}`
+      const key = `${owner}\0${name}\0${i}`
       if (seen.has(key)) continue
       seen.add(key)
       // Sem árvore não dá para separar membro de chamada: `.foo` vira membro

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { extractFacts } from './extract'
 import { CodeIndex, setCodeIndexCacheDir } from './store'
-import { renderOutline, renderRefs, renderRepoMap, resolveSymbol, searchSymbols, signatureChanges } from './query'
+import { renderOutline, renderRefs, renderRepoMap, renderSearch, resolveSymbol, searchSymbols, signatureChanges } from './query'
 
 const base = path.join(os.tmpdir(), `orbit-code-index-${process.pid}`)
 
@@ -61,6 +61,8 @@ interface Options { a: string }`,
   it('qualifica método Go pelo receiver e impl do Rust pelo tipo', async () => {
     const go = await extractFacts('m.go', 'package p\ntype S struct { A int }\nfunc (s *S) M(x int) string { return helper(x) }\nfunc helper(x int) string { return "" }\n')
     expect(go!.defs.map((d) => `${d.kind}:${d.qual}`)).toEqual(['class:S', 'method:S.M', 'function:helper'])
+    // Go: exportado = começa com maiúscula.
+    expect(go!.defs.filter((d) => d.exported).map((d) => d.qual)).toEqual(['S', 'S.M'])
     const rs = await extractFacts('m.rs', 'struct S { a: i32 }\nimpl Show for S { fn m(&self) -> i32 { helper(1) } }\nfn helper(x: i32) -> i32 { x }\n')
     expect(rs!.defs.map((d) => d.qual)).toEqual(['S', 'S.m', 'helper'])
   })
@@ -73,6 +75,8 @@ interface Options { a: string }`,
       'function:foo:6-7',
       'variable:LIMIT:8-8',
     ])
+    // Python: topo do módulo e sem _ na frente; método não conta.
+    expect(py!.defs.filter((d) => d.exported).map((d) => d.qual)).toEqual(['K', 'foo', 'LIMIT'])
   })
 
   it('extrator de linha cobre linguagem sem parser (Swift)', async () => {
@@ -107,7 +111,7 @@ describe('CodeIndex', () => {
     )
 
     const blast = renderRefs(index, keys, { direction: 'in', depth: 3 })
-    expect(blast).toContain('src/upload.ts: uploadFile')
+    expect(blast).toContain('src/upload.ts: uploadFile:3')
     expect(blast).toContain('src/cli.ts: (top level)°2')
   })
 
@@ -124,6 +128,45 @@ describe('CodeIndex', () => {
     expect(graph.incoming.get('b.ts#0')).toBeUndefined()
     // Alias `@app/a` resolve para a.ts pelo resto do caminho.
     expect(renderRefs(index, resolveSymbol(index, 'join'), { direction: 'in', depth: 1 })).toContain('run — c.ts:2')
+  })
+
+  it('lista toda linha de uso, agrupada por quem usa', async () => {
+    const index = await project('lines', {
+      'ctx.ts': 'export function check(p: string) { return p }\n',
+      'tools.ts': "import { check } from './ctx'\nexport function createTools() {\n  check('a')\n  const x = 1\n  check('b')\n  return check('c')\n}\n",
+    })
+    const refs = renderRefs(index, resolveSymbol(index, 'check'), { direction: 'in', depth: 1 })
+    expect(refs).toContain('3 uses in 1 symbols across 1 files:')
+    expect(refs).toContain('createTools — tools.ts:3, 5, 6')
+    const out = renderRefs(index, resolveSymbol(index, 'createTools'), { direction: 'out', depth: 1 })
+    expect(out).toContain('check — tools.ts:3, 5, 6')
+  })
+
+  it('busca: "called at" aponta a linha da chamada e só os 3 primeiros trazem código', async () => {
+    const index = await project('used-at', {
+      'compaction.ts': 'export function shouldCompact(n: number) {\n  return n > 1\n}\n',
+      'engine.ts': "import { shouldCompact } from './compaction'\nexport function runTurn() {\n  const a = 1\n  if (shouldCompact(a)) return\n}\n",
+      'a.ts': 'export function compactA() {}\n',
+      'b.ts': 'export function compactB() {}\n',
+      'c.ts': 'export function compactC() {}\n',
+    })
+    const out = await renderSearch(index, searchSymbols(index, 'compact', { limit: 5 }))
+    expect(out).toContain('called at: runTurn → engine.ts:4')
+    // 3 blocos com código numerado; os demais só com a assinatura.
+    expect(out.split('## ').filter(Boolean).filter((b) => /\n\s+\d+\| /.test(b))).toHaveLength(3)
+  })
+
+  it('busca acha pelo que a função usa no corpo, com peso menor que o nome', async () => {
+    const index = await project('body', {
+      'compaction.ts': "import { CONTEXT_CAP } from './budget'\nexport function shouldCompact(model: { limit: { context: number } }) {\n  return model.limit.context > CONTEXT_CAP\n}\n",
+      'budget.ts': 'export const CONTEXT_CAP = 300\n',
+      'other.ts': 'export function renderList() {}\n',
+    })
+    const hits = searchSymbols(index, 'compact context limit')
+    expect(hits[0].doc.def.name).toBe('shouldCompact')
+    // Só pelo corpo também acha, mas abaixo de quem casa pelo nome.
+    const byBody = searchSymbols(index, 'context cap')
+    expect(byBody.map((h) => h.doc.def.name)).toEqual(['CONTEXT_CAP', 'shouldCompact'])
   })
 
   it('busca por intenção acha pelo comentário e pelo nome', async () => {
@@ -144,6 +187,7 @@ describe('CodeIndex', () => {
     const outline = renderOutline(index, 'lib/a.ts')!
     expect(outline).toContain('L2-4 class export class A')
     expect(outline).toContain('  L3-3 method run()')
+    expect(outline).toContain('Exported (1): A')
     expect(renderRepoMap(index)).toContain('helperB')
   })
 

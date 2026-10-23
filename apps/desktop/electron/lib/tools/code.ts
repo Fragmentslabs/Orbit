@@ -42,17 +42,17 @@ export function createCodeTools(ctx: ToolContext) {
   return {
     code_search: tool({
       description:
-        'Find code by what it does or by name, over a live symbol index of the project (always in sync, uncommitted edits included). Returns the best-matching functions/classes with file:line spans, their source and who uses them — usually enough to answer or edit without grep or read. Prefer it to grep for locating code; use grep for exact text (strings, config values).',
+        'Find code by what it does or by name, over a live symbol index of the project (always in sync, uncommitted edits included). Returns the best-matching functions/classes with file:line spans, the start of their source (top results) and, under "called at", the exact file:line of each call (caller → file:line) — usually enough to answer or edit without grep or read. Prefer it to grep for locating code; use grep for exact text (strings, config values).',
       inputSchema: z.object({
         query: z.string().describe('What you are looking for, in plain words or identifiers (e.g. "retry backoff for uploads", "buildToolSet")'),
         path: z.string().optional().describe('Only search under this folder'),
-        limit: z.number().optional().describe('Max results (default 6)'),
-        full: z.boolean().optional().describe('Show whole definitions instead of the first 12 lines'),
+        limit: z.number().optional().describe('Max results (default 5)'),
+        full: z.boolean().optional().describe('Show the whole source of every result instead of the first lines of the top 3'),
       }),
       execute: async ({ query, path: scope, limit, full }) => {
         const { root, rel } = rootFor(ctx, scope)
         const index = await ready(root, ctx.abort)
-        const hits = searchSymbols(index, query, { limit: Math.min(limit ?? 6, 15), scope: rel })
+        const hits = searchSymbols(index, query, { limit: Math.min(limit ?? 5, 15), scope: rel })
         if (hits.length === 0) return 'No matching symbols. Try other words, or grep for exact text.'
         return renderSearch(index, hits, { full })
       },
@@ -60,7 +60,7 @@ export function createCodeTools(ctx: ToolContext) {
 
     code_outline: tool({
       description:
-        'Signatures of every function/class in a file with their line ranges and how many places use each — the file without its bodies, a fraction of the tokens of read. Without filePath: a map of the project (folders, main symbols, most-used code) to get oriented in an unfamiliar repo.',
+        'Signatures of every function/class in a file with their line ranges, which ones are exported, and how many places use each — the file without its bodies, a fraction of the tokens of read. Without filePath: a map of the project (folders, main symbols, most-used code) to get oriented in an unfamiliar repo.',
       inputSchema: z.object({
         filePath: z.string().optional().describe('File to outline; omit for the project map'),
         path: z.string().optional().describe('Project map only: restrict to this folder'),
@@ -79,7 +79,7 @@ export function createCodeTools(ctx: ToolContext) {
 
     code_refs: tool({
       description:
-        'Who uses a symbol (direction "in", default) or what it uses ("out"), with file:line. depth > 1 walks transitively and returns the blast radius grouped by file — run it before changing a signature or refactoring to find every affected file. symbol: a name, Class.method, or a file path (everything the file defines).',
+        'Who uses a symbol (direction "in", default) or what it uses ("out"), with every line of each use. depth > 1 walks transitively and returns the blast radius grouped by file — run it before changing a signature or refactoring to find every affected file. symbol: a name, Class.method, or a file path (everything the file defines).',
       inputSchema: z.object({
         symbol: z.string().describe('Function/class name, Class.method, or file path'),
         direction: z.enum(['in', 'out']).optional().describe('"in" = who uses it (default); "out" = what it uses'),

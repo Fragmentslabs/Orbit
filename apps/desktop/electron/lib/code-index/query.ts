@@ -46,6 +46,8 @@ interface SearchDoc {
   name: Set<string>
   where: Set<string>
   about: Set<string>
+  /** Nomes que a definição usa no corpo (`model.limit.context` → limit, context). */
+  body: Set<string>
 }
 
 /** Os documentos de busca vivem junto do grafo: ambos mudam só quando o índice muda. */
@@ -57,6 +59,13 @@ function searchDocs(index: CodeIndex, graph: CodeGraph): SearchDoc[] {
   docs = []
   for (const [file, entry] of index.files) {
     const where = new Set(tokenize(file.replace(/\.[^.]+$/, '')))
+    const usedBy = new Map<number, Set<string>>()
+    for (const [name, owner] of entry.uses) {
+      if (owner < 0) continue
+      let set = usedBy.get(owner)
+      if (!set) usedBy.set(owner, (set = new Set()))
+      for (const token of tokenize(name)) set.add(token)
+    }
     entry.defs.forEach((def, i) => {
       docs!.push({
         key: symbolKey(file, i),
@@ -65,6 +74,7 @@ function searchDocs(index: CodeIndex, graph: CodeGraph): SearchDoc[] {
         name: new Set(tokenize(def.qual)),
         where,
         about: new Set(tokenize(`${def.sig} ${def.doc}`)),
+        body: usedBy.get(i) ?? new Set(),
       })
     })
   }
@@ -83,6 +93,12 @@ function overlap(term: string, tokens: Set<string>): number {
 }
 
 const KIND_WEIGHT: Record<string, number> = { variable: 0.75, module: 0.8 }
+/**
+ * O corpo pesa pouco e conta meio termo na cobertura: liga "limite de
+ * contexto" a quem lê `model.limit.context`, sem deixar uma função de 1.000
+ * linhas (que usa de tudo) casar com qualquer busca.
+ */
+const BODY_WEIGHT = 0.5
 
 export interface SearchHit {
   doc: SearchDoc
@@ -95,7 +111,9 @@ export function searchSymbols(index: CodeIndex, query: string, opts: { limit?: n
   if (terms.length === 0) return []
   const docs = searchDocs(index, graph).filter((d) => !opts.scope || inScope(d.file, opts.scope))
   // IDF: um termo que aparece em todo símbolo (ex.: o nome do projeto) não discrimina nada.
-  const df = terms.map((t) => docs.reduce((n, d) => n + (overlap(t, d.name) || overlap(t, d.where) || overlap(t, d.about) ? 1 : 0), 0))
+  const df = terms.map((t) =>
+    docs.reduce((n, d) => n + (overlap(t, d.name) || overlap(t, d.where) || overlap(t, d.about) || overlap(t, d.body) ? 1 : 0), 0),
+  )
   const idf = df.map((n) => Math.log(1 + docs.length / (1 + n)))
   const compact = terms.join('')
 
@@ -104,9 +122,10 @@ export function searchSymbols(index: CodeIndex, query: string, opts: { limit?: n
     let score = 0
     let matched = 0
     terms.forEach((term, i) => {
-      const s = 3 * overlap(term, doc.name) + 1.5 * overlap(term, doc.where) + overlap(term, doc.about)
+      const direct = 3 * overlap(term, doc.name) + 1.5 * overlap(term, doc.where) + overlap(term, doc.about)
+      const s = direct > 0 ? direct : BODY_WEIGHT * overlap(term, doc.body)
       if (s > 0) {
-        matched++
+        matched += direct > 0 ? 1 : 0.5
         score += idf[i] * s
       }
     })
@@ -145,14 +164,34 @@ function describe(def: SymbolDef): string {
   return `${def.kind} ${def.qual}`
 }
 
-/** Até 3 quem-usa, para o agente ver o contexto sem pedir code_refs. */
+/**
+ * Até 3 quem-usa, com a linha da CHAMADA (não a da definição de quem chama):
+ * é a linha que o agente vai abrir.
+ */
 function usersLine(graph: CodeGraph, key: SymbolKey, index: CodeIndex): string {
-  const edges = graph.incoming.get(key) ?? []
-  const froms = [...new Set(edges.map((e) => e.from))]
-  if (froms.length === 0) return ''
-  const shown = froms.slice(0, 3).map((k) => labelFor(index, k))
-  const more = froms.length > 3 ? ` +${froms.length - 3}` : ''
-  return `used by: ${shown.join(', ')}${more}`
+  const firstCall = new Map<SymbolKey, number>()
+  for (const edge of graph.incoming.get(key) ?? []) {
+    const known = firstCall.get(edge.from)
+    if (known === undefined || edge.line < known) firstCall.set(edge.from, edge.line)
+  }
+  if (firstCall.size === 0) return ''
+  // "quem → arquivo:linha da chamada": o formato diz sozinho que a linha é a
+  // do uso — no benchmark o agente leu "(arquivo:linha)" como a definição de
+  // quem chama e foi atrás do call site com grep.
+  const shown = [...firstCall].slice(0, 3).map(([from, line]) => `${nameOf(index, from)} → ${parseKey(from).file}:${line}`)
+  const more = firstCall.size > 3 ? ` +${firstCall.size - 3}` : ''
+  return `called at: ${shown.join(', ')}${more}`
+}
+
+function nameOf(index: CodeIndex, key: SymbolKey): string {
+  const { file, def } = parseKey(key)
+  return def < 0 ? '(top level)' : index.files.get(file)?.defs[def]?.qual ?? '?'
+}
+
+/** `137, 293, 306 +8`: as linhas de um quem-usa, compactas. */
+function lineList(lines: number[], max = 6): string {
+  const sorted = [...new Set(lines)].sort((a, b) => a - b)
+  return sorted.slice(0, max).join(', ') + (sorted.length > max ? ` +${sorted.length - max}` : '')
 }
 
 function labelFor(index: CodeIndex, key: SymbolKey): string {
@@ -163,21 +202,33 @@ function labelFor(index: CodeIndex, key: SymbolKey): string {
   return `${d.qual} (${file}:${d.line})`
 }
 
+/** Resultados que vêm com código; os demais só com cabeçalho e assinatura. */
+const EXCERPT_HITS = 3
+const EXCERPT_LINES = 8
+
+/**
+ * Os primeiros resultados trazem o começo do código; o resto, só onde está e
+ * a assinatura. Código de resultado que o agente não vai usar é contexto
+ * pago em todos os passos seguintes do turno.
+ */
 export async function renderSearch(index: CodeIndex, hits: SearchHit[], opts: { full?: boolean } = {}): Promise<string> {
   const graph = index.getGraph()
   const blocks: string[] = []
-  for (const { doc } of hits) {
+  for (const [rank, { doc }] of hits.entries()) {
     const { def, file } = doc
+    const users = usersLine(graph, doc.key, index)
+    const head = `## ${file}:${def.line}-${def.end} · ${describe(def)}${users ? `\n${users}` : ''}`
+    if (!opts.full && rank >= EXCERPT_HITS) {
+      blocks.push(`${head}\n  ${def.sig || def.name}`)
+      continue
+    }
     const lines = await readLines(index, file)
     if (!lines) continue
     const span = def.end - def.line + 1
-    const max = opts.full ? 200 : 12
+    const max = opts.full ? 200 : EXCERPT_LINES
     const shown = lines.slice(def.line - 1, def.line - 1 + Math.min(span, max))
     const rest = span > max ? `\n      … +${span - max} lines (read ${file} offset ${def.line + max})` : ''
-    const users = usersLine(graph, doc.key, index)
-    blocks.push(
-      `## ${file}:${def.line}-${def.end} · ${describe(def)}${users ? `\n${users}` : ''}\n${numbered(shown, def.line)}${rest}`,
-    )
+    blocks.push(`${head}\n${numbered(shown, def.line)}${rest}`)
   }
   return blocks.join('\n\n')
 }
@@ -194,7 +245,10 @@ export function renderOutline(index: CodeIndex, file: string): string | null {
     return `${'  '.repeat(depth(i))}L${def.line}-${def.end} ${def.kind} ${def.sig || def.name}${usedBy}`
   })
   const header = `${file} — ${entry.lines} lines, ${entry.defs.length} symbols (← N = used by N symbols)`
-  return rows.length > 0 ? `${header}\n${rows.join('\n')}` : `${header}\n(no symbols found)`
+  // A API pública numa linha: "o que este arquivo exporta" sem grep ^export.
+  const exported = entry.defs.filter((d) => d.exported).map((d) => d.qual)
+  const api = exported.length > 0 ? `\nExported (${exported.length}): ${exported.join(', ')}` : ''
+  return rows.length > 0 ? `${header}${api}\n${rows.join('\n')}` : `${header}\n(no symbols found)`
 }
 
 /**
@@ -298,22 +352,35 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
   const other = (e: Edge) => (opts.direction === 'in' ? e.from : e.to)
   const startSet = new Set(start)
 
-  if (opts.depth <= 1) {
-    const rows: string[] = []
-    const seen = new Set<string>()
-    for (const key of start) {
-      for (const edge of edgesOf(key)) {
-        const target = other(edge)
-        if (startSet.has(target)) continue
-        const { file } = parseKey(edge.from)
-        const id = `${target}\0${edge.line}`
-        if (seen.has(id)) continue
-        seen.add(id)
-        rows.push(`  ${labelFor(index, target).replace(/ \(.*\)$/, '')} — ${file}:${edge.line}${edge.sure ? '' : '  (~ same name elsewhere)'}`)
+  // Linhas de cada vizinho direto (a linha é sempre a do uso, no arquivo de quem usa).
+  const direct = new Map<SymbolKey, { lines: number[]; sure: boolean; at: string }>()
+  for (const key of start) {
+    for (const edge of edgesOf(key)) {
+      const target = other(edge)
+      if (startSet.has(target)) continue
+      const entry = direct.get(target)
+      if (entry) {
+        entry.lines.push(edge.line)
+        entry.sure &&= edge.sure
+      } else {
+        direct.set(target, { lines: [edge.line], sure: edge.sure, at: parseKey(edge.from).file })
       }
     }
-    if (rows.length === 0) return opts.direction === 'in' ? 'No uses found in the index.' : 'Uses nothing else in the index.'
-    const head = opts.direction === 'in' ? `${rows.length} uses:` : `${rows.length} dependencies:`
+  }
+
+  if (opts.depth <= 1) {
+    if (direct.size === 0) return opts.direction === 'in' ? 'No uses found in the index.' : 'Uses nothing else in the index.'
+    // Agrupado por quem usa, com TODAS as linhas: uma linha por vizinho, e
+    // nenhuma chamada some (createVideoTools → 11 linhas, não só a primeira).
+    const rows = [...direct]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([target, { lines, sure, at }]) => `  ${nameOf(index, target)} — ${at}:${lineList(lines, 12)}${sure ? '' : '  (~ same name elsewhere)'}`)
+    const total = [...direct.values()].reduce((n, d) => n + new Set(d.lines).size, 0)
+    const files = new Set([...direct.keys()].map((k) => parseKey(k).file)).size
+    const head =
+      opts.direction === 'in'
+        ? `${total} uses in ${direct.size} symbols across ${files} files:`
+        : `${direct.size} dependencies (${total} uses):`
     return [head, ...rows.slice(0, 80), rows.length > 80 ? `  … +${rows.length - 80}` : ''].filter(Boolean).join('\n')
   }
 
@@ -337,8 +404,10 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
 
   const byFile = new Map<string, Array<{ name: string; d: number }>>()
   for (const [key, d] of level) {
-    const { file, def } = parseKey(key)
-    const name = def < 0 ? '(top level)' : index.files.get(file)?.defs[def]?.qual ?? '?'
+    const { file } = parseKey(key)
+    // Vizinho direto leva as linhas do uso: dá para abrir sem outro code_refs.
+    const lines = d === 1 && opts.direction === 'in' ? direct.get(key)?.lines : undefined
+    const name = nameOf(index, key) + (lines ? `:${lineList(lines, 4)}` : '')
     const list = byFile.get(file)
     if (list) list.push({ name, d })
     else byFile.set(file, [{ name, d }])
