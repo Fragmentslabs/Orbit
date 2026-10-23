@@ -95,6 +95,7 @@ export type BridgeAction =
   | { op: 'focused'; pid: number }
   | { op: 'hit'; pid: number; x: number; y: number; actions?: string[]; focusText?: boolean }
   | { op: 'scrollAx'; pid: number; x: number; y: number; dx: number; dy: number }
+  | { op: 'selection'; pid: number }
   | {
       op: 'element'
       pid: number
@@ -111,6 +112,8 @@ export interface ElementResult {
   action?: string
   /** O AX não confirmou a tempo (-25204) — a ação provavelmente rodou */
   unconfirmed?: boolean
+  /** Seleção de texto no elemento com foco (op selection) */
+  selection?: { location: number; length: number; text: string | null } | null
   node?: Omit<AxNode, 'id' | 'parent' | 'depth' | 'path'>
   readBack?: string | null
 }

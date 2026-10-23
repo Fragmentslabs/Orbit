@@ -67,6 +67,22 @@ exibida em DFS. Grupos vazios não ganham linha. O frame de cada elemento é
 mostrado **no espaço do screenshot** (`@x,y wxh`), o mesmo das coordenadas
 `x`/`y`. Campo seguro (`AXSecureTextField`) nunca tem o valor lido.
 
+**Um só espaço de coordenadas por janela.** x/y e os frames da árvore
+(`@x,y wxh`) estão sempre nos pixels do screenshot daquela janela, ou seja,
+pontos × escala do monitor, reduzidos ao lado máximo (`windowSpace`), **com ou
+sem imagem na observação**. Antes, sem screenshot, eles viravam pontos da janela.
+No teste no app, o agente repetiu "os mesmos passos" de uma observação com
+imagem numa sem imagem: manteve o deslocamento "+15" (que era 7,5 pt) como
+15 pt, e o arrasto caiu **abaixo da linha de texto**, selecionando nada. No
+TextEdit, o arrasto seleciona a linha a +4/+8/+10 pt do topo e nada a
++13/+15/+20 pt. A explicação que o agente deu ("soltar 2 px fora do campo
+cancela a seleção") não se confirmou: medido, a seleção fica.
+
+**Retorno da seleção.** Depois de arrastar ou de clique duplo/triplo, o
+resultado diz o que ficou selecionado (`op: 'selection'`, `AXSelectedTextRange`
++ `AXSelectedText`), ou avisa que nada foi e por quê. `triple_click` seleciona a
+linha (só no ponteiro global).
+
 **Geometria.** No macOS, AX, CGWindowList e eventos usam pontos globais, com
 origem no topo esquerdo do monitor principal e coordenadas negativas para
 monitores à esquerda ou acima. Entre o screenshot e esses pontos só existe a
@@ -132,7 +148,24 @@ cheia do navegador (alça recolhida que abre no hover):
   abre o painel sozinho, senão o agente ficaria esperando um card que ninguém vê;
 - **direita: as ações** `cu_*` desta conversa, da mais recente para a mais
   antiga, cada uma com a frase do que fez, o resumo da saída (clique expande) e
-  o botão Parar.
+  o botão Parar. No topo, a **miniatura do último screenshot** da janela
+  controlada, com o alvo da última ação marcado (retângulo no elemento, círculo
+  no ponto). Ela mostra *onde* o agente agiu mesmo com o app atrás de outras
+  janelas, porque o screenshot é da janela, não da tela.
+
+**Screenshots fora da galeria.** Com uma observação por ação (`read_back`),
+gravar cada screenshot na galeria encheria a aba de mídia com dezenas de
+arquivos por tarefa. O modelo recebe a imagem pelo `toModelOutput`, e o main
+guarda só o último screenshot de cada conversa, em memória (`computer/shots.ts`),
+apagado quando o controle termina.
+
+**Cursor no ponteiro global.** No modo global, o cursor real desliza até o alvo
+numa curva suavizada (~250 ms) antes de clicar, rolar ou arrastar, em vez de
+pular. No modo dirigido não há cursor nenhum, nem desenhado: o app costuma estar
+em segundo plano ou coberto, e um cursor pintado por cima da tela apontaria para
+a janela da frente. É a miniatura com o marcador que mostra o lugar. (O OCU
+desenha um cursor de software sobre o app; ele só faz sentido com a janela alvo
+visível.)
 
 Peças: `computer/panels.ts` (a janela: área útil da tela, `focusable: false`,
 atravessável pelo mouse fora dos painéis, nível `floating`, abaixo da faixa
@@ -313,5 +346,6 @@ Testes automáticos (`vitest`, com driver falso, sem tocar no SO):
 - **Linux**: AT-SPI via PyGObject. Ficam para o plano dele a dependência de
   `python3-gi`, a acessibilidade habilitada e o Wayland (captura e injeção só
   via portal, best-effort).
-- Rotinas, esteira e celular, display virtual, `select_text`, cursor animado e
-  aba "Computador" no painel direito (Fase 2 de polimento).
+- Rotinas, esteira e celular, display virtual, `select_text` e aba
+  "Computador" no painel direito (Fase 2 de polimento). O cursor desenhado saiu
+  do plano: veja "Cursor no ponteiro global".

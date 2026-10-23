@@ -405,12 +405,31 @@ function mouseEvent(type, x, y, button, windowId, clicks) {
 
 function pause(ms) { delay(ms / 1000) }
 
+// Deslize do cursor REAL até o alvo (só no ponteiro global): em vez de pular,
+// percorre uma curva suavizada (ease-in-out) em ~16 ms por passo — a pessoa
+// acompanha com os olhos onde o agente vai agir. Abaixo de 4 px não anima.
+var GLIDE_MS = 240
+function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
+function glide(x, y, ms) {
+  var start = $.CGEventGetLocation($.CGEventCreate($()))
+  var dx = x - start.x
+  var dy = y - start.y
+  if (Math.sqrt(dx * dx + dy * dy) < 4) return
+  var steps = Math.max(6, Math.round((ms || GLIDE_MS) / 16))
+  for (var i = 1; i < steps; i++) {
+    var k = easeInOut(i / steps)
+    $.CGEventPost(0, mouseEvent(EV.moved, start.x + dx * k, start.y + dy * k, 0, 0, 0))
+    pause(16)
+  }
+}
+
 function opMouse(args) {
   requireTrust()
   var btn = args.button === 'right' ? 1 : args.button === 'middle' ? 2 : 0
   var down = btn === 1 ? EV.rightDown : btn === 2 ? EV.otherDown : EV.leftDown
   var up = btn === 1 ? EV.rightUp : btn === 2 ? EV.otherUp : EV.leftUp
   var mode = args.mode || 'pid'
+  if (mode === 'global') glide(args.x, args.y, args.glideMs)
   if (mode === 'global' || args.kind === 'move') post(mouseEvent(EV.moved, args.x, args.y, 0, args.windowId, 0), mode, args.pid)
   if (args.kind === 'move') return { done: 'move' }
   var clicks = args.clicks || 1
@@ -427,6 +446,7 @@ function opDrag(args) {
   requireTrust()
   var mode = args.mode || 'global'
   var steps = args.steps || 12
+  if (mode === 'global') glide(args.from[0], args.from[1], args.glideMs)
   post(mouseEvent(EV.moved, args.from[0], args.from[1], 0, args.windowId, 0), mode, args.pid)
   post(mouseEvent(EV.leftDown, args.from[0], args.from[1], 0, args.windowId, 1), mode, args.pid)
   for (var i = 1; i <= steps; i++) {
@@ -441,6 +461,11 @@ function opDrag(args) {
 
 function opScroll(args) {
   requireTrust()
+  // A roda age onde o cursor está: no global, ele desliza até lá primeiro.
+  if ((args.mode || 'pid') === 'global') {
+    glide(args.x, args.y, args.glideMs)
+    $.CGEventPost(0, mouseEvent(EV.moved, args.x, args.y, 0, 0, 0))
+  }
   var ev = $.CGEventCreateScrollWheelEvent2($(), 0, 2, args.dy || 0, args.dx || 0, 0)
   $.CGEventSetLocation(ev, { x: args.x, y: args.y })
   post(ev, args.mode || 'pid', args.pid)
@@ -614,6 +639,26 @@ function opScrollAx(args) {
   return { done: null, reason: 'noScrollArea' }
 }
 
+// Seleção de texto no elemento com foco do app: o retorno de arrastar e de
+// clique duplo/triplo. Sem isto, "arrastei" saía mesmo quando o arrasto não
+// selecionou nada (Fase 0: arrasto abaixo da linha de texto).
+function opSelection(args) {
+  requireTrust()
+  setGlobalTimeout(0.5)
+  var focused = copyAttr(appElement(args.pid), 'AXFocusedUIElement').value
+  if (!focused || !focused.element) return { selection: null }
+  var raw = null
+  var out = Ref()
+  if ($.AXUIElementCopyAttributeValue(focused.element, $('AXSelectedTextRange'), out) === AX_OK) {
+    var d = ObjC.unwrap(ObjC.castRefToObject(out[0]).description)
+    var m = /location:(\d+) length:(\d+)/.exec(d)
+    if (m) raw = { location: Number(m[1]), length: Number(m[2]) }
+  }
+  if (!raw) return { selection: null }
+  var text = copyAttr(focused.element, 'AXSelectedText').value
+  return { selection: { location: raw.location, length: raw.length, text: clip(text, 120) } }
+}
+
 // O elemento com foco de um app (ou do sistema, sem pid): é o que recebe a
 // digitação — o driver confere aqui que não é um campo de senha.
 function opFocused(args) {
@@ -640,6 +685,7 @@ var OPS = {
   element: opElement,
   focused: opFocused,
   hit: opHit,
+  selection: opSelection,
   scrollAx: opScrollAx,
 }
 

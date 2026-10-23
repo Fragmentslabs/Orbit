@@ -2,6 +2,7 @@ import { BrowserWindow, globalShortcut, screen } from 'electron'
 import type { ComputerActivity, ComputerEvent } from '@shared/computer'
 import { tNow } from '../i18n'
 import { disposeComputerPanels, setComputerPanelsSession } from './panels'
+import { forgetShots } from './shots'
 
 /**
  * Estado vivo do controle do computador: quem está controlando o quê, o
@@ -52,6 +53,11 @@ function broadcast(event: ComputerEvent): void {
   }
 }
 
+/** A miniatura da conversa mudou (screenshot novo ou alvo da ação). */
+export function noteShotChanged(sessionId: string): void {
+  broadcast({ type: 'shot', sessionId, at: Date.now() })
+}
+
 export function getComputerActivity(): ComputerActivity[] {
   return [...live.values()].map((l) => l.activity)
 }
@@ -91,6 +97,8 @@ export function endActivity(sessionId: string): void {
   const current = live.get(sessionId)
   if (current) clearTimeout(current.timer)
   live.delete(sessionId)
+  // O screenshot só vive enquanto o controle dura: a memória não guarda imagem velha.
+  forgetShots(sessionId)
   const pids: number[] = []
   for (const [pid, sessions] of enhanced) {
     sessions.delete(sessionId)

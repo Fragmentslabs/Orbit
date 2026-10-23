@@ -3168,12 +3168,14 @@
         "double_click": "Clique duplo",
         "move": "Mover o ponteiro",
         "drag": "Arrastar",
-        "invoke": "Acionar"
+        "invoke": "Acionar",
+        "triple_click": "Clique triplo"
       },
       "target": {
         "element": "no elemento {{index}}",
         "point": "em ({{x}}, {{y}})"
-      }
+      },
+      "shotAlt": "Última captura de {{app}}"
     }
   },
   "fullscreen": {

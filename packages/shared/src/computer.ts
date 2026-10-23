@@ -19,6 +19,18 @@ export interface ComputerActivity {
 export type ComputerEvent =
   | { type: "active"; activity: ComputerActivity }
   | { type: "idle"; sessionId: string }
+  /** Screenshot (ou marcador) novo da conversa — a miniatura busca por computer:shot */
+  | { type: "shot"; sessionId: string; at: number }
+
+/** Último screenshot da conversa, com o marcador da última ação (espaço da imagem). */
+export interface ComputerShot {
+  dataUrl: string
+  width: number
+  height: number
+  app: string
+  at: number
+  marker: { x: number; y: number; w: number; h: number; label: string } | null
+}
 
 /** Estado da capacidade nesta máquina (Preferências → Computador). */
 export interface ComputerStatus {

@@ -14,7 +14,7 @@ import type {
   SessionRevert,
 } from "@shared/chat"
 import type { AppSettings } from "@shared/app-settings"
-import type { ComputerActivity, ComputerEvent, ComputerStatus, ComputerTestResult } from "@shared/computer"
+import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
@@ -145,6 +145,8 @@ export const appSettingsApi = {
 export const computerApi = {
   status: () => window.ipcRenderer.invoke("computer:status") as Promise<ComputerStatus>,
   test: () => window.ipcRenderer.invoke("computer:test") as Promise<ComputerTestResult>,
+  /** Último screenshot da conversa com o marcador da última ação (só em memória no main) */
+  shot: (sessionId: string) => window.ipcRenderer.invoke("computer:shot", sessionId) as Promise<ComputerShot | null>,
   /** Sessões controlando agora (para o chip depois de um reload) */
   activity: () => window.ipcRenderer.invoke("computer:activity") as Promise<ComputerActivity[]>,
   /** Para o controle (e o turno) de uma sessão — sem id, de todas */

@@ -56,6 +56,8 @@ export interface FakeDriver extends ComputerDriver {
   hitResult: ElementResult
   /** Resposta da rolagem pelo AX */
   scrollResult: ElementResult
+  /** Seleção devolvida depois de arrastar/clique duplo */
+  selection: ElementResult['selection']
   /** A árvore muda depois de uma ação? (para o "nada mudou") */
   changeAfterAction: boolean
   restored: number[][]
@@ -70,6 +72,7 @@ export function createFakeDriver(png: Buffer): FakeDriver {
     elementResult: { done: 'press', action: 'AXPress' },
     hitResult: { done: 'press', action: 'AXPress', node: { ...fakeTree().nodes[3] } },
     scrollResult: { done: 'scroll' },
+    selection: { location: 0, length: 49, text: 'Rascunho — esta linha será selecionada e trocada.' },
     changeAfterAction: true,
     capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true }),
     perms: async () => ({ accessibility: true }),
@@ -91,6 +94,7 @@ export function createFakeDriver(png: Buffer): FakeDriver {
       if (action.op === 'focused') return { done: 'focused', node: { ...fakeTree().nodes[2] } }
       acted++
       if (action.op === 'hit') return driver.hitResult
+      if (action.op === 'selection') return { done: 'selection', selection: driver.selection }
       if (action.op === 'scrollAx') return driver.scrollResult
       return action.op === 'element' ? driver.elementResult : { done: action.op }
     },

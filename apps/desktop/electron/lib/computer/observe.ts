@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
-import { fitWithin, type ShotGeometry } from './geometry'
+import { windowSpace, type ShotGeometry } from './geometry'
 import { formatTree, SCREEN_CONTENT_CLOSE, SCREEN_CONTENT_OPEN } from './format'
 import { newObservationId, type ObservationRecord, type Registry } from './registry'
 import { assertTargetAllowed, CHROMIUM_BROWSERS } from './safety'
-import { ComputerError, type AppInfo, type AppsSnapshot, type ComputerDriver, type TreeSnapshot, type WindowInfo } from './types'
+import { ComputerError, type AppInfo, type AppsSnapshot, type ComputerDriver, type Frame, type TreeSnapshot, type WindowInfo } from './types'
 
 /**
  * Monta uma observação: screenshot + árvore + foco de UMA janela, registrada
@@ -24,6 +24,8 @@ export interface ObserveOptions {
   enhance: boolean
   /** Espera depois de ligar a flag — quem chama sabe se o app já estava ligado */
   enhanceWaitMs?: number
+  /** Escala do monitor da janela (2 no Retina) — define o espaço de coordenadas */
+  scaleFor?: (frame: Frame) => number
   signal?: AbortSignal
 }
 
@@ -71,9 +73,8 @@ export function resolveWindow(snapshot: AppsSnapshot, app: AppInfo, windowId?: n
   return win
 }
 
-async function encodeShot(png: Buffer, maxEdge: number): Promise<{ data: Buffer; width: number; height: number }> {
-  const meta = await sharp(png).metadata()
-  const size = fitWithin(meta.width ?? maxEdge, meta.height ?? maxEdge, maxEdge)
+/** Redimensiona exatamente para o espaço da janela: com e sem imagem, x/y são os mesmos. */
+async function encodeShot(png: Buffer, size: { width: number; height: number }): Promise<{ data: Buffer; width: number; height: number }> {
   const data = await sharp(png).resize(size.width, size.height, { fit: 'fill' }).webp({ quality: 72 }).toBuffer()
   return { data, ...size }
 }
@@ -87,6 +88,7 @@ export async function observe(
   const app = resolveApp(snapshot, options.app)
   assertTargetAllowed(app)
   const win = resolveWindow(snapshot, app, options.windowId)
+  const geometry = windowSpace(win.frame, options.scaleFor?.(win.frame) ?? 1, options.maxScreenshotEdge)
 
   // Captura e árvore em paralelo: são processos diferentes, e a soma dos dois
   // é o tempo que o turno espera.
@@ -94,7 +96,7 @@ export async function observe(
     options.includeScreenshot
       ? driver
           .capture(win.id, options.signal)
-          .then((png) => encodeShot(png, options.maxScreenshotEdge))
+          .then((png) => encodeShot(png, geometry))
           .catch((err: unknown) => {
             if (err instanceof ComputerError && err.code === 'aborted') throw err
             return err instanceof ComputerError ? err : new ComputerError('bridgeError', String(err))
@@ -121,10 +123,6 @@ export async function observe(
     throw shot instanceof ComputerError ? shot : new ComputerError('badRequest', 'Nothing to observe: include_tree and include_screenshot are both false.')
   }
 
-  // Sem screenshot, o espaço de coordenadas é o da janela em pontos — dito no texto.
-  const geometry: ShotGeometry = image
-    ? { frame: win.frame, width: image.width, height: image.height }
-    : { frame: win.frame, width: Math.round(win.frame[2]), height: Math.round(win.frame[3]) }
   const formatted = tree ? formatTree(tree, geometry) : null
   const title = win.title ?? (tree?.nodes[0]?.title || null)
 
@@ -150,7 +148,7 @@ export async function observe(
   lines.push(
     image
       ? `Observation ${record.id} — screenshot ${geometry.width}×${geometry.height} px. x/y in cu_computer are pixels of THIS screenshot; element frames below (@x,y wxh) use the same space.`
-      : `Observation ${record.id} — no screenshot${imageNote ? ` (${imageNote})` : ''}. x/y in cu_computer are window points (0..${geometry.width} × 0..${geometry.height}).`,
+      : `Observation ${record.id} — no screenshot${imageNote ? ` (${imageNote})` : ''}. x/y in cu_computer and the frames below (@x,y wxh) still use this window's screenshot space (${geometry.width}×${geometry.height} px) — the same numbers as an observation with the image.`,
   )
   if (record.url) lines.push(`URL: ${record.url}`)
   if (formatted && tree) {
@@ -183,6 +181,8 @@ export interface QueryOptions {
   limit: number
   enhance: boolean
   enhanceWaitMs?: number
+  maxScreenshotEdge: number
+  scaleFor?: (frame: Frame) => number
   signal?: AbortSignal
 }
 
@@ -212,10 +212,7 @@ export async function query(driver: ComputerDriver, registry: Registry, options:
   )
   const previous = registry.peek(options.sessionId, app.pid)
   const sameFrame = previous && previous.window.id === win.id && previous.window.frame.every((v, i) => Math.abs(v - win.frame[i]) < 1)
-  const geometry: ShotGeometry =
-    previous && sameFrame && previous.hasScreenshot
-      ? previous.geometry
-      : { frame: win.frame, width: Math.round(win.frame[2]), height: Math.round(win.frame[3]) }
+  const geometry: ShotGeometry = windowSpace(win.frame, options.scaleFor?.(win.frame) ?? 1, options.maxScreenshotEdge)
   const formatted = formatTree(tree, geometry)
   const record: ObservationRecord = {
     id: newObservationId(),
@@ -243,9 +240,7 @@ export async function query(driver: ComputerDriver, registry: Registry, options:
     matches.push(body)
   })
   const shown = matches.slice(0, options.limit)
-  const space = record.hasScreenshot
-    ? `frames and x/y use the pixels of the last screenshot (${geometry.width}×${geometry.height})`
-    : `no screenshot for this window: frames and x/y are window points (${geometry.width}×${geometry.height})`
+  const space = `frames and x/y use this window's screenshot space (${geometry.width}×${geometry.height} px), with or without an image`
   const header = [
     `App: ${app.name} (${app.bundleId ?? 'no bundle id'}, pid ${app.pid}) — window ${win.id}`,
     `Observation ${record.id} (replaces the previous one of this app; ${space}). Searched ${tree.nodes.length} nodes${tree.truncated ? ` (stopped: ${tree.truncated})` : ''}.`,

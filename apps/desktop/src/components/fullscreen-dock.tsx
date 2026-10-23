@@ -518,6 +518,7 @@ export function ActionsFeed({
   filter,
   describe,
   headerExtra,
+  top,
   onHoverChange,
   limit = 60,
 }: {
@@ -531,6 +532,8 @@ export function ActionsFeed({
   /** Rótulo legível da ação (padrão: o título da tool ou o nome dela) */
   describe?: (part: ToolPart) => string
   headerExtra?: ReactNode
+  /** Conteúdo fixo acima da lista (a miniatura do Computer Use) */
+  top?: ReactNode
   onHoverChange?: (over: boolean) => void
   limit?: number
 }) {
@@ -593,6 +596,7 @@ export function ActionsFeed({
               {headerExtra}
               <FeedPinButton pinned={pinned} onToggle={onTogglePin} />
             </div>
+            {top}
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {actions.length === 0 ? (
                 <p className="px-2 py-6 text-center text-[11px] text-muted-foreground">{t("computer.panels.empty")}</p>

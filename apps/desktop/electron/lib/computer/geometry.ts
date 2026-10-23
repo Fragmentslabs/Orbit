@@ -26,6 +26,19 @@ export function fitWithin(width: number, height: number, maxEdge: number): { wid
   return { width: Math.max(1, Math.round(width * ratio)), height: Math.max(1, Math.round(height * ratio)) }
 }
 
+/**
+ * O espaço de coordenadas de uma janela: o tamanho que o screenshot dela tem
+ * (pontos × escala do monitor, reduzido ao lado máximo). É o MESMO com ou sem
+ * screenshot na observação — antes, sem screenshot, x/y viravam pontos da
+ * janela, e o agente que repetia "os mesmos passos" de uma observação com
+ * imagem errava pela metade num monitor Retina (visto na Fase 0: o arrasto
+ * caiu abaixo da linha de texto e não selecionou nada).
+ */
+export function windowSpace(frame: Frame, scale: number, maxEdge: number): ShotGeometry {
+  const size = fitWithin(frame[2] * scale, frame[3] * scale, maxEdge)
+  return { frame, width: size.width, height: size.height }
+}
+
 /** Ponto do screenshot → ponto global. Fora da imagem é erro, não um clique em outro app. */
 export function shotToGlobal(g: ShotGeometry, x: number, y: number): [number, number] {
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > g.width || y > g.height) {

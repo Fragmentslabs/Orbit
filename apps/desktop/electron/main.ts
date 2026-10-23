@@ -75,6 +75,7 @@ import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSett
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { abortSession, dispatchSend } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
+import { shotView } from './lib/computer/shots'
 import {
   computerStatus,
   disposeComputerUse,
@@ -2955,6 +2956,7 @@ app.whenReady().then(() => {
   ipcMain.handle('computer:status', () => computerStatus())
   ipcMain.handle('computer:test', () => testComputer())
   ipcMain.handle('computer:activity', () => getComputerActivity())
+  ipcMain.handle('computer:shot', (_event, sessionId: string) => shotView(sessionId))
   ipcMain.handle('computer:stop', (_event, sessionId?: string) => stopComputer(sessionId))
   ipcMain.handle('computer:request-accessibility', () => requestAccessibility())
   ipcMain.handle('computer:request-screen', () => requestScreenRecording())

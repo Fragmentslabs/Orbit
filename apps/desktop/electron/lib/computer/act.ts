@@ -3,6 +3,7 @@ import { parseKeys } from './keys'
 import type { ElementHandle, ObservationRecord, Registry } from './registry'
 import { resolveApp } from './observe'
 import { assertTargetAllowed } from './safety'
+import type { ShotTarget } from './shots'
 import { ComputerError, type AppInfo, type ComputerDriver, type DeliveryMode, type PointerMode } from './types'
 
 /**
@@ -17,6 +18,7 @@ export const COMPUTER_ACTIONS = [
   'right_click',
   'middle_click',
   'double_click',
+  'triple_click',
   'move',
   'drag',
   'scroll',
@@ -59,6 +61,8 @@ export interface ActOutcome {
   record: ObservationRecord | null
   /** O app saiu do lugar (aberto agora): o read_back escolhe a janela da frente */
   reopen?: boolean
+  /** Onde a ação mirou, em pontos globais — o marcador da miniatura no painel */
+  target?: ShotTarget
 }
 
 const PRESS_ACTIONS = ['AXPress', 'AXConfirm', 'AXOpen', 'AXPick']
@@ -125,7 +129,17 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     driver.act({ op: 'element', pid: app.pid, window: windowRef, path: h.path, expect: expect(h), kind, ...extra }, req.signal)
   const mouse = (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') =>
     driver.act({ op: 'mouse', pid: app.pid, windowId: record.window.id, x: point[0], y: point[1], button, clicks, kind, mode }, req.signal)
-  const done = (summary: string): ActOutcome => ({ summary, app, record })
+  // Alvo para o marcador da miniatura: o elemento, ou o ponto x/y pedido.
+  const aimed = (): ShotTarget | undefined => {
+    if (handle?.frame && handle.frame[2] > 0 && handle.frame[3] > 0) return { frame: handle.frame }
+    if (req.x === undefined || req.y === undefined) return undefined
+    try {
+      return { point: shotToGlobal(record.geometry, req.x, req.y) }
+    } catch {
+      return undefined
+    }
+  }
+  const done = (summary: string): ActOutcome => ({ summary, app, record, target: aimed() })
   const where = (point: [number, number]) => (handle ? `element ${handle.index} (${label(handle)})` : `(${req.x}, ${req.y}) → global (${point[0]}, ${point[1]})`)
   const pressed = (r: { action?: string; unconfirmed?: boolean }, what: string) =>
     `${what} via ${r.action}${r.unconfirmed ? ' (the app did not confirm in time — it probably ran; check the next observation)' : ''}.`
@@ -133,6 +147,18 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
   // o ponto vira elemento pelo hit-test do AX e a ação vai pela acessibilidade.
   const hit = (point: [number, number], actions: string[], focusText: boolean) =>
     driver.act({ op: 'hit', pid: app.pid, x: point[0], y: point[1], actions, focusText }, req.signal)
+  // O que ficou selecionado depois de arrastar ou de clique duplo/triplo — dado,
+  // não suposição. Sem seleção é aviso explícito: o arrasto errou o texto.
+  const selectionNote = async (): Promise<string> => {
+    await sleep(150, req.signal)
+    const r = await driver.act({ op: 'selection', pid: app.pid }, req.signal).catch(() => null)
+    const sel = r?.selection
+    if (!sel) return ''
+    if (sel.length === 0) {
+      return ` Nothing is selected now (text cursor at ${sel.location}) — the gesture missed the text. Check the y against the line in the latest observation (a point below the last line maps to the end of the text), or select with the keyboard (e.g. "shift+cmd+left").`
+    }
+    return ` Selection now: ${sel.length} character(s)${sel.text ? ` ${JSON.stringify(sel.text)}` : ''}.`
+  }
   const needsGlobal = (what: string) =>
     new ComputerError(
       'unavailable',
@@ -178,12 +204,14 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       await mouse(point, 'middle')
       return done(`Middle-clicked ${where(point)} with the global pointer.`)
     }
-    case 'double_click': {
-      // Selecionar palavra/abrir item com clique duplo não tem ação AX equivalente.
-      if (mode === 'pid') throw needsGlobal('Double-click')
+    case 'double_click':
+    case 'triple_click': {
+      // Selecionar palavra (duplo) ou linha (triplo) não tem ação AX equivalente.
+      const triple = req.action === 'triple_click'
+      if (mode === 'pid') throw needsGlobal(triple ? 'Triple-click' : 'Double-click')
       const point = pointAt(handle, req.x, req.y)
-      await mouse(point, 'left', 2)
-      return done(`Double-clicked ${where(point)} with the global pointer.`)
+      await mouse(point, 'left', triple ? 3 : 2)
+      return done(`${triple ? 'Triple' : 'Double'}-clicked ${where(point)} with the global pointer.${await selectionNote()}`)
     }
     case 'move': {
       if (mode === 'pid') throw needsGlobal('Hovering (moving the pointer)')
@@ -199,7 +227,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       const toHandle = req.toElement !== undefined ? registry.element(record, req.toElement) : null
       const to = pointAt(toHandle, req.toX, req.toY)
       await driver.act({ op: 'drag', pid: app.pid, windowId: record.window.id, from, to, mode }, req.signal)
-      return done(`Dragged from ${from.join(', ')} to ${to.join(', ')} (global points).`)
+      return done(`Dragged from ${from.join(', ')} to ${to.join(', ')} (global points).${await selectionNote()}`)
     }
     case 'scroll': {
       const direction = req.direction ?? 'down'

@@ -32,6 +32,7 @@ const look = () =>
     includeScreenshot: true,
     maxNodes: 250,
     maxScreenshotEdge: 1280,
+    scaleFor: () => 2,
     enhance: true,
   })
 
@@ -66,11 +67,15 @@ describe('observe', () => {
     await expect(observe(own, registry, { sessionId: 's1', app: 'Orbit', includeTree: true, includeScreenshot: false, maxNodes: 50, maxScreenshotEdge: 1280, enhance: false })).rejects.toThrow(/its own window/)
   })
 
-  it('sem screenshot as coordenadas passam a ser pontos da janela — e o texto diz isso', async () => {
-    const result = await observe(driver, registry, { sessionId: 's1', app: 'TextEdit', includeTree: true, includeScreenshot: false, maxNodes: 50, maxScreenshotEdge: 1280, enhance: false })
+  it('sem screenshot, x/y continuam no MESMO espaço do screenshot da janela', async () => {
+    // Antes, sem imagem, x/y viravam pontos da janela: quem repetia os passos de
+    // uma observação com imagem errava pela metade no Retina.
+    const result = await observe(driver, registry, { sessionId: 's1', app: 'TextEdit', includeTree: true, includeScreenshot: false, maxNodes: 50, maxScreenshotEdge: 1280, scaleFor: () => 2, enhance: false })
     expect(result.image).toBeNull()
-    expect(result.text).toContain('x/y in cu_computer are window points')
-    expect(result.record.geometry).toMatchObject({ width: 1000, height: 800 })
+    expect(result.record.geometry).toMatchObject({ width: 1280, height: 1024 })
+    expect(result.text).toContain("still use this window's screenshot space (1280×1024 px)")
+    // O mesmo elemento sai no mesmo lugar que na observação com imagem.
+    expect(result.text).toMatch(/^\t2 button "Salvar" actions: press @1152,896 102x38$/m)
   })
 })
 
@@ -88,6 +93,15 @@ describe('act', () => {
     await run({ element: 2 })
     expect(driver.actions[1]).toMatchObject({ op: 'hit', pid: FAKE_PID, x: 1040, y: 765, focusText: true })
     expect(driver.actions.some((a) => a.op === 'mouse')).toBe(false)
+  })
+
+  it('a ação devolve o alvo (elemento ou ponto) para o marcador da miniatura', async () => {
+    await look()
+    expect((await run({ element: 2 })).target).toEqual({ frame: [1000, 750, 80, 30] })
+    await look()
+    expect((await run({ x: 640, y: 512 })).target).toEqual({ point: [600, 450] })
+    await look()
+    expect((await run({ action: 'key', key: 'return' })).target).toBeUndefined()
   })
 
   it('x/y do screenshot viram pontos globais — e, no modo dirigido, hit-test', async () => {
@@ -123,7 +137,7 @@ describe('act', () => {
     await expect(run({ action: 'middle_click', x: 10, y: 10 })).rejects.toThrow(/global pointer/)
     await expect(run({ action: 'move', x: 10, y: 10 })).rejects.toThrow(/global pointer/)
     await run({ action: 'double_click', x: 0, y: 0, pointer: 'global' })
-    expect(driver.actions.at(-1)).toMatchObject({ op: 'mouse', clicks: 2, mode: 'global' })
+    expect(driver.actions.findLast((a) => a.op === 'mouse')).toMatchObject({ op: 'mouse', clicks: 2, mode: 'global' })
   })
 
   it('agir sem observar antes é erro', async () => {
@@ -163,7 +177,25 @@ describe('act', () => {
     await look()
     await expect(run({ action: 'drag', x: 10, y: 10, toX: 100, toY: 100 })).rejects.toThrow(/global pointer/)
     await run({ action: 'drag', x: 0, y: 0, toX: 1280, toY: 1024, pointer: 'global' })
-    expect(driver.actions.at(-1)).toMatchObject({ op: 'drag', from: [100, 50], to: [1100, 850], mode: 'global' })
+    expect(driver.actions.findLast((a) => a.op === 'drag')).toMatchObject({ op: 'drag', from: [100, 50], to: [1100, 850], mode: 'global' })
+  })
+
+  it('depois de arrastar, o resultado diz o que ficou selecionado — ou avisa que nada foi', async () => {
+    await look()
+    const ok = await run({ action: 'drag', x: 0, y: 0, toX: 640, toY: 0, pointer: 'global' })
+    expect(ok.summary).toMatch(/Selection now: 49 character\(s\) "Rascunho/)
+    await look()
+    driver.selection = { location: 49, length: 0, text: null }
+    const missed = await run({ action: 'drag', x: 0, y: 0, toX: 640, toY: 0, pointer: 'global' })
+    expect(missed.summary).toMatch(/Nothing is selected now \(text cursor at 49\) — the gesture missed the text/)
+  })
+
+  it('clique triplo: só com o ponteiro global, três cliques e o retorno da seleção', async () => {
+    await look()
+    await expect(run({ action: 'triple_click', x: 10, y: 10 })).rejects.toThrow(/Triple-click needs the global pointer/)
+    const outcome = await run({ action: 'triple_click', element: 1, pointer: 'global' })
+    expect(driver.actions.find((a) => a.op === 'mouse')).toMatchObject({ clicks: 3, mode: 'global' })
+    expect(outcome.summary).toMatch(/Triple-clicked element 1 .* Selection now: 49/)
   })
 
   it('scroll dirigido move a barra pelo AX, no centro da janela', async () => {
@@ -202,18 +234,18 @@ describe('act', () => {
 describe('query', () => {
   it('acha por texto e devolve índices válidos para agir', async () => {
     await look()
-    const text = await query(driver, registry, { sessionId: 's1', app: 'TextEdit', text: 'salvar', maxNodes: 500, limit: 10, enhance: true })
+    const text = await query(driver, registry, { sessionId: 's1', app: 'TextEdit', text: 'salvar', maxNodes: 500, limit: 10, enhance: true, maxScreenshotEdge: 1280, scaleFor: () => 2 })
     expect(text).toContain('1 match(es)')
     expect(text).toMatch(/2 button "Salvar"/)
     // Mantém o espaço do último screenshot (a janela não mudou).
-    expect(text).toContain('pixels of the last screenshot (1280×1024)')
+    expect(text).toContain("this window's screenshot space (1280×1024 px)")
     const outcome = await run({ element: 2 })
     expect(outcome.summary).toMatch(/Salvar/)
   })
 
   it('filtra por papel', async () => {
     await look()
-    const text = await query(driver, registry, { sessionId: 's1', app: 'TextEdit', role: 'text field', maxNodes: 500, limit: 10, enhance: true })
+    const text = await query(driver, registry, { sessionId: 's1', app: 'TextEdit', role: 'text field', maxNodes: 500, limit: 10, enhance: true, maxScreenshotEdge: 1280, scaleFor: () => 2 })
     expect(text).toMatch(/secure text field/)
     expect(text).not.toMatch(/Salvar/)
   })

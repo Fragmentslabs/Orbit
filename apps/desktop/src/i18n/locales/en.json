@@ -3168,12 +3168,14 @@
         "double_click": "Double-click",
         "move": "Move the pointer",
         "drag": "Drag",
-        "invoke": "Invoke"
+        "invoke": "Invoke",
+        "triple_click": "Triple-click"
       },
       "target": {
         "element": "on element {{index}}",
         "point": "at ({{x}}, {{y}})"
-      }
+      },
+      "shotAlt": "Latest capture of {{app}}"
     }
   },
   "fullscreen": {

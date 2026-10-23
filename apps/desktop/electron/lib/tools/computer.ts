@@ -1,8 +1,7 @@
 import { tool, type ToolSet } from 'ai'
-import { shell } from 'electron'
+import { screen, shell } from 'electron'
 import { z } from 'zod'
 import { getAppSettings } from '../app-settings'
-import { saveMedia } from '../media'
 import { describeImage } from '../vision'
 import {
   ComputerError,
@@ -15,7 +14,8 @@ import {
 import { act, COMPUTER_ACTIONS } from '../computer/act'
 import { observe, query, type ObservationResult } from '../computer/observe'
 import { isDeniedApp } from '../computer/safety'
-import { isEnhanced, noteActivity, noteEnhanced } from '../computer/session'
+import { isEnhanced, noteActivity, noteEnhanced, noteShotChanged } from '../computer/session'
+import { rememberShot, rememberTarget } from '../computer/shots'
 
 /**
  * Tools do Computer Use (só macOS na v1). O laço é observar → agir por índice
@@ -45,6 +45,15 @@ const SETTLE_MS = 350
  */
 const ENHANCE_WAIT_MS = 450
 
+/** Escala do monitor onde a janela está (2 no Retina): é ela que define o espaço x/y da janela. */
+function scaleFor(frame: [number, number, number, number]): number {
+  try {
+    return screen.getDisplayMatching({ x: frame[0], y: frame[1], width: frame[2], height: frame[3] }).scaleFactor || 1
+  } catch {
+    return 1
+  }
+}
+
 const stash = new Map<string, { base64: string; mediaType: string } | { text: string }>()
 
 const ERROR_HINTS: Record<string, string> = {
@@ -73,31 +82,27 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Guarda a imagem para o toModelOutput e a salva na galeria. Com o modo Visão
- * ligado, só a descrição entra no contexto — a imagem nunca.
+ * Guarda a imagem para o toModelOutput. Com o modo Visão ligado, só a
+ * descrição entra no contexto — a imagem nunca. Não vai para a galeria: com
+ * uma observação por ação, a aba de mídia ganharia dezenas de arquivos por
+ * tarefa; a pessoa vê o screenshot mais recente na miniatura do painel.
  */
 async function stashImage(options: ComputerToolOptions, toolCallId: string, result: ObservationResult): Promise<string> {
   if (!result.image) return ''
-  const media = await saveMedia(result.image.data, 'webp', {
-    source: 'screenshot',
-    sessionId: options.sessionId,
-    name: `computer-${result.record.app.name}`,
-  }).catch(() => null)
-  const mediaNote = media ? `\nScreenshot saved to the gallery: ${media}` : ''
   if (options.visionModel) {
     const desc = await describeImage({
       model: options.visionModel,
       imageDataUrl: `data:${result.image.mediaType};base64,${result.image.data.toString('base64')}`,
     }).catch(() => null)
     if (desc) stash.set(toolCallId, { text: desc })
-    return `${mediaNote}${desc ? '\nThe screenshot was described by the vision model (below).' : '\nThe vision model could not describe the screenshot.'}`
+    return `${desc ? '\nThe screenshot was described by the vision model (below).' : '\nThe vision model could not describe the screenshot.'}`
   }
-  if (!options.modelVision) return `${mediaNote}\nThis model has no vision: the screenshot was NOT loaded — rely on the tree.`
+  if (!options.modelVision) return `\nThis model has no vision: the screenshot was NOT loaded — rely on the tree.`
   if (result.image.data.length > MAX_MODEL_IMAGE_BYTES) {
-    return `${mediaNote}\n[Screenshot omitted: ${Math.round(result.image.data.length / 1024)}KB exceeds the ${MAX_MODEL_IMAGE_BYTES / 1000}KB limit — lower "Screenshot size" in Settings → Computer.]`
+    return `\n[Screenshot omitted: ${Math.round(result.image.data.length / 1024)}KB exceeds the ${MAX_MODEL_IMAGE_BYTES / 1000}KB limit — lower "Screenshot size" in Settings → Computer.]`
   }
   stash.set(toolCallId, { base64: result.image.data.toString('base64'), mediaType: result.image.mediaType })
-  return mediaNote
+  return ''
 }
 
 function toModelOutput({ toolCallId, output }: { toolCallId: string; output: unknown }) {
@@ -136,11 +141,22 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       includeScreenshot: args.includeScreenshot ?? true,
       maxNodes: args.maxNodes ?? DEFAULT_MAX_NODES,
       maxScreenshotEdge: settings().maxScreenshotEdge,
+      scaleFor,
       enhance: args.enhance ?? true,
       signal,
     })
     if (result.tree?.enhanced) noteEnhanced(sessionId, result.record.app.pid)
     noteActivity(sessionId, result.record.app.name, null)
+    if (result.image) {
+      rememberShot(sessionId, {
+        data: result.image.data,
+        mediaType: result.image.mediaType,
+        geometry: result.record.geometry,
+        app: result.record.app.name,
+        at: Date.now(),
+      })
+      noteShotChanged(sessionId)
+    }
     return result
   }
 
@@ -213,8 +229,8 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     cu_computer: tool({
       description: [
         'Acts on an app of the user\'s computer. Target by `element` (index from the LATEST cu_observe/cu_query of that app — preferred) or by `x`/`y` (pixels of the latest screenshot of that window).',
-        'Actions: left_click, right_click, middle_click, double_click, move, drag (element/x/y → to_element/to_x/to_y; needs the global pointer), scroll (direction + amount, at element/x/y or the window center), type (text into element or the focused field), key ("cmd+s", "return", "ctrl+a ctrl+c"), set_value (replace the value of element), invoke (accessibility action on element, e.g. ax_action "increment" or "showMenu"), open_app (open or bring to front by bundle id/name), wait (seconds).',
-        'By default (directed pointer) nothing moves the user\'s cursor and the app can stay in the background: clicks go through accessibility (press on the element, or the element under x/y; a text field gets focus), scroll moves the accessible scroll bar, and keyboard/text go straight to the app. double_click, middle_click, move and drag need the global pointer (the user enables it in Settings → Computer). Never type passwords, 2FA codes or payment data. With read_back (default true) the result includes the next observation — check it before the next action.',
+        'Actions: left_click, right_click, middle_click, double_click, triple_click (selects the line), move, drag (element/x/y → to_element/to_x/to_y; needs the global pointer), scroll (direction + amount, at element/x/y or the window center), type (text into element or the focused field), key ("cmd+s", "return", "ctrl+a ctrl+c"), set_value (replace the value of element), invoke (accessibility action on element, e.g. ax_action "increment" or "showMenu"), open_app (open or bring to front by bundle id/name), wait (seconds).',
+        'By default (directed pointer) nothing moves the user\'s cursor and the app can stay in the background: clicks go through accessibility (press on the element, or the element under x/y; a text field gets focus), scroll moves the accessible scroll bar, and keyboard/text go straight to the app. double_click, triple_click, middle_click, move and drag need the global pointer; after drag/double/triple click the result says what got selected (the user enables it in Settings → Computer). Never type passwords, 2FA codes or payment data. With read_back (default true) the result includes the next observation — check it before the next action.',
       ].join(' '),
       inputSchema: z.object({
         action: z.enum(COMPUTER_ACTIONS),
@@ -257,6 +273,10 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
             signal: abortSignal,
           })
           if (outcome.app) noteActivity(sessionId, outcome.app.name, outcome.summary)
+          if (outcome.target) {
+            rememberTarget(sessionId, outcome.target, args.action)
+            noteShotChanged(sessionId)
+          }
           if (args.read_back === false || !outcome.app || args.action === 'wait') return outcome.summary
           await sleep(args.action === 'open_app' ? 0 : SETTLE_MS)
           const before = outcome.record?.digest ?? null
@@ -303,6 +323,8 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
             limit: args.limit ?? 40,
             enhance: true,
             enhanceWaitMs: enhanceWait(args.app),
+            maxScreenshotEdge: settings().maxScreenshotEdge,
+            scaleFor,
             signal: abortSignal,
           })
           const target = computerRegistry.lastTargetFor(args.app)
