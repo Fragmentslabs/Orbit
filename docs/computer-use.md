@@ -78,6 +78,21 @@ TextEdit, o arrasto seleciona a linha a +4/+8/+10 pt do topo e nada a
 +13/+15/+20 pt. A explicação que o agente deu ("soltar 2 px fora do campo
 cancela a seleção") não se confirmou: medido, a seleção fica.
 
+**`select_text`.** Seleciona um trecho de um campo de texto **pelo AX**
+(`AXSelectedTextRange`), sem coordenada nem mouse. Funciona com o app em
+segundo plano, e o `type` seguinte substitui a seleção. Ele acha o texto pedido
+(com `occurrence` para repetições) ou seleciona tudo. O JXA não monta o
+`CFRange` sozinho: os bytes vão num `NSData` para o `AXValueCreate`, e o valor
+volta embrulhado com `castRefToObject`. Sem o embrulho, o set responde OK e
+não seleciona nada. Medido no TextEdit atrás do Claude: a 2ª ocorrência de
+"beta", o texto todo, um erro claro para texto inexistente, e "selecionar gama
++ digitar" trocou só a palavra.
+
+**No chat.** Cada ação `cu_*` aparece com a frase do que foi feito ("Clicar no
+elemento 12 · TextEdit") e, embaixo, o que aconteceu (o resumo do
+`cu_computer`, a linha do app no `cu_observe`, os resultados do `cu_query`).
+Um clique mostra a saída completa.
+
 **Retorno da seleção.** Depois de arrastar ou de clique duplo/triplo, o
 resultado diz o que ficou selecionado (`op: 'selection'`, `AXSelectedTextRange`
 + `AXSelectedText`), ou avisa que nada foi e por quê. `triple_click` seleciona a
@@ -97,7 +112,7 @@ Windows e não é usada aqui.
 | `cu_observe` | Screenshot e árvore numerada de uma janela | Nativa |
 | `cu_query` | Busca na árvore por texto/papel, sem screenshot | Nativa |
 | `cu_permissions` | Status das permissões; `request: true` pede ao usuário | Nativa |
-| `cu_computer` | Ações: left/right/middle/double_click, move, drag, scroll, type, key, set_value, invoke, open_app, wait | Aprovação por app |
+| `cu_computer` | Ações: left/right/middle/double/triple_click, move, drag, scroll, type, key, set_value, select_text, invoke, open_app, wait | Aprovação por app |
 
 O `cu_computer` tenta primeiro a ação de acessibilidade (AXPress, AXValue). No
 ponteiro **dirigido** (o padrão) tudo vai pela acessibilidade, porque o AppKit

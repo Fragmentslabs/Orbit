@@ -198,6 +198,21 @@ describe('act', () => {
     expect(outcome.summary).toMatch(/Triple-clicked element 1 .* Selection now: 49/)
   })
 
+  it('select_text seleciona pelo AX (sem mouse) e diz o que ficou selecionado', async () => {
+    await look()
+    driver.elementResult = { done: 'select', selection: { location: 10, length: 4, text: 'gama' } }
+    const outcome = await run({ action: 'select_text', element: 1, text: 'gama', occurrence: 1 })
+    expect(driver.actions[0]).toMatchObject({ op: 'element', kind: 'select', find: 'gama', occurrence: 1, path: [0, 0] })
+    expect(driver.actions.some((a) => a.op === 'mouse')).toBe(false)
+    expect(outcome.summary).toMatch(/Selected 4 character\(s\) .*"gama" \(range 10–14\)/)
+  })
+
+  it('select_text recusa campo de senha e exige o elemento', async () => {
+    await look()
+    await expect(run({ action: 'select_text', element: 3 })).rejects.toThrow(/secure/)
+    await expect(run({ action: 'select_text', text: 'x' })).rejects.toThrow(/needs "element"/)
+  })
+
   it('scroll dirigido move a barra pelo AX, no centro da janela', async () => {
     await look()
     await run({ action: 'scroll', direction: 'down', amount: 2 })

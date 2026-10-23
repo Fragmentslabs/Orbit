@@ -3169,7 +3169,8 @@
         "move": "Move the pointer",
         "drag": "Drag",
         "invoke": "Invoke",
-        "triple_click": "Triple-click"
+        "triple_click": "Triple-click",
+        "select_text": "Select “{{text}}”"
       },
       "target": {
         "element": "on element {{index}}",

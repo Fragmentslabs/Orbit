@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import type { ToolPart } from "@shared/chat"
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { computerActionSummary, describeAction, isComputerTool } from "@/src/lib/computer-actions"
 
 /**
  * As ferramentas de um turno, recolhidas numa linha só.
@@ -51,12 +52,21 @@ export function toolChip(part: ToolPart): string | undefined {
   return isPath ? candidate.split(/[\\/]/).pop() : candidate
 }
 
+/** Saída completa no detalhe expandido — o teto evita colar a árvore inteira de um app no chat. */
+const MAX_DETAIL = 4000
+
 export function ToolActionItem({ part }: { part: ToolPart }) {
+  const { t } = useTranslation()
   const [showOutput, setShowOutput] = useState(false)
   const actionLabels = useActionLabels()
-  const label = actionLabels[part.tool] ?? part.tool
-  const chip = toolChip(part)
-  const detail = part.error ?? (part.tool === "bash" ? part.output : undefined)
+  // Computer Use: a frase do que o agente fez ("Clicar no elemento 12 ·
+  // TextEdit") e, embaixo, o que aconteceu — no lugar de "cu_computer" cru.
+  const computer = isComputerTool(part.tool)
+  const label = computer ? describeAction(part, t) : actionLabels[part.tool] ?? part.tool
+  const chip = computer ? undefined : toolChip(part)
+  const summary = computer ? computerActionSummary(part) : null
+  const fullOutput = part.error ?? (part.tool === "bash" || computer ? part.output : undefined)
+  const detail = fullOutput && fullOutput.length > MAX_DETAIL ? `${fullOutput.slice(0, MAX_DETAIL)}…` : fullOutput
 
   return (
     <TaskItem>
@@ -84,6 +94,9 @@ export function ToolActionItem({ part }: { part: ToolPart }) {
           />
         )}
       </button>
+      {summary && !showOutput && (
+        <p className={cn("mt-0.5 line-clamp-2 text-[11px] text-muted-foreground", part.state === "error" && "text-destructive/80")}>{summary}</p>
+      )}
       {showOutput && detail && (
         <pre className="mt-1 max-h-56 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
           {detail}

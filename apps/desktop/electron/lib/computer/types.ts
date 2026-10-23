@@ -102,9 +102,13 @@ export type BridgeAction =
       window: { frame: Frame; title: string | null }
       path: number[]
       expect?: { role: string; title?: string | null }
-      kind: 'info' | 'press' | 'focus' | 'setValue'
+      kind: 'info' | 'press' | 'focus' | 'setValue' | 'select'
       actions?: string[]
       value?: string
+      /** select: texto a achar no valor do elemento (sem ele, seleciona tudo) */
+      find?: string
+      /** select: qual ocorrência (1 = a primeira) */
+      occurrence?: number
     }
 
 export interface ElementResult {

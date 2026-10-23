@@ -17,6 +17,31 @@ ObjC.import('CoreGraphics')
 ObjC.bindFunction('CGEventKeyboardSetUnicodeString', ['void', ['void*', 'unsigned long', 'void*']])
 var UTF16LE = 0x94000100
 
+// Intervalo de texto (CFRange) para AXSelectedTextRange: o JXA não monta o
+// struct sozinho (um objeto { location, length } chega zerado). Os bytes reais
+// — dois inteiros de 64 bits — vão num NSData, e o valor volta embrulhado com
+// castRefToObject; sem o embrulho o set responde OK e não seleciona nada.
+ObjC.bindFunction('AXValueCreate', ['void*', ['int', 'void*']])
+var AX_VALUE_CFRANGE = 4
+var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+function base64(bytes) {
+  var out = ''
+  for (var i = 0; i < bytes.length; i += 3) {
+    var n = (bytes[i] << 16) | ((bytes[i + 1] || 0) << 8) | (bytes[i + 2] || 0)
+    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (i + 1 < bytes.length ? B64[(n >> 6) & 63] : '=') + (i + 2 < bytes.length ? B64[n & 63] : '=')
+  }
+  return out
+}
+function int64le(n) {
+  var b = []
+  for (var i = 0; i < 8; i++) { b.push(n % 256); n = Math.floor(n / 256) }
+  return b
+}
+function rangeValue(location, length) {
+  var data = $.NSData.alloc.initWithBase64EncodedStringOptions($(base64(int64le(location).concat(int64le(length)))), 0)
+  return ObjC.castRefToObject($.AXValueCreate(AX_VALUE_CFRANGE, data.bytes))
+}
+
 var AX_OK = 0
 var AX_API_DISABLED = -25211
 var AX_CANNOT_COMPLETE = -25204
@@ -561,6 +586,30 @@ function opElement(args) {
     if (se !== AX_OK) return { done: null, node: node }
     var after = clip(copyAttr(el, 'AXValue').value, 500)
     return { done: 'setValue', node: node, readBack: after }
+  }
+  if (args.kind === 'select') {
+    // O valor INTEIRO (o da árvore vem cortado): os índices do AX são UTF-16,
+    // os mesmos do String do JS.
+    var full = copyAttr(el, 'AXValue').value
+    if (typeof full !== 'string') fail('badRequest', 'The element has no text to select.')
+    var start = 0
+    var length = full.length
+    if (typeof args.find === 'string' && args.find.length) {
+      var occurrence = Math.max(1, args.occurrence || 1)
+      var at = -1
+      for (var k = 0; k < occurrence; k++) {
+        at = full.indexOf(args.find, at + 1)
+        if (at === -1) break
+      }
+      if (at === -1) fail('textNotFound', 'Text not found in the element' + (occurrence > 1 ? ' (occurrence ' + occurrence + ')' : '') + ': ' + JSON.stringify(args.find))
+      start = at
+      length = args.find.length
+    }
+    $.AXUIElementSetAttributeValue(el, $('AXFocused'), $.NSNumber.numberWithBool(true))
+    var se = $.AXUIElementSetAttributeValue(el, $('AXSelectedTextRange'), rangeValue(start, length))
+    if (se !== AX_OK) return { done: null, node: node }
+    var picked = copyAttr(el, 'AXSelectedText').value
+    return { done: 'select', node: node, selection: { location: start, length: length, text: clip(picked, 120) } }
   }
   fail('badRequest', 'Unknown element action: ' + args.kind)
 }

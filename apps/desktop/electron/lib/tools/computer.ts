@@ -232,7 +232,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     cu_computer: tool({
       description: [
         'Acts on an app of the user\'s computer. Target by `element` (index from the LATEST cu_observe/cu_query of that app — preferred) or by `x`/`y` (pixels of the latest screenshot of that window).',
-        'Actions: left_click, right_click, middle_click, double_click, triple_click (selects the line), move, drag (element/x/y → to_element/to_x/to_y; needs the global pointer), scroll (direction + amount, at element/x/y or the window center), type (text into element or the focused field), key ("cmd+s", "return", "ctrl+a ctrl+c"), set_value (replace the value of element), invoke (accessibility action on element, e.g. ax_action "increment" or "showMenu"), open_app (open or bring to front by bundle id/name), wait (seconds).',
+        'Actions: left_click, right_click, middle_click, double_click, triple_click (selects the line), move, drag (element/x/y → to_element/to_x/to_y; needs the global pointer), scroll (direction + amount, at element/x/y or the window center), type (text into element or the focused field), key ("cmd+s", "return", "ctrl+a ctrl+c"), set_value (replace the value of element), select_text (select the given "text" inside element — or all of it without text — through accessibility, no mouse, works in the background; then "type" replaces the selection), invoke (accessibility action on element, e.g. ax_action "increment" or "showMenu"), open_app (open or bring to front by bundle id/name), wait (seconds).',
         'By default (directed pointer) nothing moves the user\'s cursor and the app can stay in the background: clicks go through accessibility (press on the element, or the element under x/y; a text field gets focus), scroll moves the accessible scroll bar, and keyboard/text go straight to the app. double_click, triple_click, middle_click, move and drag need the global pointer; after drag/double/triple click the result says what got selected (the user enables it in Settings → Computer). Never type passwords, 2FA codes or payment data. With read_back (default true) the result includes the next observation — check it before the next action.',
       ].join(' '),
       inputSchema: z.object({
@@ -245,12 +245,13 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         to_element: z.number().int().optional().describe('drag: target element index'),
         to_x: z.number().optional().describe('drag: target x'),
         to_y: z.number().optional().describe('drag: target y'),
-        text: z.string().optional().describe('type: text to type; set_value: the new value'),
+        text: z.string().optional().describe('type: text to type; set_value: the new value; select_text: the text to select'),
         key: z.string().optional().describe('key: combo like "cmd+shift+t", "return", "escape"; space separates a sequence'),
         direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('scroll direction (default down)'),
         amount: z.number().int().min(1).max(20).optional().describe('scroll steps (default 3)'),
         seconds: z.number().min(0.1).max(10).optional().describe('wait: seconds (default 1)'),
         ax_action: z.string().optional().describe('invoke: accessibility action name (press, increment, decrement, showMenu, confirm, cancel…)'),
+        occurrence: z.number().int().min(1).optional().describe('select_text: which occurrence of "text" (default 1)'),
         read_back: z.boolean().optional().describe('Return a fresh observation after acting (default true)'),
       }),
       execute: async (args, { abortSignal, toolCallId }) => {
@@ -273,6 +274,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
             amount: args.amount,
             seconds: args.seconds,
             axAction: args.ax_action,
+            occurrence: args.occurrence,
             pointer: settings().pointer,
             signal: abortSignal,
           })
@@ -452,7 +454,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
 
 /** Rótulo da ação na linha do tempo do vídeo: "left_click on element 3", "type “oi”". */
 function describeForTimeline(args: { action: string; element?: number; x?: number; y?: number; text?: string; key?: string; direction?: string; seconds?: number }): string {
-  if (args.action === 'type' || args.action === 'set_value') {
+  if (args.action === 'type' || args.action === 'set_value' || (args.action === 'select_text' && args.text)) {
     const text = args.text ?? ''
     return `${args.action} ${JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text)}`
   }

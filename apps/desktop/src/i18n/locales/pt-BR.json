@@ -3169,7 +3169,8 @@
         "move": "Mover o ponteiro",
         "drag": "Arrastar",
         "invoke": "Acionar",
-        "triple_click": "Clique triplo"
+        "triple_click": "Clique triplo",
+        "select_text": "Selecionar “{{text}}”"
       },
       "target": {
         "element": "no elemento {{index}}",

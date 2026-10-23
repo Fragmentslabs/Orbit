@@ -27,6 +27,7 @@ export const COMPUTER_ACTIONS = [
   'wait',
   'invoke',
   'set_value',
+  'select_text',
   'open_app',
 ] as const
 
@@ -49,6 +50,8 @@ export interface ActRequest {
   amount?: number
   seconds?: number
   axAction?: string
+  /** select_text: qual ocorrência do texto (1 = a primeira) */
+  occurrence?: number
   pointer: PointerMode
   signal?: AbortSignal
 }
@@ -125,7 +128,11 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     return shotToGlobal(record.geometry, x, y)
   }
   const expect = (h: ElementHandle) => ({ role: h.role, title: h.title })
-  const element = (h: ElementHandle, kind: 'press' | 'focus' | 'setValue', extra: { actions?: string[]; value?: string } = {}) =>
+  const element = (
+    h: ElementHandle,
+    kind: 'press' | 'focus' | 'setValue' | 'select',
+    extra: { actions?: string[]; value?: string; find?: string; occurrence?: number } = {},
+  ) =>
     driver.act({ op: 'element', pid: app.pid, window: windowRef, path: h.path, expect: expect(h), kind, ...extra }, req.signal)
   const mouse = (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') =>
     driver.act({ op: 'mouse', pid: app.pid, windowId: record.window.id, x: point[0], y: point[1], button, clicks, kind, mode }, req.signal)
@@ -281,6 +288,20 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
         return done(`Element ${handle.index} (${label(handle)}) does not accept a value directly — click it and use "type" instead.`)
       }
       return done(`Set the value of element ${handle.index} (${label(handle)}). Read back: ${JSON.stringify(result.readBack ?? '')}.`)
+    }
+    case 'select_text': {
+      // Seleção pelo AX: determinística, sem coordenada nem mouse — funciona com
+      // o app em segundo plano. É o caminho certo para "selecionar e trocar".
+      if (!handle) throw new ComputerError('badRequest', 'Action "select_text" needs "element" (a text field or text area).')
+      if (handle.secure) throw secureRefusal()
+      const result = await element(handle, 'select', { find: req.text, occurrence: req.occurrence })
+      const sel = result.selection
+      if (!result.done || !sel) {
+        return done(`Element ${handle.index} (${label(handle)}) did not accept a selection — click into it and use the keyboard (e.g. "shift+cmd+right").`)
+      }
+      return done(
+        `Selected ${sel.length} character(s) in element ${handle.index} (${label(handle)})${sel.text ? `: ${JSON.stringify(sel.text)}` : ''} (range ${sel.location}–${sel.location + sel.length}). Typing now replaces it.`,
+      )
     }
     case 'invoke': {
       if (!handle) throw new ComputerError('badRequest', 'Action "invoke" needs "element".')
