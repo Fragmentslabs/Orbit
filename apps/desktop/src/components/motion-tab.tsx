@@ -20,6 +20,7 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
+  Sparkles,
   Type,
   X,
   type LucideIcon,
@@ -48,7 +49,7 @@ import {
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
-import { FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
 
 /**
  * Preview de uma composição de motion na aba do painel direito — o palco onde o
@@ -241,8 +242,13 @@ export function MotionTab({
   const [reloads, setReloads] = useState(0)
   const [fullscreen, setFullscreen] = useState(false)
   const [composerPinned, setComposerPinned] = useState(false)
+  const [chatPinned, setChatPinned] = useState(false)
+  const [actionsPinned, setActionsPinned] = useState(false)
   useEffect(() => {
-    if (!fullscreen) setComposerPinned(false)
+    if (fullscreen) return
+    setComposerPinned(false)
+    setChatPinned(false)
+    setActionsPinned(false)
   }, [fullscreen])
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [render, setRender] = useState<RenderState>({ status: "idle" })
@@ -1343,9 +1349,25 @@ export function MotionTab({
           })}
         </div>
       </div>
-      {/* Composer do chat na tela cheia: recolhido na borda inferior, abre no
-          hover (ou fixado) — o mesmo do browser. */}
-      {fullscreen && <FullscreenComposer pinned={composerPinned} onTogglePin={() => setComposerPinned((v) => !v)} />}
+      {/* Tela cheia: conversa à esquerda, ações do agente à direita e composer
+          embaixo — recolhidos na borda, abrem no hover ou fixados, o mesmo do
+          browser. */}
+      {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
+      {fullscreen && (
+        <ActionsFeed
+          pinned={actionsPinned}
+          onTogglePin={() => setActionsPinned((v) => !v)}
+          icon={Sparkles}
+          title={t("fullscreen.agentActions")}
+        />
+      )}
+      {fullscreen && (
+        <FullscreenComposer
+          pinned={composerPinned}
+          onTogglePin={() => setComposerPinned((v) => !v)}
+          onSent={() => setChatPinned(true)}
+        />
+      )}
     </div>
   )
 }
