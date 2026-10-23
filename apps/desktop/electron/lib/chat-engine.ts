@@ -24,6 +24,7 @@ import {
   type QuotePayload,
 } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
+import { resolveTitle, titleFromUserText } from './chat-title'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
 import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
@@ -1098,47 +1099,6 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
   return result
 }
 
-const MAX_TITLE_LENGTH = 50
-
-// Modelos thinking (DeepSeek R1, Qwen QwQ, OpenAI o1/o3, Gemini Thinking etc.)
-// emitem blocos `<think>...</think>`. Alguns provedores/gateways não separam
-// o raciocínio direito e esses tokens vazam no `text` retornado — quando o
-// bloco é filtrado e sobra só o início da tag, o título nasce com `<think`
-// colado na frente. Remove também tokens de fim/início de turno de outros
-// modelos (ChatML, Llama, Mistral) que aparecem raramente em gateways mal
-// configurados.
-function stripThinkingAndArtifacts(text: string): string {
-  return text
-    // Bloco de raciocínio completo (com fechamento) — pode aparecer em
-    // qualquer lugar; alguns provedores não separam reasoning direito.
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    // Tag aberta/fechada solta OU parcial sem `>` (modelo cortou, gateway
-    // vazou). Ancorada em "<think" pra não comer texto legítimo.
-    .replace(/<\/?think(?:ing)?\b[^>]*>?/gi, '')
-    // Tokens de fim/início de turno de modelos específicos (ChatML,
-    // Anthropic specials, Llama/Mistral end-of-turn).
-    .replace(/<\/?(?:s|antml(?::text|_thinking)?)\s*>/gi, '')
-    .replace(/<\||\|>/g, '')
-    .replace(/\[\/?INST\]/g, '')
-}
-
-function truncateTitle(text: string): string {
-  const cleaned = stripThinkingAndArtifacts(text)
-    .trim()
-    .replace(/\*\*/g, '') // negrito/marcação forte
-    .replace(/[*_`#>~]/g, '') // outra marcação markdown
-    .replace(/^["']|["']$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!cleaned) return ''
-  if (cleaned.length <= MAX_TITLE_LENGTH) return cleaned
-  // corta no limite de caracteres SEM quebrar palavra no meio, quando possível
-  const hard = cleaned.slice(0, MAX_TITLE_LENGTH)
-  const lastSpace = hard.lastIndexOf(' ')
-  const cut = lastSpace > MAX_TITLE_LENGTH * 0.5 ? lastSpace : hard.length
-  return hard.slice(0, cut).trim()
-}
-
 async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
   try {
     const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
@@ -1166,7 +1126,9 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
           'such as "Project analysis". Reply with the title only.'
         : input.text.slice(0, 2000),
     })
-    const title = truncateTitle(text)
+    // Comando (`/init` etc.) não serve de título; aí a reserva é o projeto.
+    const fallback = isCommand ? (projectName ?? '') : titleFromUserText(input.text)
+    const title = resolveTitle(text, fallback)
     if (!title) return
 
     // Persiste no disco ANTES de propagar: os eventos "session" seguintes
