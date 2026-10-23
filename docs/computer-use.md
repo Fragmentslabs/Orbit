@@ -176,6 +176,36 @@ própria do renderer, sem os sincronizadores da janela principal) e
 efeitos colaterais (disco, preferências e, principalmente, a fila de mensagens,
 que a janela principal já dispara).
 
+## Gravação de uma janela
+
+`cu_record_start` → ações com `cu_computer` → `cu_record_stop` grava **uma
+janela** e entrega um MP4 no chat (e na galeria).
+
+- **Captura:** é do próprio Electron. O `desktopCapturer` acha a janela pelo
+  CGWindowID, e uma janela oculta grava com o `MediaRecorder` (H.264). Por
+  baixo é o ScreenCaptureKit: a janela sai inteira **mesmo coberta por outras**
+  (medido). A página do gravador é um arquivo, porque `data:` não é contexto
+  seguro e não tem `mediaDevices`. O bruto vai para o disco a cada segundo.
+- **Sem tempo ocioso:** a gravação roda direto e é **cortada depois**
+  (`recording-plan.ts`). Cada ação fica com 0,3 s antes e 0,9 s depois, trechos
+  a menos de 0,5 s se juntam, e `wait` fica inteiro (é o agente segurando um
+  estado de propósito). Cortar depois, em vez de pausar o gravador, não
+  depende da latência do pause/resume.
+- **Pulso de clique:** um retângulo amarelo no alvo de cada ação, no instante
+  dela (`drawbox`). No modo dirigido, sem cursor na tela, é ele que mostra o
+  que foi clicado.
+- **O agente sabe o tempo:** o `cu_record_stop` devolve a linha do tempo do
+  **vídeo final** ("0.3–0.5s left_click on element 3"), para refinar com o
+  `video_render` (EDL) se precisar. `cu_record_mark` põe marcos.
+- **Não se perde:** se o turno acaba, ou se a pessoa clica Parar ou aperta ⌘⇧.
+  sem o `cu_record_stop`, o vídeo é montado assim mesmo e vai para a galeria.
+  Limite de 20 min por gravação.
+- **Medido em 2026-10-23:** 9,8 s gravados com 6 s de ociosidade viraram
+  **2,7 s** de vídeo, com 7,1 s cortados. A montagem levou 0,3 s, e o arquivo
+  final tem 22 KB. Enquanto grava, o macOS mostra o ícone de "janela sendo
+  compartilhada" na barra de título, e ele aparece no vídeo.
+- Para páginas web, o `browser_record` (roteiro declarativo) continua melhor.
+
 ## Permissões do macOS
 
 | Permissão | Para quê | Sem ela |

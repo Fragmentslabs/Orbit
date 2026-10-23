@@ -2,6 +2,7 @@ import { BrowserWindow, globalShortcut, screen } from 'electron'
 import type { ComputerActivity, ComputerEvent } from '@shared/computer'
 import { tNow } from '../i18n'
 import { disposeComputerPanels, setComputerPanelsSession } from './panels'
+import { finishOrphanRecording, disposeRecordings } from './recording'
 import { forgetShots } from './shots'
 
 /**
@@ -99,6 +100,8 @@ export function endActivity(sessionId: string): void {
   live.delete(sessionId)
   // O screenshot só vive enquanto o controle dura: a memória não guarda imagem velha.
   forgetShots(sessionId)
+  // Gravação que o agente não parou: monta e guarda na galeria.
+  void finishOrphanRecording(sessionId)
   const pids: number[] = []
   for (const [pid, sessions] of enhanced) {
     sessions.delete(sessionId)
@@ -260,5 +263,6 @@ export async function disposeComputerSessions(): Promise<void> {
   releaseShortcut()
   hideOverlay()
   disposeComputerPanels()
+  await disposeRecordings()
   if (pids.length && restoreHandler) await restoreHandler(pids)
 }

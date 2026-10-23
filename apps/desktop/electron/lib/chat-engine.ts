@@ -2058,6 +2058,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'video_render' ||
               part.toolName === 'motion_render' ||
               part.toolName === 'browser_record' ||
+              part.toolName === 'cu_record_stop' ||
               part.toolName === 'show_video'
             ) {
               const output = part.output as { videoUrl?: string; title?: string; durationMs?: number; path?: string } | string

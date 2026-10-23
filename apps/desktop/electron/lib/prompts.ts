@@ -380,7 +380,8 @@ const COMPUTER_INSTRUCTION = `COMPUTER USE. You can see and operate apps on the 
 - Before your first action in an app, tell the user in one short line what you are going to do there. Each new app (and each new site in a browser) asks the user for approval.
 - Keyboard: "type" sends text as Unicode (any layout); "key" sends shortcuts like "cmd+s". Both reach the app even in the background.
 - Directed pointer (the default) works through accessibility: a click must land on a control (button, link, checkbox, menu…) or a text field. Double-click, middle-click, hover and drag need the global pointer, which is off unless the user enabled it in Settings → Computer — prefer element actions, menus and the keyboard instead (e.g. select text with keys, not a double-click).
-- If a tool says a permission is missing (Accessibility or Screen Recording), call cu_permissions with request: true and tell the user exactly where to enable it; do not retry in a loop.`
+- If a tool says a permission is missing (Accessibility or Screen Recording), call cu_permissions with request: true and tell the user exactly where to enable it; do not retry in a loop.
+- Recording a video of an app: only when the user asks. cu_record_start (one window) → act with cu_computer → cu_record_stop. Idle time is cut automatically, so take your time between actions; use "wait" to hold a state on screen on purpose (it stays in the video). cu_record_stop returns the video and the timeline of the final video. For a web page, browser_record (a declarative script in Orbit's browser) is still the better tool.`
 
 // Sem as tools, o agente improvisava controle de tela por osascript + System
 // Events no bash (visto no primeiro teste no app) — o que passa por fora da

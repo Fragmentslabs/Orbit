@@ -1,5 +1,6 @@
 import { tool, type ToolSet } from 'ai'
 import { screen, shell } from 'electron'
+import path from 'node:path'
 import { z } from 'zod'
 import { getAppSettings } from '../app-settings'
 import { describeImage } from '../vision'
@@ -12,8 +13,10 @@ import {
   requestAccessibility,
 } from '../computer'
 import { act, COMPUTER_ACTIONS } from '../computer/act'
-import { observe, query, type ObservationResult } from '../computer/observe'
-import { isDeniedApp } from '../computer/safety'
+import { observe, query, resolveApp, resolveWindow, type ObservationResult } from '../computer/observe'
+import { isRecording, markRecording, noteRecordedAction, startRecording, stopRecording } from '../computer/recording'
+import { addVideoToGallery } from '../video/video-gallery'
+import { assertTargetAllowed, isDeniedApp } from '../computer/safety'
 import { isEnhanced, noteActivity, noteEnhanced, noteShotChanged } from '../computer/session'
 import { rememberShot, rememberTarget } from '../computer/shots'
 
@@ -252,6 +255,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       }),
       execute: async (args, { abortSignal, toolCallId }) => {
         try {
+          const startedAt = Date.now()
           const outcome = await act(getComputerDriver(), computerRegistry, {
             sessionId,
             action: args.action,
@@ -273,6 +277,18 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
             signal: abortSignal,
           })
           if (outcome.app) noteActivity(sessionId, outcome.app.name, outcome.summary)
+          // Gravando: a ação entra na linha do tempo (é ela que decide o que fica
+          // no vídeo e onde vai o pulso de clique). `wait` fica inteiro.
+          if (isRecording(sessionId)) {
+            noteRecordedAction(sessionId, {
+              startedAt,
+              endedAt: Date.now(),
+              label: describeForTimeline(args),
+              hold: args.action === 'wait',
+              target: outcome.target,
+              window: outcome.record?.window.frame,
+            })
+          }
           if (outcome.target) {
             rememberTarget(sessionId, outcome.target, args.action)
             noteShotChanged(sessionId)
@@ -336,6 +352,68 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       },
     }),
 
+    cu_record_start: tool({
+      description:
+        'Starts recording ONE window of an app as a video while you operate it — only when the user asks for a recording/video of the flow. The window is captured even if other windows cover it. Idle time (you thinking, waiting for approval, writing) is cut automatically: the final video keeps each cu_computer action with a short margin, plus every "wait" in full — use wait to hold a state on screen on purpose. Then act with cu_computer as usual and finish with cu_record_stop.',
+      inputSchema: z.object({
+        app: z.string().describe('Bundle id, name or pid of the app to record'),
+        window_id: z.number().int().optional().describe('Window id from cu_apps (default: the app\'s frontmost window)'),
+        name: z.string().max(60).optional().describe('Title of the video in the gallery'),
+      }),
+      execute: async (args, { abortSignal }) => {
+        try {
+          const snapshot = await getComputerDriver().apps(abortSignal)
+          const app = resolveApp(snapshot, args.app)
+          assertTargetAllowed(app)
+          const win = resolveWindow(snapshot, app, args.window_id)
+          const video = await startRecording({ sessionId, app, window: win, name: args.name })
+          noteActivity(sessionId, app.name, null)
+          return `Recording window ${win.id} of ${app.name} (${video.width}×${video.height} px). Act with cu_computer now; idle time between actions is cut. Call cu_record_stop when the flow is done.`
+        } catch (err) {
+          return fail(err)
+        }
+      },
+    }),
+
+    cu_record_mark: tool({
+      description: 'Marks a moment of the running recording with a label (e.g. "form filled") — it shows up in the timeline cu_record_stop returns.',
+      inputSchema: z.object({ label: z.string().min(1).max(80) }),
+      execute: async ({ label }) => {
+        const at = markRecording(sessionId, label)
+        return at === null ? 'There is no recording running.' : `Marked "${label}" at ${(at / 1000).toFixed(1)}s of the raw take.`
+      },
+    }),
+
+    cu_record_stop: tool({
+      description:
+        'Stops the recording and assembles the video: only the actions (with a short margin) and the waits, no idle time, with a yellow pulse on each click target. Returns the video for the user and a timeline of what is at each second of the FINAL video — use it with video_render (EDL) if a part needs trimming or captions.',
+      inputSchema: z.object({
+        keep_idle: z.boolean().optional().describe('Keep the whole take, without cutting idle time (default false)'),
+        click_pulses: z.boolean().optional().describe('Draw the yellow pulse on each action target (default true)'),
+      }),
+      execute: async (args) => {
+        try {
+          const done = await stopRecording(sessionId, { keepIdle: args.keep_idle, pulses: args.click_pulses })
+          const { entry } = await addVideoToGallery({
+            file: done.file,
+            name: path.basename(done.file, '.mp4'),
+            sessionId,
+            source: 'script',
+          })
+          const s = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+          const message = [
+            `Video ready: ${s(done.plan.durationMs)} (recorded ${s(done.recordedMs)}, ${s(done.plan.cutMs)} of idle time cut, ${done.plan.segments.length} segment(s)).`,
+            `File: ${done.file}`,
+            'Timeline of the final video:',
+            done.timeline || '(no actions recorded — the video is the whole take)',
+          ].join('\n')
+          return { message, videoUrl: entry.videoUrl, title: entry.name ?? 'recording', durationMs: entry.durationMs, path: entry.path }
+        } catch (err) {
+          return fail(err)
+        }
+      },
+    }),
+
     cu_permissions: tool({
       description:
         'Shows whether Orbit has the macOS permissions computer use needs (Accessibility for the tree and input; Screen Recording for screenshots). With request: true, asks for Accessibility and opens the Screen Recording pane for the user.',
@@ -370,4 +448,18 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       },
     }),
   }
+}
+
+/** Rótulo da ação na linha do tempo do vídeo: "left_click on element 3", "type “oi”". */
+function describeForTimeline(args: { action: string; element?: number; x?: number; y?: number; text?: string; key?: string; direction?: string; seconds?: number }): string {
+  if (args.action === 'type' || args.action === 'set_value') {
+    const text = args.text ?? ''
+    return `${args.action} ${JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text)}`
+  }
+  if (args.action === 'key') return `key ${args.key ?? ''}`
+  if (args.action === 'wait') return `wait ${args.seconds ?? 1}s`
+  if (args.action === 'scroll') return `scroll ${args.direction ?? 'down'}`
+  if (args.element !== undefined) return `${args.action} on element ${args.element}`
+  if (args.x !== undefined) return `${args.action} at (${args.x}, ${args.y})`
+  return args.action
 }
