@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, Monitor, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +48,7 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
+import { useComputerMode } from "@/src/stores/computer-mode"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
@@ -167,6 +168,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
   const visionModel = useProviderStore((s) => s.visionModel)
   const vision = useModeActive("vision", sessionId, codeActiveModes.vision)
+  const computer = useComputerMode(sessionId)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
   // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
@@ -199,7 +201,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     // Na orquestra o Loop não vale (quem revisa é o orquestrador)
     loop: orchestra && mode === "code" ? undefined : loop,
     toolsServers: toolsServers ?? undefined,
-  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, toolsServers, mode])
+    computer: computer.active || undefined,
+  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, toolsServers, mode, computer.active])
 
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders
@@ -252,7 +255,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         setVisionConfigOpen(true)
       },
     },
-  ], [search, plan, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
+    // Computador: só aparece com o interruptor das Preferências ligado.
+    ...(computer.visible
+      ? [{ icon: Monitor, label: t("input.modes.computer.label"), active: computer.active, onChange: (v: boolean) => setModeActive("computer", sessionId, v) }]
+      : []),
+  ], [search, plan, simple, brain, vision, visionModel, computer.visible, computer.active, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     // Editando um item da fila (lápis na fila): o Enter grava a edição no
@@ -705,6 +712,18 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 else setVisionConfigOpen(true)
               }}
               onConfig={() => setVisionConfigOpen(true)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {/* Computador: na barra só se ligado em Aparência (padrão: oculto) e
+              com o interruptor das Preferências → Computador ligado. */}
+          {computer.visible && modesInRow.includes("computer") && (
+            <ModeToggle
+              icon={Monitor}
+              label={t("input.modes.computer.label")}
+              description={t("input.modes.computer.description")}
+              active={computer.active}
+              onToggle={() => setModeActive("computer", sessionId, !computer.active)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, PlusIcon, Quote, Search, X } from "lucide-react"
+import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, Monitor, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +44,7 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
+import { useComputerMode } from "@/src/stores/computer-mode"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
@@ -81,6 +82,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
   const search = useModeActive("search", sessionId, chatActiveModes.search)
   const browser = useModeActive("browser", sessionId, chatActiveModes.browser)
+  const computer = useComputerMode(sessionId)
   const setModeActive = useModeOverrides((s) => s.setMode)
   const simple = useSimpleMode(sessionId, chatActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
@@ -147,7 +149,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         setVisionConfigOpen(true)
       },
     },
-  ], [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
+    // Computador: só aparece com o interruptor das Preferências ligado.
+    ...(computer.visible
+      ? [{ icon: Monitor, label: t("input.modes.computer.label"), active: computer.active, onChange: (v: boolean) => setModeActive("computer", sessionId, v) }]
+      : []),
+  ], [search, browser, simple, brain, vision, visionModel, computer.visible, computer.active, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -157,7 +163,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
     toolsServers: toolsServers ?? undefined,
-  }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers])
+    computer: computer.active || undefined,
+  }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers, computer.active])
 
   /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
    *  `voiceCall` para o agente responder curto e falado. */
@@ -425,6 +432,18 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                 else setVisionConfigOpen(true)
               }}
               onConfig={() => setVisionConfigOpen(true)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {/* Computador: na barra só se ligado em Aparência (padrão: oculto) e
+              com o interruptor das Preferências → Computador ligado. */}
+          {computer.visible && modesInRow.includes("computer") && (
+            <ModeToggle
+              icon={Monitor}
+              label={t("input.modes.computer.label")}
+              description={t("input.modes.computer.description")}
+              active={computer.active}
+              onToggle={() => setModeActive("computer", sessionId, !computer.active)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}

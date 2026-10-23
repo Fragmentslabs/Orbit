@@ -14,6 +14,7 @@ import type {
   SessionRevert,
 } from "@shared/chat"
 import type { AppSettings } from "@shared/app-settings"
+import type { ComputerActivity, ComputerEvent, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
@@ -138,6 +139,25 @@ export const appSettingsApi = {
     return () => window.ipcRenderer.off("link:open", wrapper)
   },
   openExternal: (url: string) => window.ipcRenderer?.send("link:open-external", url),
+}
+
+/** Controle do computador (Computer Use): estado, permissões e o botão Parar. */
+export const computerApi = {
+  status: () => window.ipcRenderer.invoke("computer:status") as Promise<ComputerStatus>,
+  test: () => window.ipcRenderer.invoke("computer:test") as Promise<ComputerTestResult>,
+  /** Sessões controlando agora (para o chip depois de um reload) */
+  activity: () => window.ipcRenderer.invoke("computer:activity") as Promise<ComputerActivity[]>,
+  /** Para o controle (e o turno) de uma sessão — sem id, de todas */
+  stop: (sessionId?: string) => window.ipcRenderer.invoke("computer:stop", sessionId) as Promise<void>,
+  requestAccessibility: () => window.ipcRenderer.invoke("computer:request-accessibility") as Promise<boolean>,
+  /** Cria a entrada do app em Gravação de Tela e abre o painel */
+  requestScreen: () => window.ipcRenderer.invoke("computer:request-screen") as Promise<void>,
+  openPane: (pane: "accessibility" | "screen") => window.ipcRenderer.invoke("computer:open-pane", pane) as Promise<void>,
+  onEvent: (listener: (event: ComputerEvent) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("computer:event", (event) => listener(event as ComputerEvent))
+    return () => window.ipcRenderer.off("computer:event", wrapper)
+  },
 }
 
 export const catalogApi = {

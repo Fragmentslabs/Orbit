@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useTheme } from "@/components/theme-provider"
+import { windowApi } from "@/src/lib/ipc"
 import { useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
 
 type ThemePref = "light" | "dark" | "system"
@@ -33,7 +34,7 @@ type View = "main" | "visible"
 
 /** Agrupamento dos modos por contexto de uso nos inputs. */
 const MODE_GROUPS: { key: "both" | "chat" | "code"; ids: ModeId[] }[] = [
-  { key: "both", ids: ["search", "plan", "simple", "brain", "vision"] },
+  { key: "both", ids: ["search", "plan", "simple", "brain", "vision", "computer"] },
   { key: "code", ids: ["subagents", "orchestra", "loop"] },
   { key: "chat", ids: ["browser"] },
 ]
@@ -67,6 +68,8 @@ function useModeRowOptions(): { id: ModeId; label: string; icon: typeof Search }
     { id: "subagents", label: t("codeInput.modes.subagents.label"), icon: Bot },
     { id: "orchestra", label: t("codeInput.modes.orchestra.label"), icon: Network },
     { id: "loop", label: t("codeInput.modes.loop.label"), icon: RefreshCw },
+    // Computador só existe no macOS (v1): nas outras plataformas a opção some.
+    ...(windowApi.platform === "darwin" ? [{ id: "computer" as const, label: t("input.modes.computer.label"), icon: Monitor }] : []),
   ]
 }
 

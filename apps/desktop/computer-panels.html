@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbit — Computer</title>
+    <script>
+      // Mesmo tema do app antes do primeiro paint; o fundo fica transparente —
+      // a janela cobre a tela inteira e só os painéis aparecem.
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('vite-ui-theme')
+          var theme = stored === 'dark' || stored === 'light' ? stored : null
+          if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          document.documentElement.classList.add(theme)
+        } catch (e) {
+          /* best-effort: o ThemeProvider aplica o tema de qualquer forma */
+        }
+      })()
+    </script>
+    <style>
+      html,
+      body,
+      #root {
+        background: transparent !important;
+        overflow: hidden;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/computer-panels-main.tsx"></script>
+  </body>
+</html>

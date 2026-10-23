@@ -69,6 +69,10 @@
       "voice": {
         "label": "Voz",
         "description": "Leitura em voz alta, ditado e modelos de voz."
+      },
+      "computer": {
+        "label": "Computador",
+        "description": "O agente vê e opera outros apps do seu Mac"
       }
     },
     "about": {
@@ -123,7 +127,11 @@
         "label": "Visão",
         "description": "Com o modo ativo, imagens e screenshots são descritas pelo modelo de visão — a imagem não entra no contexto, apenas a descrição."
       },
-      "configureHint": "Clique com o botão direito para abrir as configurações."
+      "configureHint": "Clique com o botão direito para abrir as configurações.",
+      "computer": {
+        "label": "Computador",
+        "description": "O agente vê a tela de um app e age nele (clicar, digitar, rolar). Cada app novo pede sua aprovação."
+      }
     },
     "slash": {
       "searchDescription": "Alterna busca web (websearch/webfetch)",
@@ -3087,5 +3095,88 @@
         "kindStt": "Fala em texto"
       }
     }
+  },
+  "computerSettings": {
+    "master": {
+      "title": "Controlar o computador",
+      "description": "Libera as ferramentas que leem a tela e a árvore de acessibilidade dos apps e agem neles. Mesmo ligado, só vale nas conversas em que você ativar o modo Computador."
+    },
+    "pointer": {
+      "title": "Ponteiro",
+      "description": "Dirigido manda clique e teclado direto para o app, sem mexer no seu cursor. Global usa o ponteiro real: move o cursor e é o único que arrasta.",
+      "directed": "Dirigido (não move o cursor)",
+      "global": "Global (move o cursor)"
+    },
+    "edge": {
+      "title": "Tamanho do screenshot",
+      "description": "Lado maior da imagem enviada ao modelo. Maior = mais detalhe e mais tokens."
+    },
+    "permissions": {
+      "title": "Permissões do macOS",
+      "description": "Acessibilidade lê os apps e envia cliques e teclas; Gravação de Tela tira os screenshots.",
+      "accessibility": "Acessibilidade",
+      "screen": "Gravação de Tela",
+      "granted": "concedida",
+      "missing": "não concedida",
+      "open": "Abrir ajustes",
+      "request": "Pedir",
+      "dev": "Em desenvolvimento a permissão é do binário \"Electron\" deste projeto — outros projetos Electron aparecem com o mesmo nome em Ajustes e não valem. Use \"Pedir\" para criar a entrada certa. Gravação de Tela pede reiniciar o app.",
+      "responsible": "O Orbit foi aberto pelo {{app}}, então o macOS confere as permissões no {{app}} — não no \"Electron\" nem no \"Orbit\". Libere o {{app}} em Acessibilidade e Gravação de Tela, ou abra o app pelo Finder. Gravação de Tela pede reiniciar."
+    },
+    "test": {
+      "title": "Testar",
+      "description": "Faz uma leitura real do app da frente — confirma que a permissão vale para o processo que faz o trabalho.",
+      "button": "Testar agora",
+      "ok": "Funcionou em {{ms}} ms",
+      "okApp": "Funcionou: {{app}} elementos em {{ms}} ms",
+      "axDenied": "Sem permissão de Acessibilidade",
+      "failed": "Falhou: {{reason}}"
+    },
+    "safety": {
+      "title": "Segurança",
+      "description": "Cofres de senha, Ajustes do Sistema e prompts de segurança são bloqueados. O agente nunca digita em campos de senha. Cada app (e cada site, nos navegadores) pede aprovação na conversa, e ⌘⇧. para tudo na hora."
+    },
+    "unavailable": {
+      "mas": "Indisponível na versão da Mac App Store: o sandbox da loja bloqueia acessibilidade e envio de eventos. Use a versão do site.",
+      "platform": "Por enquanto, disponível só no macOS."
+    }
+  },
+  "computer": {
+    "chip": {
+      "controlling": "Controlando {{app}}",
+      "stop": "Parar",
+      "stopTitle": "Parar o controle do computador (⌘⇧.)"
+    },
+    "panels": {
+      "chat": "Conversa",
+      "actions": "Ações no computador",
+      "empty": "Nenhuma ação ainda.",
+      "do": {
+        "apps": "Listar apps abertos",
+        "observe": "Observar {{app}}",
+        "query": "Buscar “{{text}}”",
+        "permissions": "Conferir permissões",
+        "type": "Digitar “{{text}}”",
+        "set_value": "Preencher com “{{text}}”",
+        "key": "Tecla {{key}}",
+        "wait": "Esperar {{seconds}}s",
+        "open_app": "Abrir {{app}}",
+        "scroll": "Rolar ({{direction}})",
+        "left_click": "Clicar",
+        "right_click": "Clique direito",
+        "middle_click": "Clique do meio",
+        "double_click": "Clique duplo",
+        "move": "Mover o ponteiro",
+        "drag": "Arrastar",
+        "invoke": "Acionar"
+      },
+      "target": {
+        "element": "no elemento {{index}}",
+        "point": "em ({{x}}, {{y}})"
+      }
+    }
+  },
+  "fullscreen": {
+    "agentActions": "Ações do agente"
   }
 }

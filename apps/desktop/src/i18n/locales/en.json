@@ -69,6 +69,10 @@
       "voice": {
         "label": "Voice",
         "description": "Reading aloud, dictation and voice models."
+      },
+      "computer": {
+        "label": "Computer",
+        "description": "The agent sees and operates other apps on your Mac"
       }
     },
     "about": {
@@ -123,7 +127,11 @@
         "label": "Vision",
         "description": "When ON, images and screenshots are described by the vision model — the image never enters the context, only the description."
       },
-      "configureHint": "Right-click to open the settings."
+      "configureHint": "Right-click to open the settings.",
+      "computer": {
+        "label": "Computer",
+        "description": "The agent sees an app's screen and acts on it (click, type, scroll). Each new app asks for your approval."
+      }
     },
     "slash": {
       "searchDescription": "Toggles web search (websearch/webfetch)",
@@ -3087,5 +3095,88 @@
         "kindStt": "Speech to text"
       }
     }
+  },
+  "computerSettings": {
+    "master": {
+      "title": "Control the computer",
+      "description": "Enables the tools that read the screen and the accessibility tree of apps and act on them. Even when on, it only applies to conversations where you turn on the Computer mode."
+    },
+    "pointer": {
+      "title": "Pointer",
+      "description": "Directed sends clicks and keys straight to the app without touching your cursor. Global uses the real pointer: it moves the cursor and is the only one that can drag.",
+      "directed": "Directed (does not move the cursor)",
+      "global": "Global (moves the cursor)"
+    },
+    "edge": {
+      "title": "Screenshot size",
+      "description": "Longest side of the image sent to the model. Larger = more detail and more tokens."
+    },
+    "permissions": {
+      "title": "macOS permissions",
+      "description": "Accessibility reads apps and sends clicks and keys; Screen Recording takes the screenshots.",
+      "accessibility": "Accessibility",
+      "screen": "Screen Recording",
+      "granted": "granted",
+      "missing": "not granted",
+      "open": "Open settings",
+      "request": "Request",
+      "dev": "In development the permission belongs to this project's \"Electron\" binary — other Electron projects show up with the same name in Settings and don't count. Use \"Request\" to create the right entry. Screen Recording needs an app restart.",
+      "responsible": "Orbit was launched by {{app}}, so macOS checks the permissions on {{app}} — not on \"Electron\" or \"Orbit\". Allow {{app}} in Accessibility and Screen Recording, or open the app from Finder. Screen Recording needs a restart."
+    },
+    "test": {
+      "title": "Test",
+      "description": "Does a real read of the frontmost app — confirms the permission applies to the process that does the work.",
+      "button": "Test now",
+      "ok": "Worked in {{ms}} ms",
+      "okApp": "Worked: {{app}} elements in {{ms}} ms",
+      "axDenied": "No Accessibility permission",
+      "failed": "Failed: {{reason}}"
+    },
+    "safety": {
+      "title": "Safety",
+      "description": "Password managers, System Settings and security prompts are blocked. The agent never types into password fields. Each app (and each site, in browsers) asks for approval in the conversation, and ⌘⇧. stops everything at once."
+    },
+    "unavailable": {
+      "mas": "Unavailable in the Mac App Store version: the store sandbox blocks accessibility and event posting. Use the version from the website.",
+      "platform": "For now, available on macOS only."
+    }
+  },
+  "computer": {
+    "chip": {
+      "controlling": "Controlling {{app}}",
+      "stop": "Stop",
+      "stopTitle": "Stop controlling the computer (⌘⇧.)"
+    },
+    "panels": {
+      "chat": "Conversation",
+      "actions": "Computer actions",
+      "empty": "No actions yet.",
+      "do": {
+        "apps": "List open apps",
+        "observe": "Observe {{app}}",
+        "query": "Search “{{text}}”",
+        "permissions": "Check permissions",
+        "type": "Type “{{text}}”",
+        "set_value": "Fill with “{{text}}”",
+        "key": "Key {{key}}",
+        "wait": "Wait {{seconds}}s",
+        "open_app": "Open {{app}}",
+        "scroll": "Scroll ({{direction}})",
+        "left_click": "Click",
+        "right_click": "Right-click",
+        "middle_click": "Middle-click",
+        "double_click": "Double-click",
+        "move": "Move the pointer",
+        "drag": "Drag",
+        "invoke": "Invoke"
+      },
+      "target": {
+        "element": "on element {{index}}",
+        "point": "at ({{x}}, {{y}})"
+      }
+    }
+  },
+  "fullscreen": {
+    "agentActions": "Agent actions"
   }
 }

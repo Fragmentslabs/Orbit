@@ -1318,6 +1318,23 @@ function flushDeltas(set: Setter) {
   })
 }
 
+/**
+ * Janela espelho (o painel flutuante do Computer Use): aplica os eventos do
+ * chat ao estado em memória para mostrar a conversa ao vivo, mas nenhum efeito
+ * colateral — quem grava em disco, mexe nas preferências e, sobretudo, dispara
+ * a fila de mensagens quando a sessão fica ociosa é a janela principal. Duas
+ * janelas fazendo isso mandariam a mesma mensagem da fila duas vezes.
+ */
+let passiveMirror = false
+let mirrorStarted = false
+
+export function startChatMirror(): void {
+  if (mirrorStarted) return
+  mirrorStarted = true
+  passiveMirror = true
+  chatApi.onEvent((event) => applyChatEvent(event, useSessionStore.setState, useSessionStore.getState))
+}
+
 function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) {
   // "folders" é o único evento sem sessionId (substituição completa da lista)
   const sessionId = "sessionId" in event ? event.sessionId : ""
@@ -1333,7 +1350,7 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
     // encerrou antes de a conversa ser aberta): o store não conhece a lista
     // dela, e gravar aqui apagaria o arquivo que ainda guarda pedidos válidos.
     const asks = get().pendingAsks[sid]
-    if (!asks) return
+    if (!asks || passiveMirror) return
     void storage.write(StorageKeys.pendingAsks(sid), asks)
   }
 
@@ -1400,6 +1417,7 @@ case "message": {
       // erro. Se o 1º turno falhar (sem resposta), não conta como uso — e um
       // turno posterior que responder, sim.
       if (
+        !passiveMirror &&
         inbound.role === "assistant" &&
         inbound.completedAt &&
         !inbound.error &&
@@ -1487,7 +1505,7 @@ case "message": {
       })
       // O agente nomeou o chat: espelha o novo título nas abas de chat do
       // painel lateral que apontam para essa sessão.
-      usePanelStore.getState().renameChatTabs(sessionId, event.title)
+      if (!passiveMirror) usePanelStore.getState().renameChatTabs(sessionId, event.title)
       break
 
     case "orchestration:plan":
@@ -1496,7 +1514,7 @@ case "message": {
 
     case "plan:review":
       set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: event.review } }))
-      void storage.write(StorageKeys.planReview(sessionId), event.review)
+      if (!passiveMirror) void storage.write(StorageKeys.planReview(sessionId), event.review)
       break
 
     case "session":
@@ -1522,10 +1540,12 @@ case "message": {
       // Excluída no main (ferramenta do agente, app mobile): limpa também o que
       // esta janela guarda por conversa.
       loadedMessages.delete(sessionId)
-      useBrainPrefs.getState().setEnabled(sessionId, true)
-      useSimplePrefs.getState().clear(sessionId)
-      useSessionModelPrefs.getState().clear(sessionId)
-      useModelRotationStore.getState().selectRotation(sessionId, null)
+      if (!passiveMirror) {
+        useBrainPrefs.getState().setEnabled(sessionId, true)
+        useSimplePrefs.getState().clear(sessionId)
+        useSessionModelPrefs.getState().clear(sessionId)
+        useModelRotationStore.getState().selectRotation(sessionId, null)
+      }
       set((state) => {
         const sessions = state.sessions.filter((s) => s.id !== sessionId)
         const messages = { ...state.messages }
@@ -1550,6 +1570,7 @@ case "message": {
 
     case "notifications:open": {
       // Clique numa notificação nativa → abre a sessão correspondente
+      if (passiveMirror) break
       const session = get().sessions.find((s) => s.id === event.sessionId)
       if (session) void get().selectSession(session.mode, session.id)
       break
@@ -1603,6 +1624,9 @@ case "message": {
       .map((p) => p.text)
       .join("\n")
   }
+
+  // Espelho: daqui para baixo só há efeitos (plano proposto, fila).
+  if (passiveMirror) return
 
   // Quando o streaming termina ou dá erro, verifica planos e processa fila
   if (event.type === "status" && event.status === "idle") {

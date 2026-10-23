@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Bell, BookOpen, Database, Globe, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, Volume2, X, Pencil, Info, ChevronDown, Loader2 } from "lucide-react"
+import { Bell, BookOpen, Database, Globe, KeyRound, Monitor, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, Volume2, X, Pencil, Info, ChevronDown, Loader2 } from "lucide-react"
 import type { CatalogProvider, ProviderProtocol } from "@shared/chat"
 import {
   Dialog,
@@ -22,6 +22,7 @@ import { VoicePanel } from "@/src/components/settings-voice-panel"
 import { NotificationsPanel } from "@/src/components/notifications-panel"
 import { AboutPanel } from "@/src/components/about-panel"
 import { BrowserPanel } from "@/src/components/browser-panel"
+import { ComputerPanel } from "@/src/components/computer-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { customProvidersApi, windowApi } from "@/src/lib/ipc"
 import { isLocalEndpoint } from "@/src/lib/provider-endpoint"
@@ -49,13 +50,17 @@ function useTabs(): TabDef[] {
     { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
     { id: "voice", label: t("settings.tabs.voice.label"), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
     { id: "browser", label: t("settings.tabs.browser.label"), icon: Globe, description: t("settings.tabs.browser.description") },
+    // Computador: a v1 só tem driver no macOS — nas outras plataformas a aba não aparece.
+    { id: "computer", label: t("settings.tabs.computer.label"), icon: Monitor, description: t("settings.tabs.computer.description"), beta: true },
     // Sistema só tem o "Abrir com Orbit" do Explorer, que é exclusivo do
     // Windows: em macOS/Linux a aba nem aparece (ver `visibleTabs` abaixo).
     { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
     { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
     { id: "about", label: t("settings.tabs.about.label"), icon: Info, description: t("settings.tabs.about.description") },
   ]
-  return tabs.filter((tab) => tab.id !== "system" || windowApi.platform === "win32")
+  return tabs.filter(
+    (tab) => (tab.id !== "system" || windowApi.platform === "win32") && (tab.id !== "computer" || windowApi.platform === "darwin"),
+  )
 }
 
 /**
@@ -1096,7 +1101,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {active.id === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : active.id === "autonomy" ? <PreferencesPanel /> : active.id === "appearance" ? <AppearancePanel /> : active.id === "notifications" ? <NotificationsPanel /> : active.id === "voice" ? <VoicePanel /> : active.id === "system" ? <SystemPanel /> : active.id === "browser" ? <BrowserPanel /> : active.id === "howto" ? <HowToPanel /> : active.id === "about" ? <AboutPanel /> : <DataPanel />}
+              {active.id === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : active.id === "autonomy" ? <PreferencesPanel /> : active.id === "appearance" ? <AppearancePanel /> : active.id === "notifications" ? <NotificationsPanel /> : active.id === "voice" ? <VoicePanel /> : active.id === "system" ? <SystemPanel /> : active.id === "browser" ? <BrowserPanel /> : active.id === "computer" ? <ComputerPanel /> : active.id === "howto" ? <HowToPanel /> : active.id === "about" ? <AboutPanel /> : <DataPanel />}
             </div>
           </div>
         </div>

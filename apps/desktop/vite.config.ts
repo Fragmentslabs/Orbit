@@ -18,6 +18,17 @@ export default defineConfig({
   resolve: {
     alias: sharedAliases,
   },
+  build: {
+    rollupOptions: {
+      // Segunda página do renderer: os painéis flutuantes do Computer Use
+      // (conversa + ações por cima de outros apps). Entrada própria para não
+      // carregar os sincronizadores da janela principal (fila, celular).
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'computer-panels': path.resolve(__dirname, 'computer-panels.html'),
+      },
+    },
+  },
   plugins: [
     tailwindcss(),
     react(),

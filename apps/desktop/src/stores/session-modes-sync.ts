@@ -24,8 +24,9 @@ function withoutDraft(bySession: Record<string, boolean>): Record<string, boolea
 }
 
 /** Só os modos que os companions conhecem (`ChatModeKey`) — é o que cabe no
- *  payload compartilhado. */
-const MODE_OVERRIDE_KEYS: OverridableMode[] = [
+ *  payload compartilhado. "computer" fica de fora de propósito: o celular não
+ *  liga o controle do computador de quem está diante dele. */
+const MODE_OVERRIDE_KEYS: Exclude<OverridableMode, "computer">[] = [
   "search",
   "browser",
   "plan",

@@ -23,11 +23,14 @@ export const MODE_IDS = [
   "orchestra",
   "loop",
   "vision",
+  "computer",
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
 /** "brain" fica fora da barra por padrão: o modo Memória também vem
  *  desativado por padrão nas preferências (model-mode-prefs) — só entra na
- *  barra se o usuário ativá-lo aqui ou no menu "+". */
+ *  barra se o usuário ativá-lo aqui ou no menu "+". "computer" também: além de
+ *  opt-in nas Preferências → Computador, controlar o computador não é um modo
+ *  do dia a dia, e quem quer o atalho na barra liga em Aparência. */
 export const DEFAULT_MODES_IN_ROW: ModeId[] = [
   "search",
   "browser",

@@ -74,6 +74,17 @@ import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBrid
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { abortSession, dispatchSend } from './lib/send-dispatch'
+import { setupComputerPanels } from './lib/computer/panels'
+import {
+  computerStatus,
+  disposeComputerUse,
+  getComputerActivity,
+  requestAccessibility,
+  requestScreenRecording,
+  setComputerStopHandler,
+  stopComputer,
+  testComputer,
+} from './lib/computer'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import {
   backfillMedia,
@@ -2924,10 +2935,41 @@ app.whenReady().then(() => {
   ipcMain.handle('process:kill', (_event, pid: number, sessionId?: string) => killProcess(pid, sessionId))
   ipcMain.handle('process:output', (_event, pid: number, sessionId?: string) => getProcessOutput(pid, sessionId))
 
+  // Computer Use: Parar (chip, Preferências ou ⌘⇧.) aborta o turno inteiro —
+  // o abort mata a bridge em andamento e limpa as aprovações da conversa.
+  setComputerStopHandler((sessionId) => abortSession(sessionId))
+  // Painéis flutuantes (conversa + ações) enquanto o Orbit está fora de foco:
+  // mesmo preload e mesmo bundle das janelas do app, entrada própria.
+  setupComputerPanels({
+    preload: path.join(__dirname, 'preload.mjs'),
+    load: (panels, query) => {
+      if (VITE_DEV_SERVER_URL) {
+        const url = new URL('computer-panels.html', VITE_DEV_SERVER_URL.endsWith('/') ? VITE_DEV_SERVER_URL : `${VITE_DEV_SERVER_URL}/`)
+        for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+        void panels.loadURL(url.toString())
+      } else {
+        void panels.loadFile(path.join(RENDERER_DIST, 'computer-panels.html'), { query })
+      }
+    },
+  })
+  ipcMain.handle('computer:status', () => computerStatus())
+  ipcMain.handle('computer:test', () => testComputer())
+  ipcMain.handle('computer:activity', () => getComputerActivity())
+  ipcMain.handle('computer:stop', (_event, sessionId?: string) => stopComputer(sessionId))
+  ipcMain.handle('computer:request-accessibility', () => requestAccessibility())
+  ipcMain.handle('computer:request-screen', () => requestScreenRecording())
+  ipcMain.handle('computer:open-pane', (_event, pane: 'accessibility' | 'screen') =>
+    shell.openExternal(
+      `x-apple.systempreferences:com.apple.preference.security?${pane === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Accessibility'}`,
+    ),
+  )
+
   app.on('before-quit', () => {
     // A saída real começa aqui: daqui para baixo o `close` da janela não pode
     // mais ser convertido em esconder.
     quitting = true
+    // Devolve as flags de acessibilidade ligadas nos apps e solta o atalho.
+    void disposeComputerUse()
     destroyTray()
     killAllProcesses()
     stopWatchingNodaraBridge()

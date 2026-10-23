@@ -11,7 +11,9 @@ import { create } from "zustand"
  * session-store chama adopt() para transferir os overrides.
  */
 
-export type OverridableMode = "search" | "browser" | "plan" | "subagents" | "orchestra" | "vision"
+// "computer" não entra no sync de modos com o celular (session-modes-sync):
+// controlar o computador é decisão de quem está diante dele.
+export type OverridableMode = "search" | "browser" | "plan" | "subagents" | "orchestra" | "vision" | "computer"
 
 const STORAGE_KEY = "orbit-mode-overrides"
 const DRAFT_KEY = "draft"
