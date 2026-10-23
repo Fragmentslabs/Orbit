@@ -287,11 +287,11 @@
     "documentDesktopOnly": "documento disponível no app desktop"
   },
   "askCard": {
-    "allowOnce": "Permitir esta vez",
+    "allowOnce": "Permitir neste turno",
     "permissionRequired": "Permissão necessária",
     "criticalAction": "Ação crítica: ",
     "deny": "Negar",
-    "once": "Uma vez",
+    "once": "Neste turno",
     "alwaysThisChat": "Sempre neste chat",
     "always": "Sempre",
     "questionLabel": "Pergunta",

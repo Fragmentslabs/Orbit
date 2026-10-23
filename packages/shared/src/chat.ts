@@ -758,9 +758,6 @@ export interface PermissionClaim {
   /** Pergunta mesmo no modo irrestrito (ex.: remover worktree): trocar o modo
    *  para irrestrito não aprova este pedido sozinho. */
   alwaysAsk?: boolean
-  /** A aprovação dura no máximo a conversa: sem "sempre permitir" global
-   *  (controle do computador). */
-  sessionOnly?: boolean
 }
 
 /** Pergunta estruturada da tool question */

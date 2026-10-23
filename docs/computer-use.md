@@ -118,12 +118,18 @@ não tenha funcionado.
 - **O próprio Orbit** nunca é alvo.
 - **Campo de senha**: o agente recusa `type` e `set_value`, seja no elemento
   indicado, seja no foco do app.
-- **Aprovação por app, só para a conversa.** A primeira ação em cada app pede
-  aprovação (`cu:app:<bundleId>`). Nos navegadores a aprovação é por site
-  (`cu:app:<bundleId>@<host>`, com a URL da última observação). Não existe
-  "sempre permitir" global: o card esconde a opção, e o gate converte um
-  "always" vindo de outro cliente em "nesta conversa". O modo Irrestrito aprova
-  sozinho, como o `bash`.
+- **Aprovação por app.** A primeira ação em cada app pede aprovação
+  (`cu:app:<bundleId>`). Nos navegadores a aprovação é por site
+  (`cu:app:<bundleId>@<host>`, com a URL da última observação). As opções são
+  as mesmas de qualquer permissão do Orbit:
+  - **Permitir neste turno:** a mesma regra não pergunta de novo até o turno
+    acabar. Isso vale para toda permissão, não só o Computer Use. Antes era "só
+    esta vez", e o agente pedia a mesma coisa a cada clique;
+  - **Sempre neste chat:** vale pela conversa;
+  - **Sempre:** grava a regra daquele app (ou site), que vale daqui para frente.
+
+  Ações que perguntam sempre (como remover worktree) continuam uma a uma. O
+  modo Irrestrito aprova sozinho, como o `bash`.
 - **Prompt injection.** Todo texto vindo da tela vai dentro de
   `<screen_content untrusted="true">`, e o prompt diz que isso é dado e nunca
   instrução. Ação que a tela pede e o usuário não pediu: parar e perguntar.

@@ -69,12 +69,9 @@ function PermissionBody({ ask, submitted, onReply }: {
               <DropdownMenuItem onClick={() => { setOpen(false); onReply("always_chat") }}>
                 {t("permissions.alwaysChat")}
               </DropdownMenuItem>
-              {/* Controle do computador: a aprovação nunca passa da conversa. */}
-              {!claim.sessionOnly && (
-                <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
-                  {t("permissions.always")}
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
+                {t("permissions.always")}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

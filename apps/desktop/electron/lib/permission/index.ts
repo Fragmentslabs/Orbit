@@ -44,6 +44,12 @@ export function createToolApproval(
   parentSessionId?: string,
   workerTitle?: string,
 ) {
+  // "Permitir" vale pelo TURNO, não por chamada: o gate nasce com o turno, e
+  // uma regra aprovada aqui não pergunta de novo até ele acabar. Antes era só
+  // esta vez — o agente pedia a mesma permissão a cada tool (no Computer Use,
+  // a cada clique no mesmo app).
+  const turnTrust = new Set<string>()
+
   return async ({ toolCall }: { toolCall: ApprovalToolCall }) => {
     if (isForbidden(toolCall.toolName, toolCall.input, dir)) {
       denialReasons.set(toolCall.toolCallId, 'Ação bloqueada pela política de segurança.')
@@ -58,9 +64,8 @@ export function createToolApproval(
 
     const ruleId = assessment.ruleId
 
-    // sessionOnly ignora a confiança global: mesmo uma regra gravada antes
-    // (ou à mão no arquivo) não libera controlar o computador sem perguntar.
-    if (!assessment.sempre && !assessment.sessionOnly && checkTrust(ruleId)) return 'approved' as const
+    if (!assessment.sempre && checkTrust(ruleId)) return 'approved' as const
+    if (!assessment.sempre && turnTrust.has(ruleId)) return 'approved' as const
 
     const targetSession = sessionTrust.get(sessionId)
     if (!assessment.sempre && targetSession?.has(ruleId)) return 'approved' as const
@@ -90,15 +95,6 @@ export function createToolApproval(
         return 'approved' as const
       }
 
-      // O card esconde "sempre" quando sessionOnly, mas o celular (ou um
-      // cliente antigo) pode mandá-lo: aqui ele vale só para a conversa.
-      if (reply === 'always' && assessment.sessionOnly) {
-        const set = sessionTrust.get(sessionId) ?? new Set<string>()
-        set.add(ruleId)
-        sessionTrust.set(sessionId, set)
-        return 'approved' as const
-      }
-
       if (reply === 'always') {
         await addTrust(ruleId)
         const set = sessionTrust.get(sessionId) ?? new Set<string>()
@@ -107,7 +103,11 @@ export function createToolApproval(
         return 'approved' as const
       }
 
-      if (reply === 'allow') return 'approved' as const
+      if (reply === 'allow') {
+        // Ação que pergunta sempre (ex.: remover worktree) continua uma a uma.
+        if (!assessment.sempre) turnTrust.add(ruleId)
+        return 'approved' as const
+      }
 
       denialReasons.set(toolCall.toolCallId, 'Negado pelo usuário.')
 

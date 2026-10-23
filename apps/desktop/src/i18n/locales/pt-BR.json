@@ -234,7 +234,7 @@
     "loopOffInOrchestra": "Na orquestra quem revisa é o orquestrador — ajuste em Configurações da orquestra."
   },
   "permissions": {
-    "allowOnce": "Permitir esta vez",
+    "allowOnce": "Permitir neste turno",
     "moreOptions": "Mais opções de permissão",
     "title": "Modo de permissões",
     "ask": "Perguntar",
@@ -245,7 +245,7 @@
     "fullDescription": "Sem perguntas (piso de segurança mantido)",
     "deny": "Negar",
     "allow": "Permitir",
-    "once": "Uma vez",
+    "once": "Neste turno",
     "alwaysChat": "Sempre neste chat",
     "always": "Sempre"
   },

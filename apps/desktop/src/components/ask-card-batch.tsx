@@ -51,7 +51,7 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
             <ChevronDown className="size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {PERMIT_OPTIONS.filter((opt) => !(claim.sessionOnly && opt.value === "always")).map((opt) => (
+            {PERMIT_OPTIONS.map((opt) => (
               <DropdownMenuItem key={opt.value} onClick={() => onChoice(opt.value)}>
                 {t(opt.labelKey)}
               </DropdownMenuItem>

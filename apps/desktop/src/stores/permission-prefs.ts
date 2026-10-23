@@ -31,7 +31,7 @@ function sessaoNaTela(): string | undefined {
 
 /**
  * Ao mudar para Irrestrito, os pedidos de permissão que já estão abertos no
- * chat da tela são aprovados (só desta vez) — o usuário acabou de dizer que
+ * chat da tela são aprovados (pelo turno) — o usuário acabou de dizer que
  * não quer mais ser perguntado. Os de chats que não estão à vista ficam: quem
  * mudou o modo não os viu. Pedidos que perguntam sempre (ex.: remover
  * worktree) também ficam.

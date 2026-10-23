@@ -14,8 +14,6 @@ export interface Assessment {
    * ações destrutivas que o usuário precisa ver uma a uma.
    */
   sempre?: boolean
-  /** A aprovação vale no máximo para a conversa: "sempre permitir" global não existe. */
-  sessionOnly?: boolean
 }
 
 function shorten(text: string, max = 80): string {
@@ -227,9 +225,10 @@ const NATIVE_TOOLS = new Set([
 ])
 
 /**
- * Agir na tela: aprovação por app (por site, nos navegadores), só para a
- * conversa — "sempre permitir" global não existe para isto. O detalhe mostra
- * o app, a janela/URL vista e a ação, para o usuário saber o que está liberando.
+ * Agir na tela: aprovação por app (por site, nos navegadores). Como todo
+ * pedido, "Permitir" vale pelo turno, "Sempre neste chat" pela conversa e
+ * "Sempre" para este app (ou site) daqui para frente. O detalhe mostra o app,
+ * a janela/URL vista e a ação, para o usuário saber o que está liberando.
  */
 function assessComputer(args: Record<string, unknown>): Assessment | null {
   const action = typeof args.action === 'string' ? args.action : '?'
@@ -252,14 +251,12 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
             : `${action}${args.x !== undefined ? ` em (${String(args.x)}, ${String(args.y)})` : ''}`
   return {
     ruleId,
-    sessionOnly: true,
     claim: {
       tool: 'cu_computer',
       title: host ? `Controlar ${name} em ${host}` : `Controlar ${name}`,
       detail:
         `O agente quer agir no app ${name}${host ? ` (site ${host})` : ''} — ${what}. ` +
-        'Aprovar vale para este app nesta conversa; outro app ou outro site pede de novo.',
-      sessionOnly: true,
+        'A aprovação vale para este app' + (host ? ' e este site' : '') + '; outro app ou outro site pede de novo.',
     },
   }
 }

@@ -45,12 +45,12 @@ describe('assess — nativas x MCP', () => {
 })
 
 describe('computer use', () => {
-  it('leitura não pede; agir pede por app, só para a conversa', async () => {
+  it('leitura não pede; agir pede por app', async () => {
     const { isForbidden } = await import('./rules')
     expect(assess('cu_observe', { app: 'com.apple.TextEdit' }, null)).toBeNull()
     expect(assess('cu_apps', {}, null)).toBeNull()
     const pedido = assess('cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 3 }, null)
-    expect(pedido).toMatchObject({ ruleId: 'cu:app:com.apple.TextEdit', sessionOnly: true, claim: { tool: 'cu_computer', sessionOnly: true } })
+    expect(pedido).toMatchObject({ ruleId: 'cu:app:com.apple.TextEdit', claim: { tool: 'cu_computer' } })
     expect(pedido?.claim.detail).toContain('elemento 3')
     expect(assess('cu_computer', { action: 'wait', seconds: 1 }, null)).toBeNull()
     expect(isForbidden('cu_computer', { action: 'left_click', app: 'TextEdit' }, null)).toBe(false)

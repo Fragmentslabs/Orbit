@@ -234,7 +234,7 @@
     "loopOffInOrchestra": "In the orchestra the orchestrator does the reviewing — adjust it in the Orchestra settings."
   },
   "permissions": {
-    "allowOnce": "Allow this time",
+    "allowOnce": "Allow for this turn",
     "moreOptions": "More permission options",
     "title": "Permission mode",
     "ask": "Ask",
@@ -245,7 +245,7 @@
     "fullDescription": "No questions asked (safety floor still enforced)",
     "deny": "Deny",
     "allow": "Allow",
-    "once": "Once",
+    "once": "This turn",
     "alwaysChat": "Always in this chat",
     "always": "Always"
   },

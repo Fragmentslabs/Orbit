@@ -70,31 +70,39 @@ describe('modo de permissão ao vivo', () => {
   })
 })
 
-describe('aprovação só da conversa (controle do computador)', () => {
+describe('permitir vale pelo turno', () => {
   const agir = (app: string) => chamada('cu_computer', { action: 'left_click', app, x: 1, y: 1 })
 
-  it('"sempre" vira "sempre neste chat": a outra conversa pergunta de novo', async () => {
-    const { addTrust } = await import('./trust-rules')
-    pedidos.resposta = 'always'
-    const aprovar = createToolApproval('ask', 'chat_a', null, 'm1')
-    expect(await aprovar(agir('com.apple.TextEdit'))).toBe('approved')
-    expect(addTrust).not.toHaveBeenCalled()
-    // Mesma conversa: não pergunta mais.
-    expect(await aprovar(agir('com.apple.TextEdit'))).toBe('approved')
+  it('"Permitir" libera a mesma regra até o fim do turno; o turno seguinte pergunta de novo', async () => {
+    pedidos.resposta = 'allow'
+    const turno = createToolApproval('ask', 'chat_a', null, 'm1')
+    expect(await turno(agir('com.apple.TextEdit'))).toBe('approved')
+    expect(await turno(agir('com.apple.TextEdit'))).toBe('approved')
+    expect(await turno(agir('com.apple.TextEdit'))).toBe('approved')
     expect(pedidos.claims).toHaveLength(1)
-    // Outra conversa: pergunta.
-    const outra = createToolApproval('ask', 'chat_b', null, 'm1')
-    pedidos.resposta = 'deny'
-    expect(await outra(agir('com.apple.TextEdit'))).toMatchObject({ type: 'denied' })
+    // Outro app no mesmo turno: pergunta.
+    await turno(agir('com.apple.Notes'))
+    expect(pedidos.claims).toHaveLength(2)
+    // Turno novo (novo gate) na mesma conversa: pergunta de novo.
+    const proximo = createToolApproval('ask', 'chat_a', null, 'm2')
+    await proximo(agir('com.apple.TextEdit'))
+    expect(pedidos.claims).toHaveLength(3)
+  })
+
+  it('ação que pergunta sempre continua uma a uma, mesmo aprovada', async () => {
+    pedidos.resposta = 'allow'
+    const turno = createToolApproval('ask', 'chat_b', null, 'm1')
+    await turno(chamada('worktree_remove', { destino: 'feature-x' }))
+    await turno(chamada('worktree_remove', { destino: 'feature-x' }))
     expect(pedidos.claims).toHaveLength(2)
   })
 
-  it('outro app pede de novo, mesmo aprovado o primeiro', async () => {
-    pedidos.resposta = 'always_chat'
-    const aprovar = createToolApproval('ask', 'chat_c', null, 'm1')
-    await aprovar(agir('com.apple.TextEdit'))
-    await aprovar(agir('com.apple.Notes'))
-    expect(pedidos.claims).toHaveLength(2)
+  it('"Sempre" grava a regra do app (vale daqui para frente)', async () => {
+    const { addTrust } = await import('./trust-rules')
+    pedidos.resposta = 'always'
+    const turno = createToolApproval('ask', 'chat_c', null, 'm1')
+    expect(await turno(agir('com.apple.TextEdit'))).toBe('approved')
+    expect(addTrust).toHaveBeenCalledWith('cu:app:com.apple.TextEdit')
   })
 
   it('modo irrestrito aprova sozinho, como o bash', async () => {
