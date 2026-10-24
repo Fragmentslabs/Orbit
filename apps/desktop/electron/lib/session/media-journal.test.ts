@@ -21,7 +21,8 @@ vi.mock('electron', () => ({
   dialog: {},
 }))
 
-const { bindMediaJournal, closeMediaJournal, mergeJournals, readMediaJournal, runWithMediaJournal } = await import('./media-journal')
+const { bindMediaJournal, closeMediaJournal, mergeJournals, readMediaJournal, restorePaths, runWithMediaJournal } =
+  await import('./media-journal')
 const { discardMediaRevert, revertMedia, unrevertMedia } = await import('./media-revert')
 const media = await import('../media')
 const { getDesign, designIdFor } = await import('../design/design-store')
@@ -239,5 +240,35 @@ describe('revert de mídia — conflitos', () => {
     // O revert devolveu a revisão para 1; a edição externa seguinte vira 2.
     expect(entry?.revision).toBe(2)
     expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>v3</p>')
+  })
+})
+
+describe('revalidação logo antes de aplicar', () => {
+  it('restorePaths deixa intacto o caminho que mudou depois da decisão', async () => {
+    const dir = path.join(userData, 'revalida')
+    await fsp.mkdir(dir, { recursive: true })
+    const alvo = path.join(dir, 'a.txt')
+    const backup = path.join(dir, 'a.backup')
+    await fsp.writeFile(alvo, 'mudou no meio', 'utf8')
+    await fsp.writeFile(backup, 'antes', 'utf8')
+
+    const skipped = await restorePaths(
+      [{ type: 'path', path: alvo, backupFile: backup }],
+      async () => false,
+    )
+
+    expect(skipped).toHaveLength(1)
+    expect(await fsp.readFile(alvo, 'utf8')).toBe('mudou no meio')
+  })
+
+  it('restoreMediaEntries recusa a entrada que outra conversa gravou no meio', async () => {
+    const created = await media.saveArtifact('<p>v1</p>', { title: 'Corrida', sessionId: 'sess-corrida' })
+    const antes = await media.getMediaEntry(created.id)
+    await media.updateArtifact(created.id, '<p>v2</p>')
+
+    const skipped = await media.restoreMediaEntries([{ id: created.id, before: antes }], () => false)
+
+    expect([...skipped]).toEqual([created.id])
+    expect((await media.getMediaEntry(created.id))?.revision).toBe(2)
   })
 })

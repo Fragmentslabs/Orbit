@@ -501,15 +501,25 @@ export async function finalizeJournal(
  * a pasta dele num turno seguinte voltam os dois — a pasta ao estado do segundo
  * turno, e o arquivo, por cima, ao do primeiro.
  */
-export async function restorePaths(records: RestoreRecord[]): Promise<void> {
+export async function restorePaths(
+  records: RestoreRecord[],
+  /** Revalida o caminho logo antes de trocar (quem decidiu leu antes). Recusado, fica como está. */
+  stillSafe?: (record: Extract<RestoreRecord, { type: 'path' }>) => Promise<boolean>,
+): Promise<RestoreRecord[]> {
+  const skipped: RestoreRecord[] = []
   const paths = records
     .filter((record): record is Extract<RestoreRecord, { type: 'path' }> => record.type === 'path')
     .sort((a, b) => a.path.split(path.sep).length - b.path.split(path.sep).length)
   for (const record of paths) {
     if (!isJournaledPath(record.path)) continue
+    if (stillSafe && !(await stillSafe(record))) {
+      skipped.push(record)
+      continue
+    }
     await fsp.rm(record.path, { recursive: true, force: true })
     if (record.backupFile) await cloneInto(record.backupFile, record.path)
   }
+  return skipped
 }
 
 /** Apaga diários: os das mensagens dadas, ou (sem lista) todos da sessão. */

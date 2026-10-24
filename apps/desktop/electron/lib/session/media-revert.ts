@@ -374,24 +374,40 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
 
   if (redoDir) await captureJournal(redoDir, safe, currentEntry)
 
+  // A partição leu o estado no começo; outra conversa pode ter gravado no
+  // meio. Cada item é revalidado logo antes de trocar — a entrada dentro da
+  // trava do índice, a pasta da peça dentro da trava da peça — e o que mudou
+  // nesse intervalo fica como está e conta como conflito.
+  const beforeApply = new Map<string, MediaEntry | null>()
+  for (const record of safeMedia) beforeApply.set(record.id, await currentEntry(record.id))
+  const afterById = new Map(safeMedia.map((r) => [r.id, r.after ?? null]))
+  const lateEntries = await restoreMediaEntries(
+    safeMedia.map((r) => ({ id: r.id, before: r.before })),
+    (id, current) => sameAssetState(current, afterById.get(id) ?? null),
+  )
+  const media = safeMedia.filter((r) => !lateEntries.has(r.id))
+  const stillSafe = async (record: Extract<RestoreRecord, { type: 'path' }>): Promise<boolean> =>
+    !record.after || samePathState(await hashPath(record.path), record.after)
+
+  let late = lateEntries.size
   const pieces = new Map<string, PieceRef>()
   const plain: RestoreRecord[] = []
   for (const record of safe) {
     if (record.type !== 'path') continue
+    // Os arquivos de uma entrada que perdeu a corrida ficam com ela.
+    if (record.owner && lateEntries.has(record.owner)) continue
     if (record.piece) {
-      pieces.set(pieceKey(record.piece), record.piece)
       // A pasta da peça troca sob o MESMO lock das tools que a escrevem.
-      await withAssetLock(`${record.piece.kind}:${record.piece.folder}`, () => restorePaths([record]))
+      const skipped = await withAssetLock(`${record.piece.kind}:${record.piece.folder}`, () =>
+        restorePaths([record], stillSafe),
+      )
+      if (skipped.length > 0) late += 1
+      else pieces.set(pieceKey(record.piece), record.piece)
     } else {
       plain.push(record)
     }
   }
-  await restorePaths(plain)
-
-  const media = safeMedia
-  const beforeApply = new Map<string, MediaEntry | null>()
-  for (const record of media) beforeApply.set(record.id, await currentEntry(record.id))
-  await restoreMediaEntries(media.map((r) => ({ id: r.id, before: r.before })))
+  late += (await restorePaths(plain, stillSafe)).length
 
   // O player do vídeo tem registro próprio (videos.json): volta com o mesmo id
   // que a entrada guarda, ou sai com o arquivo que deixou de existir.
@@ -418,7 +434,7 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
     restored: true,
     pieces: pieces.size,
     items,
-    conflicts: conflictCount(records, part),
+    conflicts: conflictCount(records, part) + late,
     ...(conflictLabels.length > 0 ? { conflictLabels } : {}),
   }
 }

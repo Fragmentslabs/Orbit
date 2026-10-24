@@ -486,11 +486,27 @@ async function journalEntryFiles(entry: MediaEntry): Promise<void> {
  * ARQUIVOS são do chamador (o diário os restaura antes); aqui é só o índice e o
  * aviso às janelas, inclusive aos cards de artefato/documento já na tela.
  */
-export async function restoreMediaEntries(records: Array<{ id: string; before: MediaEntry | null }>): Promise<void> {
-  if (records.length === 0) return
+export async function restoreMediaEntries(
+  records: Array<{ id: string; before: MediaEntry | null }>,
+  /** Revalida cada entrada DENTRO da trava do índice, logo antes de trocar:
+   *  quem decidiu que era seguro leu o índice antes, e outra conversa pode ter
+   *  gravado no meio. A entrada recusada fica como está. */
+  stillSafe?: (id: string, current: MediaEntry | null) => boolean,
+): Promise<Set<string>> {
+  const skipped = new Set<string>()
+  if (records.length === 0) return skipped
   const wanted = new Map(records.map((r) => [r.id, r.before]))
   await withIndexLock(async () => {
     const entries = await readIndex()
+    if (stillSafe) {
+      const byId = new Map(entries.map((e) => [e.id, e]))
+      for (const id of [...wanted.keys()]) {
+        if (!stillSafe(id, byId.get(id) ?? null)) {
+          wanted.delete(id)
+          skipped.add(id)
+        }
+      }
+    }
     const next: MediaEntry[] = []
     for (const entry of entries) {
       if (!wanted.has(entry.id)) {
@@ -506,8 +522,8 @@ export async function restoreMediaEntries(records: Array<{ id: string; before: M
     await writeIndex(next)
   })
   notifyMediaChanged()
-  for (const { before } of records) {
-    if (!before) continue
+  for (const { id, before } of records) {
+    if (!before || skipped.has(id)) continue
     const kind = mediaKind(before)
     if (kind !== 'artifact' && kind !== 'document') continue
     const artifactId = kind === 'document' ? `${documentBase(before.id)}.html` : before.id
@@ -515,6 +531,7 @@ export async function restoreMediaEntries(records: Array<{ id: string; before: M
       if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId, revision: before.revision ?? 1 })
     }
   }
+  return skipped
 }
 
 /**
