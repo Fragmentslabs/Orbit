@@ -44,7 +44,7 @@ vi.mock('../subchats', () => ({
 }))
 
 const { createSubchatTools } = await import('./subchats')
-const { withWorkspaceLock } = await import('../session/workspace-lock')
+const { currentTurnWrites, recordToolWrite, runWithWriteScope } = await import('../session/write-journal')
 
 type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const exec = (tools: ReturnType<typeof createSubchatTools>, name: 'suggest_subchat' | 'open_subchat' | 'read_subchat' | 'send_to_subchat') =>
@@ -145,25 +145,22 @@ describe('open_subchat', () => {
     expect(String(r)).toContain('already working')
   })
 
-  it('o turno do filho entra na fila da pasta em vez de herdar a trava do pai', async () => {
-    // O filho é outra conversa na mesma pasta e não é esperado pelo pai:
-    // herdando a trava, ele escreveria junto com o pai e seguiria depois que
-    // o pai a soltasse, ao lado do próximo turno da fila.
-    const order: string[] = []
+  it('o filho roda fora do escopo de escrita do pai: o que ele grava não é do pai', async () => {
+    // O filho é outra conversa, com revert próprio, disparado sem await.
     let filho: Promise<void> | undefined
-    mocks.runChat.mockImplementationOnce(async (_win, child) => {
-      filho = withWorkspaceLock(child.directory!, async () => {
-        order.push('filho')
+    // O runChat de verdade abre o escopo do turno do filho.
+    mocks.runChat.mockImplementationOnce(async () => {
+      filho = runWithWriteScope(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        recordToolWrite('/repo/do-filho.ts')
       })
       await filho
     })
-    await withWorkspaceLock('/repo', async () => {
+    await runWithWriteScope(async () => {
       await exec(createSubchatTools(input(), janela), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
-      await new Promise((resolve) => setTimeout(resolve, 20))
-      order.push('pai-saiu')
+      await filho
+      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
     })
-    await filho
-    expect(order).toEqual(['pai-saiu', 'filho'])
   })
 
   it('sem janela não dispara turno nenhum (subagente efêmero)', async () => {
@@ -233,25 +230,23 @@ describe('send_to_subchat', () => {
     expect([String(a), String(b)].filter((t) => t.includes('busy'))).toHaveLength(1)
   })
 
-  it('o turno do filho entra na fila da pasta em vez de herdar a trava do pai', async () => {
-    const order: string[] = []
+  it('a instrução roda fora do escopo de escrita do pai', async () => {
     let filho: Promise<void> | undefined
-    mocks.runChat.mockImplementationOnce(async (_win, child) => {
-      filho = withWorkspaceLock(child.directory!, async () => {
-        order.push('filho')
+    mocks.runChat.mockImplementationOnce(async () => {
+      filho = runWithWriteScope(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        recordToolWrite('/repo/do-filho.ts')
       })
       await filho
     })
-    await withWorkspaceLock('/repo', async () => {
+    await runWithWriteScope(async () => {
       await exec(createSubchatTools(input(), janela), 'send_to_subchat')(
         { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
         {},
       )
-      await new Promise((resolve) => setTimeout(resolve, 20))
-      order.push('pai-saiu')
+      await filho
+      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
     })
-    await filho
-    expect(order).toEqual(['pai-saiu', 'filho'])
   })
 
   it('sem janela não dispara nada', async () => {

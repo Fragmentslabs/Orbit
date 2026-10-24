@@ -27,7 +27,7 @@ import {
   type YtdlpRunResult,
 } from '../ytdlp/run'
 import { cueText, matchLanguage, parseSubtitleFile, timestampedCues, type SubtitleCue } from '../ytdlp/subtitles'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveWritePath, type ToolContext } from './context'
 
 /**
  * Mídia por LINK: baixar vídeo, extrair áudio, ler a transcrição e (com o
@@ -82,7 +82,7 @@ function assertLink(url: string): void {
 
 function outputDirFor(ctx: ToolContext | null, sessionId: string, wanted?: string): string {
   if (!ctx) return chatDir(sessionId)
-  return resolveSafePath(ctx, wanted?.trim() || 'downloads')
+  return resolveWritePath(ctx, wanted?.trim() || 'downloads')
 }
 
 async function pruneStale(outDir: string): Promise<void> {
@@ -649,7 +649,7 @@ export function createYtdlpTools(
           if (ctx) {
             const chosenPath = (input as { savePath?: string }).savePath
             const file = chosenPath
-              ? resolveSafePath(ctx, chosenPath.endsWith('.md') ? chosenPath : `${chosenPath}.md`)
+              ? resolveWritePath(ctx, chosenPath.endsWith('.md') ? chosenPath : `${chosenPath}.md`)
               : path.join(outDir, `${slug}${info.id ? ` [${info.id}]` : ''}.transcript.md`)
             await fs.mkdir(path.dirname(file), { recursive: true })
             await fs.writeFile(file, `# ${label} — ${title}\n\n_${headline}_\n\n${body}\n`)

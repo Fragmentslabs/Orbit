@@ -7,7 +7,7 @@ import { saveDocument } from '../media'
 import { decodeAudioFile } from '../voice/decode'
 import type { SttSegment } from '../voice/engine'
 import { synthesizeToWav, transcribeAudioPcm } from '../voice'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 
 /**
  * Áudio para o agente: transcrever um áudio (anexo ou, no código, um arquivo
@@ -165,7 +165,7 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
       const { url } = await saveAudio(wav, 'wav', { sessionId, name: title || undefined, source: 'chat' })
       let savedTo: string | null = null
       if (savePath && ctx) {
-        const file = resolveSafePath(ctx, savePath.endsWith('.wav') ? savePath : `${savePath}.wav`)
+        const file = resolveWritePath(ctx, savePath.endsWith('.wav') ? savePath : `${savePath}.wav`)
         await fs.mkdir(path.dirname(file), { recursive: true })
         await fs.writeFile(file, wav)
         savedTo = file

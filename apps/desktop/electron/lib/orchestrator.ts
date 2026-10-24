@@ -21,7 +21,7 @@ import { conductorInput } from './orchestrator-conductor'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
-import { withWorkspaceLock } from './session/workspace-lock'
+import { coveredBy, currentTurnWrites, runWithWriteScope } from './session/write-journal'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { agentPrepareStep } from './agent-step'
 import { readJson, writeJson } from './storage'
@@ -58,7 +58,7 @@ import {
 } from './orquestra/worktrees'
 import { raizDoRepositorio } from './worktrees/nucleo'
 import { capture, diff } from './snapshot'
-import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
+import { manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 
 /**
  * OrchestratorEngine (modo Orchestra), em quatro fases:
@@ -189,8 +189,11 @@ async function saveMessages(sessionId: string, messages: ChatMessage[]) {
  * ou delegate_change), sem isso o que ele mudou não aparecia na aba Diff nem
  * podia ser revertido pela mensagem.
  */
+/** Início de cada turno com snapshot aberto — os saves manuais contam daqui. */
+const snapshotStartedAt = new WeakMap<ChatMessage, number>()
+
 async function abrirSnapshot(directory: string, message: ChatMessage) {
-  clearManualSaves(directory)
+  snapshotStartedAt.set(message, Date.now())
   try {
     message.snapshot = { start: await capture(directory) }
   } catch (err) {
@@ -206,7 +209,15 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
     return
   }
   // Saves manuais do painel não são do orquestrador: o revert os preserva.
-  snapshot.manual = [...manualSavesUnder(directory)]
+  const since = snapshotStartedAt.get(message) ?? 0
+  snapshot.manual = [...manualSavesUnder(directory, since)]
+  // Autoria para o revert: o que as tools do turno (e dos workers que ele
+  // esperou) gravaram, e o que as de outras conversas gravaram no intervalo.
+  const writes = currentTurnWrites(directory)
+  if (writes) {
+    snapshot.authored = writes.authored
+    snapshot.others = writes.others
+  }
   try {
     const end = await capture(directory)
     if (end === snapshot.start) {
@@ -214,9 +225,11 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
       return
     }
     const changes = await diff(directory, snapshot.start, end)
-    // O que a pessoa salvou à mão durante o turno não é obra do orquestrador.
-    const manual = manualSavesUnder(directory)
-    const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
+    // O que a pessoa salvou à mão durante o turno, e o que outra conversa
+    // gravou na pasta no mesmo intervalo, não é obra do orquestrador.
+    const notAgent = manualSavesUnder(directory, since)
+    for (const file of changes.files) if (coveredBy(file, writes?.others ?? [])) notAgent.add(file)
+    const files = notAgent.size > 0 ? changes.files.filter((f) => !notAgent.has(f)) : changes.files
     if (files.length === 0) {
       snapshot.verified = 'unchanged'
       // A pasta mudou só por save manual: guarda a árvore final para o revert
@@ -227,7 +240,7 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
     snapshot.verified = 'changed'
     snapshot.end = end
     snapshot.files = files
-    snapshot.patch = manual.size > 0 ? stripFilesFromPatch(changes.patch, manual) : changes.patch
+    snapshot.patch = notAgent.size > 0 ? stripFilesFromPatch(changes.patch, notAgent) : changes.patch
   } catch (err) {
     console.error('[snapshot] captura final do orquestrador falhou:', err)
     snapshot.verified = 'unknown'
@@ -308,13 +321,9 @@ export function getOrchestrationRunningSessionIds(): string[] {
 
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  const turn = () => withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input))
-  if (!input.directory) return turn()
-  // O turno da orquestra também é um turno de código na pasta: sem a trava,
-  // ele captura/diffa enquanto um worker (ou outra conversa) escreve. Os
-  // workers herdam o contexto e são reentrantes — fazem parte deste trabalho.
-  emit(win, { type: 'status', sessionId: input.sessionId, status: 'submitted' })
-  return withWorkspaceLock(input.directory, turn)
+  // Escopo de escrita do turno: os workers que ele espera abrem escopos
+  // filhos, então o que eles gravam conta também como obra deste turno.
+  return runWithWriteScope(() => withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input)))
 }
 
 async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {

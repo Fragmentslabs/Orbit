@@ -669,6 +669,14 @@ export interface AssistantSnapshot {
    *  à pasta, com '/'). O turno não os reverte — são trabalho dela, não do
    *  agente; o revert os reporta como mantidos. */
   manual?: string[]
+  /** Caminhos (relativos, '/'; uma pasta cobre o que há dentro) que as
+   *  ferramentas de escrita do turno gravaram — a autoria que o revert usa.
+   *  Ausente em turnos anteriores ao diário: aí todo o diff conta como do
+   *  turno. */
+  authored?: string[]
+  /** Caminhos que as ferramentas de OUTRAS conversas gravaram nesta pasta
+   *  enquanto o turno rodava — fora do revert dele. */
+  others?: string[]
   /** true quando o rastreamento do filesystem falhou neste turno (start/end
    *  não capturados) — a UI avisa que as alterações não foram registradas. */
   failed?: boolean

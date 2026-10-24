@@ -28,7 +28,7 @@ import { resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitl
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { estimateTokens, maxStepsFor } from './context-budget'
 import { createStepPreparer } from './agent-step'
-import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
+import { manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
 import { t as mainT } from './i18n'
 import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
@@ -39,7 +39,7 @@ import { buildProviderOptions, interleavedReasoningField, normalizeMessages } fr
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
 import { bindMediaJournal, closeMediaJournal, runWithMediaJournal } from './session/media-journal'
-import { withWorkspaceLock } from './session/workspace-lock'
+import { coveredBy, currentTurnWrites, runWithWriteScope } from './session/write-journal'
 import {
   attachArtifactMessage,
   attachDocumentMessage,
@@ -1313,18 +1313,14 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   // O diário de mídia do turno (peças e galeria) é o que deixa o revert da
   // mensagem desfazer o que o agente produziu fora da pasta de trabalho.
-  const turn = () =>
+  // O diário de escrita registra o que as tools do turno gravaram na pasta
+  // de trabalho: é a autoria que o revert usa, sem depender de nenhum outro
+  // turno estar parado. Duas conversas na mesma pasta rodam em paralelo.
+  return runWithWriteScope(() =>
     withProviderSession(input.sessionId, () =>
       runWithMediaJournal(input.sessionId, () => runChatTurn(win, input)),
-    )
-  // Um turno de código segura a pasta até terminar: sem isto, dois turnos na
-  // mesma pasta (duas conversas, rotina + chat, orquestrador + worker)
-  // escrevem um no snapshot do outro e o revert de um leva junto o trabalho
-  // do outro. A trava é reentrante para subchat/worker/loop do MESMO turno.
-  if (input.mode !== 'code' || !input.directory) return turn()
-  // Feedback imediato também enquanto espera a pasta de outro turno.
-  emit(win, { type: 'status', sessionId: input.sessionId, status: 'submitted' })
-  return withWorkspaceLock(input.directory, turn)
+    ),
+  )
 }
 
 async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
@@ -1637,6 +1633,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // captura acontece DEPOIS da criação do context (verify_changes difere o
     // estado atual contra este start).
     let turnSnapshot: TurnSnapshot | undefined
+    let turnStartedAt = Date.now()
     const toolContext: ToolContext | null =
       input.mode === 'code' && input.directory
         ? {
@@ -1654,11 +1651,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     // Snapshot start: estado do filesystem antes do stream (revert per-message)
     if (toolContext) {
-      // Zera o registro de saves manuais ANTES de capturar. O que a pessoa
-      // salvou entre turnos já está dentro do `start` e nunca apareceria no
-      // diff; mantê-lo registrado só criaria o erro inverso — o agente editar
-      // esse mesmo arquivo agora e a alteração dele ser subtraída do registro.
-      clearManualSaves(toolContext.directory)
+      // Saves manuais contam a partir DAQUI: o que a pessoa salvou antes já
+      // está dentro do `start` e nunca apareceria no diff.
+      turnStartedAt = Date.now()
       try {
         turnSnapshot = { start: await capture(toolContext.directory) }
         assistantMessage.snapshot = { start: turnSnapshot.start }
@@ -1804,8 +1799,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         // painel durante o turno também entra no diff. Sem subtrair, o
         // registro verificado credita ao modelo um arquivo que ele nunca
         // tocou — e é essa linha que sustenta a verificação anti-overclaim.
-        const manual = manualSavesUnder(toolContext.directory)
-        const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
+        const notAgent = manualSavesUnder(toolContext.directory, turnStartedAt)
+        // E o que as tools de OUTRA conversa gravaram nesta pasta no mesmo
+        // intervalo — os turnos não se esperam mais, então o diff da pasta
+        // pode trazer o trabalho delas.
+        const others = currentTurnWrites(toolContext.directory)?.others ?? []
+        for (const file of changes.files) if (coveredBy(file, others)) notAgent.add(file)
+        const files = notAgent.size > 0 ? changes.files.filter((f) => !notAgent.has(f)) : changes.files
         // Só sobraram arquivos do usuário: do ponto de vista do turno, o
         // agente não escreveu nada — que é exatamente o que 'unchanged' diz.
         // O `end` vai junto porque a pasta MUDOU (saves manuais): o revert de
@@ -1818,7 +1818,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // O patch não é só bookkeeping: alimenta a aba Diff e a lista de
           // arquivos do card. Filtrar só `files` deixaria o arquivo do usuário
           // fora do registro e ainda visível na tela como obra do agente.
-          patch: manual.size > 0 ? stripFilesFromPatch(changes.patch, manual) : changes.patch,
+          patch: notAgent.size > 0 ? stripFilesFromPatch(changes.patch, notAgent) : changes.patch,
         }
       } catch (err) {
         console.error('[snapshot] captura final falhou:', err)
@@ -2535,7 +2535,16 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       assistantMessage.snapshot.verified = endSnapshot.state
       // O que a pessoa salvou à mão no painel durante o turno não é do agente:
       // o revert preserva esses caminhos em vez de desfazê-los.
-      if (toolContext) assistantMessage.snapshot.manual = [...manualSavesUnder(toolContext.directory)]
+      if (toolContext) {
+        assistantMessage.snapshot.manual = [...manualSavesUnder(toolContext.directory, turnStartedAt)]
+        // Autoria para o revert: o que as tools deste turno gravaram, e o que
+        // as de outras conversas gravaram enquanto ele rodava.
+        const writes = currentTurnWrites(toolContext.directory)
+        if (writes) {
+          assistantMessage.snapshot.authored = writes.authored
+          assistantMessage.snapshot.others = writes.others
+        }
+      }
       if (endSnapshot.state === 'changed') {
         assistantMessage.snapshot.end = endSnapshot.end
         assistantMessage.snapshot.files = endSnapshot.files

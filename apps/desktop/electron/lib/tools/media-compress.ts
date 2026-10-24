@@ -17,6 +17,7 @@ import {
 } from '../media-compress/plan'
 import { probeMedia } from '../video/ffmpeg'
 import { resolveSafePath, type ToolContext } from './context'
+import { recordToolWrite } from '../session/write-journal'
 
 /**
  * Compressão de vídeo e áudio para o agente.
@@ -212,6 +213,8 @@ export function createMediaTools(
         } else {
           output = path.join(chatCompressDir(scope.sessionId), `${base}-${randomBytes(3).toString('hex')}.${container}`)
         }
+        // No código o resultado cai na pasta de trabalho: é escrita do turno.
+        if (ctx) recordToolWrite(output)
 
         const report = await compressMedia({
           file,

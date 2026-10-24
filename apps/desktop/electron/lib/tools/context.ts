@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { recordToolWrite } from '../session/write-journal'
 
 /** Snapshot do turno em andamento (modo código): tree hash do filesystem
  * capturado antes do stream começar. Preenchido pelo chat-engine DEPOIS de
@@ -55,6 +56,18 @@ export function resolveSafePath(ctx: ToolContext, target: string): string {
       `Access denied: ${resolved} is outside the working folders (${roots.join(', ')})`,
     )
   }
+  return resolved
+}
+
+/**
+ * `resolveSafePath` para um caminho que a ferramenta vai GRAVAR (criar,
+ * sobrescrever, apagar, mover para cá) — arquivo ou pasta inteira. Registra
+ * no diário de escrita do turno: é a prova de autoria que o revert usa para
+ * separar o que o agente escreveu do que mudou na pasta por outra via.
+ */
+export function resolveWritePath(ctx: ToolContext, target: string): string {
+  const resolved = resolveSafePath(ctx, target)
+  recordToolWrite(resolved)
   return resolved
 }
 

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { assertSafeSvg, recolorSvg, resizeSvg, svgInfo } from '../svg-ops'
 import { vectorizeImage } from '../vectorize'
 import { getMediaEntry, mediaIdFromUrl, readMedia, saveMedia } from '../media'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
@@ -60,7 +60,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
     let savedTo: string | null = null
     if (savePath && ctx) {
       try {
-        const target = resolveSafePath(ctx, savePath)
+        const target = resolveWritePath(ctx, savePath)
         await fsp.mkdir(path.dirname(target), { recursive: true })
         await fsp.writeFile(target, markup, 'utf8')
         savedTo = savePath

@@ -13,36 +13,40 @@ import path from 'node:path'
  * de montar o veredito do turno.
  */
 
-/** Caminhos absolutos, normalizados pelo `path.resolve`. */
-const saved = new Set<string>()
+/**
+ * Caminho absoluto (normalizado pelo `path.resolve`) → instante do último
+ * save. Por instante, e não "limpa no começo do turno": dois turnos podem
+ * rodar ao mesmo tempo na mesma pasta, e o começo de um apagaria os saves que
+ * a pessoa fez durante o outro.
+ */
+const saved = new Map<string, number>()
+/** Ninguém consulta saves mais velhos que o turno mais longo. */
+const SAVE_TTL_MS = 24 * 60 * 60 * 1000
 
-export function recordManualSave(absPath: string): void {
-  saved.add(path.resolve(absPath))
+export function recordManualSave(absPath: string, at = Date.now()): void {
+  saved.set(path.resolve(absPath), at)
+  const cutoff = at - SAVE_TTL_MS
+  for (const [file, time] of saved) if (time < cutoff) saved.delete(file)
 }
 
 /**
- * Os caminhos salvos à mão dentro deste diretório, relativos a ele e com
- * separador '/' — o mesmo formato em que o `git diff --name-only` devolve.
+ * Os caminhos salvos à mão dentro deste diretório desde `since` (o começo do
+ * turno), relativos a ele e com separador '/' — o mesmo formato em que o
+ * `git diff --name-only` devolve. O que foi salvo ANTES do turno já está no
+ * `start` e nunca aparece no diff; contá-lo criaria o erro inverso — o agente
+ * editar esse arquivo agora e a alteração dele ser subtraída do registro.
  */
-export function manualSavesUnder(directory: string): Set<string> {
+export function manualSavesUnder(directory: string, since = 0): Set<string> {
   const root = path.resolve(directory)
   const result = new Set<string>()
-  for (const abs of saved) {
+  for (const [abs, at] of saved) {
+    if (at < since) continue
     const rel = path.relative(root, abs)
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
       result.add(rel.replace(/\\/g, '/'))
     }
   }
   return result
-}
-
-/** Limpa o registro do diretório — chamado ao fechar o turno. */
-export function clearManualSaves(directory: string): void {
-  const root = path.resolve(directory)
-  for (const abs of [...saved]) {
-    const rel = path.relative(root, abs)
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) saved.delete(abs)
-  }
 }
 
 /** Só para teste: zera tudo entre casos. */

@@ -11,7 +11,8 @@ import { renderEdl } from '../video/render'
 import { registerVideo } from '../video/store'
 import { renderTimeline } from '../video/timeline'
 import { editDirFor, packTranscript, readCachedTranscript, sec, transcribeVideo } from '../video/transcript'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
+import { recordToolWrite } from '../session/write-journal'
 
 /**
  * Edição de vídeo para o agente (EDL).
@@ -170,6 +171,7 @@ export function createVideoTools(
         }
         const packed = packTranscript(entries)
         const packedFile = path.join(editDirFor(entries[0].file), 'takes_packed.md')
+        recordToolWrite(packedFile)
         await fs.mkdir(path.dirname(packedFile), { recursive: true })
         await fs.writeFile(packedFile, packed)
         const head = `${notes.join(' · ')}\nSaved to ${rel(packedFile)}.\n\n`
@@ -267,7 +269,8 @@ export function createVideoTools(
           : fromAttachment
             ? path.join(ctx.directory, 'edit')
             : editDirFor(firstSource)
-        resolveSafePath(ctx, editDir)
+        // A pasta da edição inteira é escrita do turno (render, EDL, prévias).
+        resolveWritePath(ctx, editDir)
         // No chat cada vídeo final tem nome próprio (cada um é um item da
         // galeria); a prévia é uma só, sobrescrita.
         const finalName = scope.chat ? `video-${Date.now().toString(36)}.mp4` : 'final.mp4'

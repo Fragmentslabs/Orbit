@@ -11,7 +11,7 @@ import { addVideoToGallery } from '../video/video-gallery'
 import { VIDEO_GUIDES } from '../video/guide'
 import { panelMotionPreview } from '../panel-browser'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { createVideoTools } from './video'
 import {
   ASSET_SOURCE,
@@ -384,7 +384,7 @@ export function createMotionTools(
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         if ((output || audio) && !project) throw new Error('`output` and `audio` need a working folder (code mode)')
-        const exported = output ? resolveSafePath(project!, output) : null
+        const exported = output ? resolveWritePath(project!, output) : null
         const ext = format ?? 'mp4'
         // A saída mora ao lado das composições da conversa, FORA da pasta da peça
         // (que é observada pela recarga ao vivo).

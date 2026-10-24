@@ -8,7 +8,7 @@ import { fillForm, mergePdfs, parsePageRange, readFormFields, readMetadata, tran
 import { DEFAULT_IMAGE_MIN_SIZE, extractPdfImages } from '../pdf'
 import { saveDerivedPdf, saveMedia } from '../media'
 import { readSessionDocument, readSessionDocumentBytes } from '../session-documents'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
@@ -58,7 +58,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
     let savedTo: string | null = null
     if (savePath && ctx) {
       try {
-        const target = resolveSafePath(ctx, savePath)
+        const target = resolveWritePath(ctx, savePath)
         await fsp.mkdir(path.dirname(target), { recursive: true })
         await fsp.writeFile(target, bytes)
         savedTo = savePath

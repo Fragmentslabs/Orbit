@@ -19,7 +19,7 @@ import {
   panelScreenshot,
   panelType,
 } from '../panel-browser'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { describeImage } from '../vision'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
@@ -281,7 +281,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           let saved = ''
           if (savePath) {
             const saveName = savePath.replace(/\.[^/.]+$/, '') + `.${outFormat}`
-            const target = resolveSafePath(ctx, saveName)
+            const target = resolveWritePath(ctx, saveName)
             await fsp.mkdir(path.dirname(target), { recursive: true })
             await fsp.writeFile(target, image)
             saved = ` Saved to ${saveName}.`

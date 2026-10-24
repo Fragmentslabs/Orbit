@@ -6,7 +6,7 @@ import { editDocx, readDocxParagraphs, type EditResult } from '../docx-edit'
 import { saveDerivedDocx } from '../media'
 import { readSessionDocument, readSessionDocumentBytes } from '../session-documents'
 import { documentKindOf } from '../document-pages'
-import { resolveSafePath, type ToolContext } from './context'
+import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
@@ -161,7 +161,7 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
         let savedTo: string | null = null
         if (savePath && ctx) {
           try {
-            const target = resolveSafePath(ctx, savePath)
+            const target = resolveWritePath(ctx, savePath)
             await fsp.mkdir(path.dirname(target), { recursive: true })
             await fsp.writeFile(target, edited.bytes)
             savedTo = savePath

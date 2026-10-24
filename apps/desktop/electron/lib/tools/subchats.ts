@@ -7,7 +7,7 @@ import { newRequestId } from '../ask-broker'
 import { getRunningSessionIds, runChat } from '../chat-engine'
 import { broadcastSessionEvent } from '../companion-server'
 import { createSubchatRecord, findSubchat, readSubchatMessages } from '../subchats'
-import { outsideWorkspaceLocks } from '../session/workspace-lock'
+import { detachFromTurn } from '../session/write-journal'
 
 /**
  * Primeira mensagem do chat novo, na voz de quem autorizou a abertura: o filho
@@ -33,11 +33,12 @@ const FROM_PARENT = {
 
 /**
  * Dispara um turno no filho, em paralelo ao do pai e sem esperar por ele. O
- * filho é OUTRA conversa na mesma pasta: entra na fila da pasta (e começa
- * quando o pai terminar) em vez de herdar a trava do pai.
+ * filho é OUTRA conversa na mesma pasta, com revert próprio: roda fora do
+ * escopo de escrita do pai, senão o que ele grava contaria como obra do turno
+ * do pai.
  */
 function startChildTurn(input: SendMessageInput, win: BrowserWindow, child: SessionInfo, text: string): void {
-  void outsideWorkspaceLocks(() => runChat(win, {
+  void detachFromTurn(() => runChat(win, {
     sessionId: child.id,
     text,
     providerId: input.providerId,

@@ -2,7 +2,7 @@ import { tool } from 'ai'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { IGNORED_DIRS, resolveSafePath, type ToolContext } from './context'
+import { IGNORED_DIRS, resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import {
   documentHeader,
   extractDocumentFile,
@@ -82,7 +82,7 @@ export function createWriteTool(ctx: ToolContext) {
       content: z.string().describe('Full file content'),
     }),
     execute: async ({ filePath, content }) => {
-      const file = resolveSafePath(ctx, filePath)
+      const file = resolveWritePath(ctx, filePath)
       await fs.mkdir(path.dirname(file), { recursive: true })
       await fs.writeFile(file, content, 'utf8')
       return `File written: ${file} (${content.length} characters)${await afterEditNote(ctx, file)}`
@@ -124,7 +124,7 @@ export function createEditTool(ctx: ToolContext) {
       replaceAll: z.boolean().optional().describe('Replace all occurrences'),
     }),
     execute: async ({ filePath, oldString, newString, replaceAll }) => {
-      const file = resolveSafePath(ctx, filePath)
+      const file = resolveWritePath(ctx, filePath)
       const content = await fs.readFile(file, 'utf8')
       if (oldString === newString) throw new Error('oldString and newString are identical')
 

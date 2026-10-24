@@ -2,7 +2,6 @@ import path from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  clearManualSaves,
   manualSavesUnder,
   recordManualSave,
   resetManualSaves,
@@ -39,12 +38,12 @@ describe('manualSavesUnder', () => {
     expect(manualSavesUnder(root).size).toBe(0)
   })
 
-  it('clearManualSaves limpa só o diretório pedido', () => {
-    recordManualSave(path.join(root, 'a.ts'))
-    recordManualSave(path.resolve('/outro', 'b.ts'))
-    clearManualSaves(root)
-    expect(manualSavesUnder(root).size).toBe(0)
-    expect(manualSavesUnder(path.resolve('/outro'))).toEqual(new Set(['b.ts']))
+  it('conta só os saves desde o começo do turno — e não apaga os de outro turno', () => {
+    recordManualSave(path.join(root, 'antes.ts'), 1_000)
+    recordManualSave(path.join(root, 'durante.ts'), 2_000)
+    // Turno que começou em 1500 vê só o save de 2000; um que começou antes vê os dois.
+    expect(manualSavesUnder(root, 1_500)).toEqual(new Set(['durante.ts']))
+    expect(manualSavesUnder(root, 500)).toEqual(new Set(['antes.ts', 'durante.ts']))
   })
 })
 
