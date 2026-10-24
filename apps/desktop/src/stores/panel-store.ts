@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides"
 
 export interface PanelTab {
   id: string
@@ -29,6 +29,13 @@ export interface PanelTab {
   /** Caminho ABSOLUTO da entrada — o que a nota de motion entrega ao agente
    *  (a entrada sozinha, "index.html", não diz de qual composição se fala). */
   motionPath?: string
+  /** Aba Slides: id do registro (sld_xxx) do deck que a aba apresenta. */
+  slidesId?: string
+  /** Caminho da entrada do deck DENTRO da pasta registrada — é o que a URL
+   *  `orbit-slides://<id>/<caminho-relativo>` serve. */
+  slidesEntry?: string
+  /** Caminho ABSOLUTO da entrada — o que a nota de slides entrega ao agente. */
+  slidesPath?: string
   /** Aba Design: id do registro (dsg_xxx) do canvas que a aba renderiza. */
   designId?: string
   /** Caminho ABSOLUTO da pasta do canvas — o que a nota de design entrega ao agente. */
@@ -157,6 +164,13 @@ export type PanelEvent =
    * não há `entry`: a aba lê `canvas.json` e desenha todos os artboards.
    */
   | { type: "design"; id: string; title: string; sessionId?: string; path?: string }
+  /**
+   * A tool registrou um deck de slides e quer o palco no painel. `id` é o
+   * registro do main (sld_xxx), `entry` o arquivo dentro da pasta que o scheme
+   * serve e `title` o nome exibível. `sessionId` é opcional: sem ele a aba cai
+   * no balde do chat ativo (resolvido no App).
+   */
+  | { type: "slides"; id: string; entry: string; title: string; sessionId?: string; path?: string }
 
 /** Registro do browser do agente por sessão de chat/task. */
 export interface AgentBrowserEntry {
@@ -190,6 +204,8 @@ interface PanelState {
   closeMotionTabs: (motionIds: string[]) => void
   /** Fecha as abas dos canvas de design que foram excluídos (em qualquer conversa). */
   closeDesignTabs: (designIds: string[]) => void
+  /** Fecha as abas dos decks que foram excluídos (ver closeDesignTabs). */
+  closeSlidesTabs: (slidesIds: string[]) => void
   /** Fecha as abas dos artefatos que foram excluídos (em qualquer conversa). */
   closeArtifactTabs: (artifactIds: string[]) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
@@ -205,6 +221,10 @@ interface PanelState {
    *  evento `design` do main (a tool registrou a pasta) — nunca pelo seletor.
    *  Reabrir o MESMO canvas foca a aba onde ela estiver. Espelha openMotionTab. */
   openDesignTab: (ref: { id: string; title: string; sessionId?: string; path?: string }) => void
+  /** Abre (ou reaproveita) o palco de um deck de slides. Chamada pelo evento
+   *  `slides` do main (a tool registrou a pasta) — nunca pelo seletor. Reabrir
+   *  o MESMO deck foca a aba onde ela estiver. Espelha openDesignTab. */
+  openSlidesTab: (ref: { id: string; entry: string; title: string; sessionId?: string; path?: string }) => void
   /** Abre (ou reaproveita) a aba que APRESENTA um canvas navegando entre as
    *  telas, começando em `file`. Nasce do botão Play do artboard; `fullscreen`
    *  leva o estado do editor para a apresentação abrir no mesmo modo. */
@@ -379,6 +399,22 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const activeTabBySession = { ...state.activeTabBySession }
         for (const [key, tabs] of Object.entries(state.tabsBySession)) {
           const next = tabs.filter((t) => !(t.type === "design" && t.designId && gone.has(t.designId)))
+          tabsBySession[key] = next
+          if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
+            activeTabBySession[key] = next.length > 0 ? next[0].id : null
+          }
+        }
+        return { tabsBySession, activeTabBySession }
+      }),
+
+    closeSlidesTabs: (slidesIds) =>
+      set((state) => {
+        if (slidesIds.length === 0) return state
+        const gone = new Set(slidesIds)
+        const tabsBySession: typeof state.tabsBySession = {}
+        const activeTabBySession = { ...state.activeTabBySession }
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.filter((t) => !(t.type === "slides" && t.slidesId && gone.has(t.slidesId)))
           tabsBySession[key] = next
           if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
             activeTabBySession[key] = next.length > 0 ? next[0].id : null
@@ -583,6 +619,67 @@ export const usePanelStore = create<PanelState>((set, get) => {
           sessionId: tabSession(bucket),
           designId: ref.id,
           designPath: ref.path,
+        }
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
+        }
+      }),
+
+    // Mesmo raciocínio do openDesignTab: o deck é um recurso do PROJETO
+    // (conversa, no modo chat), não de uma mensagem — a aba nasce do evento do
+    // main que registrou a pasta, e o mesmo deck é UMA aba, onde ela estiver.
+    openSlidesTab: (ref) =>
+      set((state) => {
+        const bucket = ref.sessionId ?? ORPHAN_KEY
+        const tabsBySession = { ...state.tabsBySession }
+        for (const [key, tabs] of Object.entries(tabsBySession)) {
+          const existing = tabs.find((t) => t.type === "slides" && t.slidesId === ref.id)
+          if (!existing) continue
+          if (key === bucket) {
+            const refreshed: PanelTab = {
+              ...existing,
+              slidesEntry: ref.entry,
+              slidesPath: ref.path ?? existing.slidesPath,
+            }
+            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
+            return {
+              rightPanelOpen: true,
+              selectorOpen: false,
+              tabsBySession,
+              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
+            }
+          }
+          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
+          // está — o painel só mostra as abas do chat ativo.
+          const rest = tabs.filter((t) => t !== existing)
+          if (rest.length > 0) tabsBySession[key] = rest
+          else delete tabsBySession[key]
+          const moved: PanelTab = {
+            ...existing,
+            title: ref.title,
+            slidesEntry: ref.entry,
+            slidesPath: ref.path ?? existing.slidesPath,
+            sessionId: tabSession(bucket),
+          }
+          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
+          return {
+            rightPanelOpen: true,
+            selectorOpen: false,
+            tabsBySession,
+            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `slides-${nextTabId()}`,
+          type: "slides",
+          title: ref.title,
+          sessionId: tabSession(bucket),
+          slidesId: ref.id,
+          slidesEntry: ref.entry,
+          slidesPath: ref.path,
         }
         return {
           rightPanelOpen: true,
@@ -911,6 +1008,18 @@ export const usePanelStore = create<PanelState>((set, get) => {
             path: event.path,
           })
           break
+        case "slides":
+          markActive()
+          // O deck é o que o usuário pediu para ver — o painel abre sozinho,
+          // como no motion e no design.
+          get().openSlidesTab({
+            id: event.id,
+            entry: event.entry,
+            title: event.title,
+            sessionId: event.sessionId,
+            path: event.path,
+          })
+          break
         case "activity": {
           usePanelStore.getState().pushActivity(event.label)
           // Mantém o indicador da sessão fresco enquanto o agente mexe no browser.
@@ -1004,6 +1113,9 @@ function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): v
       motionPath: t.motionPath,
       designId: t.designId,
       designPath: t.designPath,
+      slidesId: t.slidesId,
+      slidesPath: t.slidesPath,
+      slidesEntry: t.slidesEntry,
       documentId: t.documentId,
       url: t.url,
       sourceDocId: t.sourceDocId,

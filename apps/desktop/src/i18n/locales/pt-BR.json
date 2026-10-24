@@ -748,6 +748,10 @@
       "design": {
         "label": "Design",
         "description": "Canvas com os artboards de um design"
+      },
+      "slides": {
+        "label": "Slides",
+        "description": "Apresente um deck de slides produzido pelo assistente"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -2185,7 +2189,8 @@
       "audio": "Áudio",
       "motion": "Peça",
       "video": "Vídeo",
-      "design": "Design"
+      "design": "Design",
+      "slides": "Apresentação"
     },
     "period": {
       "all": "Qualquer data",
@@ -2214,6 +2219,7 @@
       "confirmAll": "Excluir tudo",
       "motionNote": "{{count}} peça(s) de motion incluída(s): a pasta da composição (com os vídeos, GIFs e áudios copiados para ela) também é excluída. Os vídeos que você renderizou ficam.",
       "designNote": "{{count}} canvas de design incluído(s): a pasta com os artboards também é excluída.",
+      "slidesNote": "{{count}} apresentação(ões) incluída(s): a pasta do deck (o index.html) também é excluída. Os PDFs que você baixou ficam.",
       "allVersions": "Excluir as {{count}} versões",
       "onlyThis": "Excluir só a v{{version}}"
     }
@@ -3193,5 +3199,31 @@
   },
   "fullscreen": {
     "agentActions": "Ações do agente"
+  },
+  "slides": {
+    "exportPdf": "Baixar em PDF",
+    "exporting": "Gerando o PDF…",
+    "exportFailed": "Não foi possível gerar o PDF deste deck.",
+    "dismiss": "Fechar",
+    "unavailable": "Nenhum deck aberto. Peça uma apresentação ao agente.",
+    "loading": "Carregando o deck…",
+    "loadFailed": "O deck não carregou",
+    "loadFailedHttp": "O deck respondeu {{status}}: {{text}}",
+    "retry": "Tentar de novo",
+    "reload": "Recarregar",
+    "toggleList": "Lista de slides",
+    "toggleNotes": "Notas do apresentador",
+    "previous": "Slide anterior",
+    "next": "Próximo slide",
+    "counter": "{{index}} / {{total}}",
+    "notes": "Notas do apresentador",
+    "noNotes": "Este slide não tem notas.",
+    "slidesCount_one": "{{count}} slide",
+    "slidesCount_other": "{{count}} slides",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
+    "openTab": "Abrir o deck no painel",
+    "deck": "Deck de slides",
+    "gone": "Este deck não está mais no registro — peça para o agente escrevê-lo de novo."
   }
 }

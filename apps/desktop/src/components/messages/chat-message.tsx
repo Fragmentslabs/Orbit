@@ -17,6 +17,7 @@ import {
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { MotionPartView } from "@/src/components/ai/motion-part"
 import { DesignPartView } from "@/src/components/ai/design-part"
+import { SlidesPartView } from "@/src/components/ai/slides-part"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImageGroupView } from "@/src/components/ai/image"
 import { ActionsGroup } from "@/src/components/ai/actions-group"
@@ -155,6 +156,10 @@ const RENDER_PROPRIO = new Set([
   "design_write",
   "design_edit",
   "design_preview",
+  // E o deck de slides, pelo mesmo motivo: fechar a aba era perder o deck de
+  // vista (o Slides tab não tem outra porta na conversa).
+  "slides_preview",
+  "slides_write",
 ])
 
 function segmentParts(parts: MessagePart[]): Segment[] {
@@ -260,6 +265,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           segment.part.tool === "design_edit" ||
           segment.part.tool === "design_preview" ? (
           <DesignPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.tool === "slides_preview" || segment.part.tool === "slides_write" ? (
+          <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update" ? (
           <McpProposalCard key={segment.id} part={segment.part} />
         ) : // O card do artefato já é o resultado destas tools — o chip genérico

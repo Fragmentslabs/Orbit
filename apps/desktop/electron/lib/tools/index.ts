@@ -47,6 +47,8 @@ import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createChatSlidesTools } from './slides-chat'
+import { createSlidesTools } from './slides'
 import { createYtdlpTools } from './ytdlp'
 import { createChatDesignTools } from './design-chat'
 import { createPanelTools } from './panel'
@@ -200,6 +202,9 @@ export function buildToolSet(
       // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
       // aba Design, ao vivo.
       Object.assign(tools, createChatDesignTools({ sessionId: input.sessionId }))
+      // Slides: o deck inteiro entra na CHAMADA da tool (uma por slide), como o
+      // create_artifact — o main monta o arquivo, registra e abre a aba.
+      Object.assign(tools, createChatSlidesTools({ sessionId: input.sessionId }))
       // Fontes externas (biblioteca do Orbit): instalar não pede permissão nem
       // escreve no projeto — o scheme orbit-font:// entrega o arquivo ao
       // artboard e à composição. Sem toggle: não expõe nada que o app já não
@@ -370,6 +375,10 @@ export function buildToolSet(
   // da sessão principal.
   if (ctx && input.orchestrationRole !== 'worker') {
     Object.assign(tools, createDesignTools(ctx, { sessionId: input.sessionId }))
+    // Slides: um arquivo por deck (index.html com <section class="slide">), sem
+    // canvas.json e sem coordenadas — o mesmo molde do design, com metade da
+    // escrita. Workers ficam de fora: o painel é um recurso visível.
+    Object.assign(tools, createSlidesTools(ctx, { sessionId: input.sessionId }))
     Object.assign(tools, createFontTools())
   }
 

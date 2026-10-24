@@ -694,6 +694,30 @@ export const designApi = {
 }
 
 /**
+ * Decks de slides do palco (`orbit-slides://`). Espelha o designApi, ainda mais
+ * enxuto: o deck é UM arquivo e não há edição pela aba — quem escreve é o
+ * agente, e a aba apresenta.
+ */
+export const slidesApi = {
+  /** Reabre um deck já registrado. O card manda o `id`, ou o `path` do arquivo
+   *  (modo código) / o `name` do deck com a `sessionId` (modo chat) — o main
+   *  traduz pelo registro. `false` quando o deck saiu do registro. */
+  open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
+    window.ipcRenderer.invoke("slides:open", ref) as Promise<boolean>,
+  /** O arquivo do deck mudou no disco: remonta o palco. */
+  onChanged: (listener: (payload: { id: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("slides:changed", (payload) => listener(payload as { id: string }))
+    return () => window.ipcRenderer.off("slides:changed", wrapper)
+  },
+  /** Baixa o deck em PDF. A impressão é do main, sobre o próprio index.html;
+   *  `canceled` é o usuário desistindo no diálogo, não uma falha. */
+  exportPdf: (id: string, suggestedName?: string) =>
+    window.ipcRenderer.invoke("slides:export", id, suggestedName) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
+}
+
+/**
  * Formatos de saída do render de motion. `-alpha` é o arquivo com transparência:
  * mov (ProRes 4444) para edição, webm (VP9) para web/overlay. Mesma união do
  * `MotionRenderRequest.format` do main — mudar aqui sem mudar lá quebra o IPC.

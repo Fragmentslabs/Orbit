@@ -15,7 +15,7 @@ import {
   type MediaSource,
   type MediaUsage,
   SAFE_VIDEO_MEDIA_ID,
-  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME, FONT_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME, SLIDES_SCHEME, FONT_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
@@ -731,6 +731,18 @@ export function registerSchemePrivileges(): void {
         corsEnabled: true,
       },
     },
+    // Decks de slides (ver slides/slides-store.ts): o palco é servido da pasta
+    // registrada, com o runtime de navegação injetado no <head>. As flags são as
+    // do design — sem `stream`, porque slide não tem faixa de mídia.
+    {
+      scheme: SLIDES_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
     // Biblioteca de fontes do Orbit (ver fonts/store.ts): scheme próprio porque
     // o artboard, a composição de motion e a janela do app declaram o MESMO
     // @font-face, cada um numa origem diferente.
@@ -1145,6 +1157,59 @@ export async function saveDesignMedia(thumb: Buffer | null, meta: SaveDesignMeta
       source: 'chat',
       kind: 'design',
       designId: meta.designId,
+      name: meta.title,
+      thumb: thumb ? id : existing?.thumb,
+      sessionId: meta.sessionId ?? existing?.sessionId,
+      messageId: meta.messageId ?? existing?.messageId,
+      directory: meta.directory ?? existing?.directory,
+      width: meta.width ?? existing?.width,
+      height: meta.height ?? existing?.height,
+    }
+    if (existing) entries[entries.indexOf(existing)] = entry
+    else entries.push(entry)
+    await writeIndex(entries)
+    return entry
+  })
+}
+
+/** O que um deck de slides precisa para entrar na galeria — espelha SaveDesignMeta. */
+export interface SaveSlidesMeta {
+  /** Id do deck no registro do main (`orbit-data/slides.json`). */
+  slidesId: string
+  title: string
+  directory?: string
+  sessionId?: string
+  messageId?: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Registra um DECK de slides na galeria — irmão de `saveDesignMedia`: o conteúdo
+ * é a pasta do deck (um `index.html` só), o registro guarda a capa (o primeiro
+ * slide) e o `slidesId`, e abrir é reabrir a aba Slides.
+ *
+ * O prefixo da capa é `dck_` e não `sld_` de propósito: `sld_` já é o id do
+ * DECK no registro do main, e dois nomes iguais em espaços diferentes viram
+ * confusão na hora de depurar.
+ */
+export async function saveSlidesMedia(thumb: Buffer | null, meta: SaveSlidesMeta): Promise<MediaEntry> {
+  const id = `dck_${meta.slidesId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
+  await fsp.mkdir(artifactsDir(), { recursive: true })
+  const file = path.join(artifactsDir(), id)
+  if (thumb) await fsp.writeFile(file, thumb)
+  return withIndexLock(async () => {
+    const entries = await readIndex()
+    const existing = entries.find((e) => mediaKind(e) === 'slides' && e.slidesId === meta.slidesId)
+    const entry: MediaEntry = {
+      ...existing,
+      id,
+      path: file,
+      size: thumb ? thumb.length : (existing?.size ?? 0),
+      createdAt: existing?.createdAt ?? Date.now(),
+      source: 'chat',
+      kind: 'slides',
+      slidesId: meta.slidesId,
       name: meta.title,
       thumb: thumb ? id : existing?.thumb,
       sessionId: meta.sessionId ?? existing?.sessionId,

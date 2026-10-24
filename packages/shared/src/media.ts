@@ -36,10 +36,12 @@ export interface MediaCredit {
  * composição é uma PASTA do projeto e nada dela é copiado para cá — o registro
  * guarda a capa e o `motionId`, e abrir é reabrir a aba Motion) ou video (um
  * vídeo anexado pelo usuário, ou produzido no chat: o arquivo mora no app, o
- * registro guarda a capa e a URL de reprodução).
+ * registro guarda a capa e a URL de reprodução). Design e slides são irmãos do
+ * motion: o canvas e o deck são PASTAS (do app ou do projeto), nada delas é
+ * copiado para cá além da capa, e abrir é reabrir a aba.
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video" | "design"
+export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video" | "design" | "slides"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -135,6 +137,13 @@ export interface MediaEntry {
    * da capa; abrir é reabrir a aba Design.
    */
   designId?: string
+  /**
+   * Só em decks de slides: o id do deck no registro do main
+   * (`orbit-data/slides.json`). Mesmo contrato de `designId` e `motionId` — a
+   * pasta do deck não é copiada, o registro guarda a capa (o primeiro slide) e
+   * abrir é reabrir a aba Slides.
+   */
+  slidesId?: string
   /**
    * Material da aba Fontes: a pasta da sidebar com que este arquivo é
    * COMPARTILHADO. Ausente = é só da conversa (`sessionId`). É o equivalente, para
@@ -248,6 +257,13 @@ export const MOTION_SCHEME = "orbit-motion"
  */
 export const DESIGN_SCHEME = "orbit-design"
 /**
+ * Decks de slides (pasta: `index.html` com um `<section class="slide">` por
+ * slide, servido com o runtime de navegação injetado). Mesmas flags do design:
+ * o deck é HTML autocontido, mas o runtime conversa com a aba por postMessage e
+ * as fontes da biblioteca exigem CORS.
+ */
+export const SLIDES_SCHEME = "orbit-slides"
+/**
  * Fontes baixadas pelo Orbit (biblioteca em `orbit-data/fonts`). Servidas por
  * arquivo com hash no nome, `corsEnabled` e `Access-Control-Allow-Origin: *`:
  * o artboard, a composição de motion e a própria janela do app (outra origem)
@@ -312,6 +328,7 @@ const KIND_FALLBACK_MIME: Record<MediaKind, string> = {
   document: "text/markdown",
   motion: "text/html",
   design: "text/html",
+  slides: "text/html",
 }
 
 export function mediaMime(entry: Pick<MediaEntry, "id" | "kind">): string {
@@ -345,6 +362,9 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind" | "thumb" | "thum
   // Mesmo caso do motion: o canvas mora na pasta do app, não na galeria — o
   // único byte guardado aqui é a capa.
   if (kind === "design") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
+  // E o deck: o arquivo é o index.html da pasta, servido pelo orbit-slides://;
+  // aqui só existe a capa.
+  if (kind === "slides") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   // O vídeo toca pela URL do player; sem ela (registro sem player) cai na capa.
   if (kind === "video") return entry.videoUrl ?? thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`

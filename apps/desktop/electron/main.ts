@@ -27,6 +27,14 @@ import {
 } from './lib/design/design-store'
 import { reopenDesign } from './lib/design/design-open'
 import {
+  getSlides,
+  registerSlidesProtocol,
+  slidesIdForName,
+  slidesIdForPath,
+} from './lib/slides/slides-store'
+import { reopenSlides } from './lib/slides/slides-open'
+import { renderSlidesPdf } from './lib/slides/slides-export'
+import {
   addSessionMaterial,
   adoptDraftMaterials,
   listSessionMaterials,
@@ -2151,6 +2159,11 @@ app.whenReady().then(() => {
   // conteúdo é HTML estático.
   registerDesignProtocol()
 
+  // Decks de slides (orbit-slides://, ver lib/slides/slides-store): serve a
+  // pasta registrada e injeta o runtime de navegação — o deck em si é conteúdo
+  // estático, sem script próprio.
+  registerSlidesProtocol()
+
   // Fontes instaladas pela tool font_use (orbit-font://<hash>.woff2).
   registerFontProtocol()
 
@@ -2171,6 +2184,38 @@ app.whenReady().then(() => {
       return id ? reopenMotion(id) : false
     },
   )
+
+  // Reabrir um deck pelo id: o card da galeria manda o id; o card do chat manda
+  // o caminho (modo código, slides_preview) ou o NOME do deck com a sessão
+  // (modo chat, slides_write), e o registro traduz.
+  ipcMain.handle('slides:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    let id = ref.id ?? null
+    if (!id && ref.path) id = await slidesIdForPath(ref.path)
+    if (!id && ref.sessionId && ref.name) id = await slidesIdForName(ref.sessionId, ref.name)
+    return id ? reopenSlides(id) : false
+  })
+
+  // Baixar o deck em PDF. A impressão acontece no main (slides-export) — o
+  // renderer não grava arquivo — e o PDF nasce do próprio index.html, sem
+  // formato intermediário. Cancelar no diálogo não é erro.
+  ipcMain.handle('slides:export', async (_event, id: string, suggestedName?: string) => {
+    const deck = await getSlides(id)
+    if (!deck) return { ok: false as const, error: 'Deck não encontrado.' }
+    const pdf = await renderSlidesPdf(id)
+    if (!pdf) return { ok: false as const, error: 'Não foi possível gerar o PDF deste deck.' }
+    const name =
+      (suggestedName ?? path.basename(deck.folder))
+        .replace(/[\\/:*?"<>|]/g, '-')
+        .replace(/\.pdf$/i, '')
+        .trim() || 'deck'
+    const result = await dialog.showSaveDialog({
+      defaultPath: `${name}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(result.filePath, pdf)
+    return { ok: true as const, path: result.filePath }
+  })
 
   // Fontes do seletor do inspetor de design: a biblioteca do Orbit (com o CSS
   // pronto — a janela do app também precisa do @font-face para desenhar a

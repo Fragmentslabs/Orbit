@@ -748,6 +748,10 @@
       "design": {
         "label": "Design",
         "description": "Canvas with a design's artboards"
+      },
+      "slides": {
+        "label": "Slides",
+        "description": "Present a slide deck produced by the assistant"
       }
     },
     "unreadMessages": "Unread messages"
@@ -2185,7 +2189,8 @@
       "audio": "Audio",
       "motion": "Motion piece",
       "video": "Video",
-      "design": "Design"
+      "design": "Design",
+      "slides": "Deck"
     },
     "period": {
       "all": "Any time",
@@ -2214,6 +2219,7 @@
       "confirmAll": "Delete everything",
       "motionNote": "{{count}} motion piece(s) included: their composition folder (with the clips, GIFs and audio copied into it) is deleted too. Videos you rendered are kept.",
       "designNote": "{{count}} design canvas(es) included: the folder with their artboards is deleted too.",
+      "slidesNote": "{{count}} deck(s) included: the deck folder (the index.html) is deleted too. PDFs you downloaded stay.",
       "allVersions": "Delete all {{count}} versions",
       "onlyThis": "Delete only v{{version}}"
     }
@@ -3193,5 +3199,31 @@
   },
   "fullscreen": {
     "agentActions": "Agent actions"
+  },
+  "slides": {
+    "exportPdf": "Download as PDF",
+    "exporting": "Generating the PDF…",
+    "exportFailed": "Could not generate a PDF from this deck.",
+    "dismiss": "Dismiss",
+    "unavailable": "No deck open. Ask the agent for a presentation.",
+    "loading": "Loading the deck…",
+    "loadFailed": "The deck did not load",
+    "loadFailedHttp": "The deck answered {{status}}: {{text}}",
+    "retry": "Try again",
+    "reload": "Reload",
+    "toggleList": "Slide list",
+    "toggleNotes": "Presenter notes",
+    "previous": "Previous slide",
+    "next": "Next slide",
+    "counter": "{{index}} / {{total}}",
+    "notes": "Presenter notes",
+    "noNotes": "This slide has no notes.",
+    "slidesCount_one": "{{count}} slide",
+    "slidesCount_other": "{{count}} slides",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "openTab": "Open the deck in the panel",
+    "deck": "Slide deck",
+    "gone": "This deck is no longer registered — ask the agent to write it again."
   }
 }

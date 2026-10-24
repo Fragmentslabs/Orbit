@@ -203,6 +203,11 @@ const NATIVE_TOOLS = new Set([
   'design_read',
   'design_preview',
   'design_asset',
+  // Slides (deck no painel): mesmo threat model do design — o deck é um arquivo
+  // escrito por write/edit ou montado no storage do app. Fora desta lista cairia
+  // no catch-all de MCP como servidor "slides" e pediria permissão a cada chamada.
+  'slides_preview',
+  'slides_write',
   // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
   // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
   'image_search',

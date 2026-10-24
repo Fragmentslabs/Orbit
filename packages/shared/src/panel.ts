@@ -21,6 +21,7 @@ export type PanelSnapshotTabType =
   | 'document'
   | 'motion'
   | 'design'
+  | 'slides'
 
 export interface PanelSnapshotTab {
   id: string
@@ -31,6 +32,9 @@ export interface PanelSnapshotTab {
   motionPath?: string
   designId?: string
   designPath?: string
+  slidesId?: string
+  slidesPath?: string
+  slidesEntry?: string
   documentId?: string
   url?: string
   sourceDocId?: string

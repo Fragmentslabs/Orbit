@@ -140,6 +140,12 @@ export type PanelEvent =
   // motion não há `entry` (o canvas não tem UM arquivo de entrada — a aba lê
   // `canvas.json` e desenha todos os artboards).
   | { type: 'design'; id: string; title: string; sessionId?: string; path?: string }
+  // Abre (ou foca) a aba Slides do painel para um deck já registrado — quem
+  // emite é slides_preview/slides_write. `entry` é o arquivo de entrada dentro
+  // da pasta do deck (quase sempre `index.html`), como aparece na URL do
+  // scheme: o painel guarda `slidesId`/`slidesEntry` e monta
+  // `orbit-slides://<id>/<entry>`. O mesmo id volta à MESMA aba.
+  | { type: 'slides'; id: string; entry: string; title: string; sessionId?: string; path?: string }
   | { type: 'activity'; label: string; sessionId?: string }
 
 function broadcastPanelEvent(event: PanelEvent): void {
@@ -179,6 +185,21 @@ export function panelMotionPreview(event: { id: string; entry: string; title: st
  */
 export function panelDesignPreview(event: { id: string; title: string; path?: string; sessionId?: string }): void {
   broadcastPanelEvent({ type: 'design', ...event })
+}
+
+/**
+ * Abre (ou foca) a aba Slides do painel para um deck já registrado —
+ * slides_preview/slides_write são os únicos chamadores. Espelha
+ * panelMotionPreview: só avisa a UI, que resolve o resto pelo id.
+ */
+export function panelSlidesPreview(event: {
+  id: string
+  entry: string
+  title: string
+  path?: string
+  sessionId?: string
+}): void {
+  broadcastPanelEvent({ type: 'slides', ...event })
 }
 
 /** URL atual do browser do painel — vazia quando a sessão não tem webview. */

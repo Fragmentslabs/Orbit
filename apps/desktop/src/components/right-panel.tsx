@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -18,6 +18,7 @@ import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
 import { MotionTab } from "@/src/components/motion-tab"
 import { DesignTab } from "@/src/components/design-tab"
+import { SlidesTab } from "@/src/components/slides-tab"
 import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
@@ -69,7 +70,8 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
     type === "process" ||
     type === "diff" ||
     type === "motion" ||
-    type === "design"
+    type === "design" ||
+    type === "slides"
   )
     return false
   if (mode === "code") return true
@@ -94,6 +96,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     document: { icon: FileText, label: t("panel.tabs.document.label"), description: t("panel.tabs.document.description") },
     motion: { icon: Clapperboard, label: t("panel.tabs.motion.label"), description: t("panel.tabs.motion.description") },
     design: { icon: LayoutGrid, label: t("panel.tabs.design.label"), description: t("panel.tabs.design.description") },
+    slides: { icon: Presentation, label: t("panel.tabs.slides.label"), description: t("panel.tabs.slides.description") },
   }
 }
 
@@ -263,6 +266,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <MotionTab motionId={tab.motionId} entry={tab.motionEntry} path={tab.motionPath} title={tab.title} />
+        </div>
+      )
+    case "slides":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <SlidesTab slidesId={tab.slidesId} entry={tab.slidesEntry} title={tab.title} />
         </div>
       )
     case "design":

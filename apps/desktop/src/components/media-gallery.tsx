@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, Presentation, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { artifactApi, designApi, mediaApi, motionApi } from "@/src/lib/ipc"
+import { artifactApi, designApi, mediaApi, motionApi, slidesApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
@@ -67,6 +67,7 @@ const KIND_ICON: Record<MediaKind, LucideIcon> = {
   motion: Clapperboard,
   video: Film,
   design: LayoutGrid,
+  slides: Presentation,
 }
 
 /**
@@ -97,7 +98,7 @@ const PROJECT_PREFIX = "project:"
  */
 function isAppAsset(entry: MediaEntry): boolean {
   const kind = mediaKind(entry)
-  return kind === "design" || kind === "motion"
+  return kind === "design" || kind === "motion" || kind === "slides"
 }
 
 const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
@@ -757,6 +758,11 @@ export function MediaGallery() {
         if (entry.designId) void designApi.open({ id: entry.designId })
         return
       }
+      // Deck de slides: idem — o clique reabre a ABA, e a capa é só a capa.
+      if (kind === "slides") {
+        if (entry.slidesId) void slidesApi.open({ id: entry.slidesId })
+        return
+      }
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
         // A cadeia é fixada na abertura: trocar de versão dentro do visor não
@@ -801,9 +807,11 @@ export function MediaGallery() {
       // aberta num motion excluído só mostraria um erro.
       const motionIds = entries.flatMap((e) => (ids.includes(e.id) && e.motionId ? [e.motionId] : []))
       const designIds = entries.flatMap((e) => (ids.includes(e.id) && e.designId ? [e.designId] : []))
+      const slidesIds = entries.flatMap((e) => (ids.includes(e.id) && e.slidesId ? [e.slidesId] : []))
       await mediaApi.remove(ids)
       usePanelStore.getState().closeMotionTabs(motionIds)
       usePanelStore.getState().closeDesignTabs(designIds)
+      usePanelStore.getState().closeSlidesTabs(slidesIds)
       setConfirmDelete(null)
       setSelected(new Set())
       setPreview((current) => (current && ids.includes(current.id) ? null : current))
@@ -820,6 +828,11 @@ export function MediaGallery() {
 
   const selectedMotionCount = useMemo(
     () => entries.filter((e) => selected.has(e.id) && mediaKind(e) === "motion").length,
+    [entries, selected],
+  )
+
+  const selectedSlidesCount = useMemo(
+    () => entries.filter((e) => selected.has(e.id) && mediaKind(e) === "slides").length,
     [entries, selected],
   )
 
@@ -1122,6 +1135,7 @@ export function MediaGallery() {
               })}
               {selectedMotionCount > 0 && ` ${t("media.confirmDelete.motionNote", { count: selectedMotionCount })}`}
               {selectedDesignCount > 0 && ` ${t("media.confirmDelete.designNote", { count: selectedDesignCount })}`}
+              {selectedSlidesCount > 0 && ` ${t("media.confirmDelete.slidesNote", { count: selectedSlidesCount })}`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
