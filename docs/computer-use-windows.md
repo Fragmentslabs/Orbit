@@ -6,12 +6,26 @@ Plano e estado do Computer Use do Orbit no Windows. O desenho do macOS (tools
 driver** atrás do mesmo contrato `ComputerDriver`
 (`apps/desktop/electron/lib/computer/types.ts`).
 
-> **Estado:** Stages 1 a 4 implementados e testados no Mac (typecheck, lint e
-> vitest com driver falso). **O Stage 0 ainda não foi medido**: precisa de uma
-> máquina Windows. O probe está pronto em `apps/desktop/scripts/cu-probe-win.mjs`.
-> Até o portão do Stage 0 passar, o Windows é **experimental**: o código existe,
-> mas os números e o comportamento em segundo plano por tipo de app são
-> hipóteses.
+> **Estado:** Stages 1 a 4 escritos. O que roda no Mac (TypeScript: contrato,
+> runner persistente, driver, gates de UI, segurança) está coberto por typecheck,
+> lint e vitest com driver falso. **O host (`windows.ps1`, `windows-host.cs`,
+> `windows-host-actions.cs`) nunca foi compilado nem executado**: esta máquina é
+> um Mac. Ele só passou por um parser de C# (sintaxe) e por um teste do probe
+> contra um host de mentira. **O primeiro `node scripts/cu-probe-win.mjs` num
+> Windows é também o primeiro `Add-Type`**: espere erros de compilação do C#
+> antes de qualquer número. Até o portão do Stage 0 passar, o Windows é
+> **experimental**: os números e o comportamento em segundo plano por tipo de app
+> são hipóteses.
+
+### Como testar no Windows
+
+1. Instale as dependências e rode o app em dev (`npm run dev` em `apps/desktop`).
+   Em Preferências → Computador a aba aparece no Windows; o bloco "Windows" diz se
+   o host de UI Automation subiu (ou por que não: PowerShell restrito, etc.). O
+   botão "Testar" faz uma leitura real do app da frente.
+2. Ligue "Controlar o computador" e, na conversa, o modo Computador no compositor.
+3. Rode o probe com os apps abertos (ver o cabeçalho de
+   `apps/desktop/scripts/cu-probe-win.mjs`) e guarde o `cu-probe-win-report.json`.
 
 ## Referência e licença
 
@@ -129,9 +143,10 @@ do módulo (e o prompt) já conhece:
 | `ListItem`, `DataItem` | `AXListItem`, `AXRow` | |
 | demais | `AX<Nome>` equivalente | tabela completa em `format.ts` |
 
-Ações viram o vocabulário do AX também: `Invoke → AXPress`, `Toggle →
-AXToggle`, `SelectionItem → AXPick`, `ExpandCollapse → AXExpand/AXCollapse`,
-`ScrollItem → AXScrollToVisible` (silenciosa).
+Ações viram o vocabulário do AX também: `Invoke` e `Toggle → AXPress`,
+`SelectionItem → AXPick`, `ExpandCollapse → AXExpand/AXCollapse`. O `AXPress`
+tenta Invoke, depois Toggle, SelectionItem e ExpandCollapse. O estado do
+`Toggle` aparece como valor (`1`/`0`) e o de `SelectionItem` como `selected`.
 
 ### Teclas
 
@@ -259,19 +274,27 @@ de janela no host) e texto no prompt.
 **Aceite:** macOS sem mudança de comportamento (suíte verde); testes de
 `normalizeRole`, `parseKeys('ctrl+s', 'win32')` e do `ref` no `act`.
 
-### Stage 2 — driver e host ✅ (não medido)
+### Stage 2 — driver e host ✅ (não compilado, não medido)
 
-- `bridges/windows.ps1` (host), `createPersistentRunner()`, `drivers/windows.ts`.
+- `bridges/windows.ps1` (inicia o host, UTF-8, Constrained Language Mode),
+  `windows-host.cs` (`perms`, `apps`, `tree`, `capture`) e
+  `windows-host-actions.cs` (as ações), compilados juntos pelo `Add-Type`;
+  `createPersistentRunner()`; `drivers/windows.ts`, que grava os três arquivos
+  numa pasta com o hash do conteúdo.
 - `apps`, `tree`, `capture` como na tabela.
 
 **Aceite no Mac:** testes do runner persistente com um processo falso
 (correlação por id, timeout que mata e volta, abort, morte do host, linhas
 partidas e UTF-8) e do parse do protocolo. **No Windows (Stage 0):** latências.
 
-### Stage 3 — ações ✅ (não medido)
+### Stage 3 — ações ✅ (não compilado, não medido)
 
-Tudo da tabela de operações. **Aceite no Windows:** a tabela de entrada em
-segundo plano do Stage 0 preenchida.
+Tudo da tabela de operações. O texto em segundo plano (`type` no modo dirigido)
+vai por `EM_REPLACESEL` em Edit/RichEdit nativo ou por ValuePattern, trocando a
+seleção (TextPattern) ou acrescentando ao fim; atalhos de teclado, mouse livre,
+arrastar e roda só no ponteiro global. O `openApp` só abre app de verdade (nunca
+executa a string recebida). **Aceite no Windows:** a tabela de entrada em segundo
+plano do Stage 0 preenchida.
 
 ### Stage 4 — fiação ✅
 
@@ -284,7 +307,14 @@ segundo plano do Stage 0 preenchida.
   Windows, UAC `consent.exe`, Configurações, `CredentialUIBroker.exe`, tela de
   bloqueio) e navegadores por exe.
 - `computerStatus` sem `systemPreferences` no Windows.
-- Prompt sem "macOS", com permissões e atalhos por plataforma.
+- Prompt sem "macOS", com permissões e atalhos por plataforma
+  (`computerInstruction(platform)` em `prompts.ts`). **Pendente de commit:** esse
+  trecho e o teste dele (`prompts-computer.test.ts`) dependem do texto novo do
+  prompt do macOS (computer_task, cu_batch) que ainda não foi commitado pela
+  sessão dona dele; ficam na árvore de trabalho até lá.
+- O gate de aprovação avisa, no pedido, quando um navegador não tem site legível
+  (aprovar vale para todas as abas), e `bash` com PowerShell/UI Automation passa
+  pelo mesmo gate do `osascript`.
 - Faixa e painéis: `type: 'panel'` é só do macOS. No Windows, `focusable: false`
   vira `WS_EX_NOACTIVATE` no Electron: clicar no Parar ou num painel **não**
   traz o Orbit para a frente.
@@ -308,13 +338,14 @@ Windows **degrada para aprovação por app**, e isso aparece:
 - no pedido de aprovação ("vale para TODAS as abas deste navegador");
 - no prompt (o agente avisa o usuário antes de trocar de site).
 
-**Entrada em segundo plano.** Mensagens de mouse sintéticas podem ser ignoradas
-por Chromium (a renderização pode exigir `WM_POINTER`/foco), UWP (a
-`CoreWindow` lê entrada do sistema, não da fila de mensagens) e WPF (lê o
-estado do mouse pelo `GetCursorPos`). Modificadores por `PostMessage` não
-existem (o app lê `GetKeyState`): o `AttachThreadInput` + `SetKeyboardState` é
-um truque que pode falhar. O Stage 0 decide o que fica e o que vai para o
-ponteiro global.
+**Entrada em segundo plano.** O modo dirigido vai só pela UI Automation (ver
+"Decisão de entrada"): clique por padrão, texto por `EM_REPLACESEL`/ValuePattern,
+rolagem por ScrollPattern. O que não tem padrão (clique em área livre, atalho de
+teclado, hover, arrastar, roda) exige o ponteiro global e traz o app para a
+frente. Risco: apps que expõem pouca UIA (Chromium sem a árvore ligada, jogos,
+apps desenhados à mão) ficam quase só no ponteiro global. As mensagens de janela
+(que Chromium, UWP e WPF provavelmente ignoram, e que o EDR enxerga como
+suspeitas) são medidas pelo probe como experimento, não usadas.
 
 **`PrintWindow` preto** em apps com aceleração de GPU (alguns jogos, players,
 Chromium com certas flags). Detectamos imagem toda preta e caímos para
