@@ -89,6 +89,67 @@ describe('transition', () => {
     expect(await read('a.txt')).toBe('outra conversa')
   })
 
+  it('nome com [ ] é caminho literal: não restaura o vizinho que o padrão casaria', async () => {
+    // Rota dinâmica do Next.js: como padrão, `app/[id]/page.tsx` casa
+    // `app/i/page.tsx` — que aqui mudou depois do turno e é conflito.
+    await write('app/[id]/page.tsx', 'antes')
+    await write('app/i/page.tsx', 'antes')
+    const start = await capture(root)
+    await write('app/[id]/page.tsx', 'turno')
+    await write('app/i/page.tsx', 'turno')
+    const end = await capture(root)
+    await write('app/i/page.tsx', 'outra conversa')
+
+    const result = await transition(root, end, start)
+
+    expect(result.applied).toEqual(['app/[id]/page.tsx'])
+    expect(result.conflicts).toEqual(['app/i/page.tsx'])
+    expect(await read('app/[id]/page.tsx')).toBe('antes')
+    expect(await read('app/i/page.tsx')).toBe('outra conversa')
+  })
+
+  it('nome com espaço no fim é o nome do arquivo, não lixo para aparar', async () => {
+    const start = await capture(root)
+    await write('nota ', 'do turno')
+    const end = await capture(root)
+
+    const result = await transition(root, end, start)
+
+    expect(result.applied).toEqual(['nota '])
+    expect(await exists('nota ')).toBe(false)
+  })
+
+  it('apagar o arquivo criado leva junto só as pastas que ficaram vazias', async () => {
+    await write('src/existente.ts', 'fica')
+    const start = await capture(root)
+    await write('src/novo/fundo/a.ts', 'do turno')
+    await write('src/outro/b.ts', 'do turno')
+    const end = await capture(root)
+    // Alguém pôs um arquivo numa das pastas novas depois do turno.
+    await write('src/outro/de-fora.ts', 'externo')
+
+    await transition(root, end, start)
+
+    expect(await exists('src/novo')).toBe(false)
+    expect(await exists('src/outro/de-fora.ts')).toBe(true)
+    expect(await exists('src/existente.ts')).toBe(true)
+  })
+
+  it('`paths` limita a transição aos caminhos dados', async () => {
+    await write('a.txt', 'antes')
+    await write('b.txt', 'antes')
+    const start = await capture(root)
+    await write('a.txt', 'turno')
+    await write('b.txt', 'turno')
+    const end = await capture(root)
+
+    const result = await transition(root, end, start, { paths: ['a.txt'] })
+
+    expect(result.applied).toEqual(['a.txt'])
+    expect(await read('a.txt')).toBe('antes')
+    expect(await read('b.txt')).toBe('turno')
+  })
+
   it('não apaga o arquivo criado pelo turno que foi editado depois', async () => {
     const start = await capture(root)
     await write('novo.txt', 'do turno')
@@ -135,7 +196,7 @@ describe('transition', () => {
     await write('manual.txt', 'salvo à mão')
     const end = await capture(root)
 
-    const result = await transition(root, end, start, new Set(['manual.txt']))
+    const result = await transition(root, end, start, { skip: new Set(['manual.txt']) })
 
     expect(result.applied).toEqual(['a.txt'])
     expect(result.conflicts).toEqual(['manual.txt'])

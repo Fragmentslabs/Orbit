@@ -162,11 +162,16 @@ function comTrava<T>(gitDir: string, fn: () => Promise<T>): Promise<T> {
  * Invocação CRUA do git no repositório auxiliar — sem a trava da pasta.
  * Interna de propósito: é o que as operações abaixo usam quando JÁ estão com a
  * fila da pasta nas mãos (pegar a trava aqui dentro seria reentrância).
+ *
+ * `--literal-pathspecs`: os caminhos passados depois de `--` são NOMES de
+ * arquivo, não padrões. Sem isso, `checkout <tree> -- app/[id]/page.tsx`
+ * também casaria `app/i/page.tsx` e o revert sobrescreveria um arquivo que
+ * a transição tinha classificado como conflito.
  */
 async function snapshotGitCru(directory: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(
     gitBinary.binary,
-    ['--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
+    ['--literal-pathspecs', '--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
     { cwd: directory, env: gitBinary.env, maxBuffer: MAX_BUFFER },
   )
   return stdout
@@ -394,21 +399,20 @@ function samePathState(a: PathState, b: PathState): boolean {
  *
  * O resto da pasta não é lido além dos caminhos do diff, e nada é apagado em
  * bloco. `skip` são caminhos que o turno mudou mas que não são dele (saves
- * manuais do painel) — entram como conflito, preservados.
+ * manuais do painel) — entram como conflito, preservados. `paths` limita a
+ * transição a esses caminhos (os de autoria confirmada do turno); sem ele,
+ * vale todo o diff entre `from` e `to`.
  */
 export async function transition(
   directory: string,
   from: string,
   to: string,
-  skip?: Set<string>,
+  options: { skip?: Set<string>; paths?: string[] } = {},
 ): Promise<TransitionResult> {
+  const { skip } = options
   return comTrava(gitDirFor(directory), async () => {
     await ensureRepo(directory)
-    const raw = await snapshotGitCru(directory, ['diff', '--name-only', '-z', '--no-renames', from, to])
-    const paths = raw
-      .split('\0')
-      .map((p) => p.trim())
-      .filter(Boolean)
+    const paths = options.paths ?? (await changedPathsCru(directory, from, to))
     const applied: string[] = []
     const conflicts: string[] = []
     const already: string[] = []
@@ -428,6 +432,7 @@ export async function transition(
             await snapshotGitCru(directory, ['checkout', to, '--', rel])
           } else {
             await fs.rm(path.join(directory, rel), { force: true })
+            await removeEmptyParents(directory, rel)
             // Mantém o índice coerente com o que sobrou; o próximo capture
             // faria isso de qualquer forma.
             await snapshotGitCru(directory, ['rm', '--cached', '--ignore-unmatch', '--', rel]).catch(() => '')
@@ -448,6 +453,39 @@ export async function transition(
 
     return { applied, conflicts, already }
   })
+}
+
+/**
+ * Caminhos que diferem entre dois trees, sem renomeação e sem mexer no nome:
+ * `-z` entrega o nome cru (espaço no começo ou no fim é parte dele).
+ */
+async function changedPathsCru(directory: string, from: string, to: string): Promise<string[]> {
+  const raw = await snapshotGitCru(directory, ['diff', '--name-only', '-z', '--no-renames', from, to])
+  return raw.split('\0').filter(Boolean)
+}
+
+export async function changedPaths(directory: string, from: string, to: string): Promise<string[]> {
+  if (from === to) return []
+  return comTrava(gitDirFor(directory), async () => {
+    await ensureRepo(directory)
+    return changedPathsCru(directory, from, to)
+  })
+}
+
+/**
+ * Apagar o arquivo que o turno criou deixava a pasta dele para trás (o
+ * `read-tree -u` antigo levava junto). Sobe removendo só as pastas que
+ * ficaram VAZIAS, e nunca a raiz.
+ */
+async function removeEmptyParents(directory: string, rel: string): Promise<void> {
+  const root = path.resolve(directory)
+  let dir = path.dirname(path.join(root, rel))
+  while (dir !== root && dir.startsWith(root + path.sep)) {
+    const entries = await fs.readdir(dir).catch(() => null)
+    if (!entries || entries.length > 0) return
+    await fs.rmdir(dir).catch(() => {})
+    dir = path.dirname(dir)
+  }
 }
 
 /** Diff entre dois trees limitado a caminhos — é o que a barra de revert mostra. */
