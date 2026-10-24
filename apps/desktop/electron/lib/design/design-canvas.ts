@@ -32,10 +32,20 @@ export interface DesignCanvas {
 }
 
 const SAFE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.html?$/
+const SAFE_STYLE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.css$/
 
 /** Nome de arquivo de artboard válido: plano, termina em .html/.htm, sem path. */
 export function isSafeBoardFile(file: string): boolean {
   return SAFE_FILE.test(file)
+}
+
+/**
+ * Nome de folha de estilo compartilhada do canvas (ex.: "base.css"): plano,
+ * termina em .css, sem path. O scheme serve qualquer arquivo da pasta, então um
+ * <link rel="stylesheet" href="base.css"> dentro do artboard resolve.
+ */
+export function isSafeStyleFile(file: string): boolean {
+  return SAFE_STYLE.test(file)
 }
 
 function validate(value: unknown): DesignCanvas {

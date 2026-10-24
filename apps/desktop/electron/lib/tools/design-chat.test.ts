@@ -63,7 +63,7 @@ describe('createChatDesignTools — design_write / design_read / design_edit', (
   const tools = createChatDesignTools({ sessionId: 'sess1' })
   const folder = path.join(chatDesignDir('sess1'), 'landing')
 
-  it('design_write creates the canvas.json and each artboard file', async () => {
+  it('design_write creates the canvas.json, the shared stylesheet and each artboard file', async () => {
     const report = await run(tools, 'design_write', {
       name: 'Landing',
       title: 'Landing page',
@@ -71,6 +71,7 @@ describe('createChatDesignTools — design_write / design_read / design_edit', (
         { file: 'Main.html', title: 'Hero', x: 0, y: 0, w: 1280, h: 800, html: '<!doctype html><title>Hero</title><body>Hi</body>' },
         { file: 'Pricing.html', x: 1360, y: 0, w: 1280, h: 800, html: '<!doctype html><title>Pricing</title><body>$9</body>' },
       ],
+      styles: [{ file: 'base.css', css: ':root{--gap:8px} body{margin:0}' }],
     })
     // O relatório usa o SLUG da pasta (como o motion), não a grafia original.
     expect(report).toContain('Design "landing" is open in the Design tab')
@@ -78,11 +79,15 @@ describe('createChatDesignTools — design_write / design_read / design_edit', (
     // "Main.html" tem título ("Hero"), então aparece como "Hero" (Main.html, …).
     expect(report).toContain('"Hero" (Main.html,')
     expect(report).toContain('"Pricing.html" (Pricing.html,')
+    // A folha compartilhada não está no canvas.json: o relatório a nomeia para o
+    // modelo não repetir o CSS dentro de cada documento.
+    expect(report).toContain('Shared stylesheets: base.css')
 
     const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
     expect(canvas.order).toEqual(['Main.html', 'Pricing.html'])
     expect(canvas.boards['Main.html']).toMatchObject({ title: 'Hero', x: 0, y: 0, w: 1280, h: 800 })
     expect(await fsp.readFile(path.join(folder, 'Main.html'), 'utf8')).toContain('Hi')
+    expect(await fsp.readFile(path.join(folder, 'base.css'), 'utf8')).toContain('--gap')
   })
 
   it('rejects an artboard file name that is not a plain .html name', async () => {
@@ -94,12 +99,62 @@ describe('createChatDesignTools — design_write / design_read / design_edit', (
     ).rejects.toThrow(/invalid artboard file name/)
   })
 
-  it('design_read returns the layout, and one artboard\'s HTML', async () => {
+  it('design_read returns the layout (with the stylesheets), and one file\'s content', async () => {
     const layout = await run(tools, 'design_read', { name: 'Landing' })
     expect(JSON.parse(layout).order).toEqual(['Main.html', 'Pricing.html'])
+    // O canvas.json é só o arranjo; as folhas entram na leitura.
+    expect(JSON.parse(layout).styles).toEqual(['base.css'])
 
     const html = await run(tools, 'design_read', { name: 'Landing', file: 'Main.html' })
     expect(html).toContain('Hi')
+
+    const css = await run(tools, 'design_read', { name: 'Landing', file: 'base.css' })
+    expect(css).toContain('--gap')
+  })
+
+  it('design_read refuses a file that is neither an artboard nor a stylesheet', async () => {
+    await expect(run(tools, 'design_read', { name: 'Landing', file: '../secret.txt' })).rejects.toThrow(
+      /invalid file name/,
+    )
+  })
+
+  it('design_edit applies exact text edits to the shared stylesheet', async () => {
+    const report = await run(tools, 'design_edit', {
+      name: 'Landing',
+      style: { file: 'base.css', edits: [{ oldText: '--gap:8px', newText: '--gap:16px' }] },
+    })
+    expect(report).toContain('updated "base.css"')
+    const css = await fsp.readFile(path.join(folder, 'base.css'), 'utf8')
+    expect(css).toContain('--gap:16px')
+    expect(css).toContain('body{margin:0}')
+  })
+
+  it('design_edit refuses to edit a stylesheet that does not exist without its css', async () => {
+    await expect(run(tools, 'design_edit', { name: 'Landing', style: { file: 'tokens.css', edits: [{ oldText: 'a', newText: 'b' }] } })).rejects.toThrow(
+      /does not exist yet/,
+    )
+  })
+
+  it('design_write refuses a stylesheet name that is not a plain .css name', async () => {
+    await expect(
+      run(tools, 'design_write', {
+        name: 'Bad',
+        boards: [{ file: 'Main.html', x: 0, y: 0, w: 100, h: 100, html: '<html></html>' }],
+        styles: [{ file: '../base.css', css: 'body{}' }],
+      }),
+    ).rejects.toThrow(/invalid stylesheet file name/)
+  })
+
+  it('design_write refuses more than four artboards in one call (write one, add the rest with design_edit)', async () => {
+    const boards = Array.from({ length: 5 }, (_, i) => ({
+      file: `S${i}.html`,
+      x: i * 100,
+      y: 0,
+      w: 400,
+      h: 300,
+      html: '<!doctype html><title>x</title><body>x</body>',
+    }))
+    await expect(run(tools, 'design_write', { name: 'TooMany', boards })).rejects.toThrow(/at most 4 artboards/)
   })
 
   it('design_edit applies exact text edits to an artboard', async () => {
