@@ -21,6 +21,7 @@ import { conductorInput } from './orchestrator-conductor'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
+import { withWorkspaceLock } from './session/workspace-lock'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { agentPrepareStep } from './agent-step'
 import { readJson, writeJson } from './storage'
@@ -204,6 +205,8 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
     snapshot.verified = 'unknown'
     return
   }
+  // Saves manuais do painel não são do orquestrador: o revert os preserva.
+  snapshot.manual = [...manualSavesUnder(directory)]
   try {
     const end = await capture(directory)
     if (end === snapshot.start) {
@@ -216,6 +219,9 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
     const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
     if (files.length === 0) {
       snapshot.verified = 'unchanged'
+      // A pasta mudou só por save manual: guarda a árvore final para o revert
+      // isolar os caminhos do orquestrador dos da pessoa.
+      snapshot.end = end
       return
     }
     snapshot.verified = 'changed'
@@ -302,7 +308,13 @@ export function getOrchestrationRunningSessionIds(): string[] {
 
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  return withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input))
+  const turn = () => withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input))
+  if (!input.directory) return turn()
+  // O turno da orquestra também é um turno de código na pasta: sem a trava,
+  // ele captura/diffa enquanto um worker (ou outra conversa) escreve. Os
+  // workers herdam o contexto e são reentrantes — fazem parte deste trabalho.
+  emit(win, { type: 'status', sessionId: input.sessionId, status: 'submitted' })
+  return withWorkspaceLock(input.directory, turn)
 }
 
 async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {

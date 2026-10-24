@@ -39,6 +39,7 @@ import { buildProviderOptions, interleavedReasoningField, normalizeMessages } fr
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
 import { bindMediaJournal, closeMediaJournal, runWithMediaJournal } from './session/media-journal'
+import { withWorkspaceLock } from './session/workspace-lock'
 import {
   attachArtifactMessage,
   attachDocumentMessage,
@@ -167,7 +168,10 @@ function usedFileWritingTools(parts: MessagePart[]): boolean {
 /** Veredito da comparação de snapshots do turno (ver verifyTurn em runChat). */
 type TurnVerification =
   | { state: 'changed'; end: string; files: string[]; patch: string }
-  | { state: 'unchanged' }
+  // `end` presente quando a pasta MUDOU (só saves manuais do painel): o
+  // veredito é "o agente não escreveu", mas o revert ainda precisa da árvore
+  // final para desfazer sem tocar no que a pessoa salvou.
+  | { state: 'unchanged'; end?: string }
   | { state: 'unknown'; error?: string }
 const abortControllers = new Map<string, AbortController>()
 // Comando bash ativo por sessão (diagnóstico): preenchido no tool-call e
@@ -1309,7 +1313,18 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   // O diário de mídia do turno (peças e galeria) é o que deixa o revert da
   // mensagem desfazer o que o agente produziu fora da pasta de trabalho.
-  return withProviderSession(input.sessionId, () => runWithMediaJournal(input.sessionId, () => runChatTurn(win, input)))
+  const turn = () =>
+    withProviderSession(input.sessionId, () =>
+      runWithMediaJournal(input.sessionId, () => runChatTurn(win, input)),
+    )
+  // Um turno de código segura a pasta até terminar: sem isto, dois turnos na
+  // mesma pasta (duas conversas, rotina + chat, orquestrador + worker)
+  // escrevem um no snapshot do outro e o revert de um leva junto o trabalho
+  // do outro. A trava é reentrante para subchat/worker/loop do MESMO turno.
+  if (input.mode !== 'code' || !input.directory) return turn()
+  // Feedback imediato também enquanto espera a pasta de outro turno.
+  emit(win, { type: 'status', sessionId: input.sessionId, status: 'submitted' })
+  return withWorkspaceLock(input.directory, turn)
 }
 
 async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
@@ -1793,7 +1808,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
         // Só sobraram arquivos do usuário: do ponto de vista do turno, o
         // agente não escreveu nada — que é exatamente o que 'unchanged' diz.
-        if (files.length === 0) return { state: 'unchanged' }
+        // O `end` vai junto porque a pasta MUDOU (saves manuais): o revert de
+        // um turno anterior precisa desta árvore para não restaurar em bloco.
+        if (files.length === 0) return { state: 'unchanged', end }
         return {
           state: 'changed',
           end,
@@ -2516,10 +2533,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
     if (assistantMessage.snapshot) {
       assistantMessage.snapshot.verified = endSnapshot.state
+      // O que a pessoa salvou à mão no painel durante o turno não é do agente:
+      // o revert preserva esses caminhos em vez de desfazê-los.
+      if (toolContext) assistantMessage.snapshot.manual = [...manualSavesUnder(toolContext.directory)]
       if (endSnapshot.state === 'changed') {
         assistantMessage.snapshot.end = endSnapshot.end
         assistantMessage.snapshot.files = endSnapshot.files
         assistantMessage.snapshot.patch = endSnapshot.patch
+      } else if (endSnapshot.state === 'unchanged' && endSnapshot.end) {
+        // Pasta mudou só por save manual: guarda a árvore final para o revert
+        // conseguir isolar o que é do turno (o `manual` acima) do que não é.
+        assistantMessage.snapshot.end = endSnapshot.end
       }
       await saveMessages(sessionId, history)
     }
@@ -2623,13 +2647,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Falha real (não aborto manual) → notificação nativa de erro
     if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
   } finally {
+    // Grava o estado FINAL de cada caminho do diário: é o que o revert usa
+    // para saber se o turno ainda é o dono do estado atual (ver media-journal).
+    await closeMediaJournal()
     clearTurnImages(sessionId)
     // Fim do turno = fim do controle do computador: some o indicador, solta o
     // atalho de pânico e devolve as flags de acessibilidade dos apps.
     endActivity(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
-    closeMediaJournal()
     activeBashCommands.delete(sessionId)
     if (controller.signal.aborted && activeCmd) {
       console.warn(

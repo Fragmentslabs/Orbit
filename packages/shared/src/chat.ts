@@ -658,6 +658,10 @@ export interface AssistantSnapshot {
   files?: string[]
   /** Diff unificado entre start e end (truncado em ~200kB) */
   patch?: string
+  /** Caminhos que a PESSOA salvou à mão pelo painel durante o turno (relativos
+   *  à pasta, com '/'). O turno não os reverte — são trabalho dela, não do
+   *  agente; o revert os reporta como mantidos. */
+  manual?: string[]
   /** true quando o rastreamento do filesystem falhou neste turno (start/end
    *  não capturados) — a UI avisa que as alterações não foram registradas. */
   failed?: boolean
