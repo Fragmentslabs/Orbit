@@ -43,7 +43,8 @@ async function freeName(folder: string, name: string, size: number): Promise<{ n
 }
 
 export interface ImportedAsset {
-  kind: AttachmentKind
+  /** `file`: não é mídia (um script, uma fonte) — veio da pasta de trabalho. */
+  kind: AttachmentKind | 'file'
   /** Nome do arquivo na pasta — é o que vai no `src` do HTML. */
   name: string
   file: string
@@ -87,6 +88,50 @@ export async function importAttachmentInto(
       `attachment not found: ${ref}. Use the ref from the attachment note (vdo_…, aud_… or img_…) — it must belong to this app's attachments.`,
     )
   }
+  return importSourceInto(folder, resolved, wantedName, opts)
+}
+
+const VIDEO_EXT = /\.(mp4|mov|webm|m4v|mkv)$/i
+const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac)$/i
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif)$/i
+
+/**
+ * Copia um arquivo da PASTA DE TRABALHO (modo código) para dentro da peça: a
+ * foto do projeto, o vídeo da filmagem, uma biblioteca local (gsap.min.js), uma
+ * fonte. O caminho já vem resolvido e autorizado por quem chama; o tipo sai da
+ * extensão, e o que não é mídia entra como arquivo comum.
+ */
+export async function importFileInto(
+  folder: string,
+  file: string,
+  wantedName?: string,
+  opts: { usageNote?: string | ((kind: AttachmentKind, name: string) => string) } = {},
+): Promise<ImportedAsset> {
+  const stat = await fsp.stat(file).catch(() => null)
+  if (!stat?.isFile()) throw new Error(`not a file: ${file}`)
+  const kind: AttachmentKind | 'file' = VIDEO_EXT.test(file) ? 'video' : AUDIO_EXT.test(file) ? 'audio' : IMAGE_EXT.test(file) ? 'image' : 'file'
+  if (kind === 'file') {
+    const name = assetFileName(wantedName, path.basename(file), path.extname(file))
+    await fsp.mkdir(folder, { recursive: true })
+    const { name: free, reuse } = await freeName(folder, name, stat.size)
+    const target = path.join(folder, free)
+    if (!reuse) await fsp.copyFile(file, target, fs.constants.COPYFILE_FICLONE)
+    return {
+      kind: 'file',
+      name: free,
+      file: target,
+      report: `${reuse ? 'Already in the folder' : 'Copied'}: "${path.basename(file)}" → ${free}. Reference it by RELATIVE path (e.g. <script src="${free}"></script>, url("${free}")).`,
+    }
+  }
+  return importSourceInto(folder, { kind, id: path.basename(file), file, name: path.basename(file) }, wantedName, opts)
+}
+
+async function importSourceInto(
+  folder: string,
+  resolved: ResolvedAttachment,
+  wantedName: string | undefined,
+  opts: { usageNote?: string | ((kind: AttachmentKind, name: string) => string) },
+): Promise<ImportedAsset> {
   const stat = await fsp.stat(resolved.file)
   const fallbackExt = path.extname(resolved.file) || ''
   const wanted = assetFileName(wantedName, resolved.name, fallbackExt)

@@ -9,6 +9,7 @@ import { isSafeBoardFile, readDesignCanvas, writeDesignCanvas, type DesignBoard 
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { allFontFacesCss } from '../fonts/store'
 import { DESIGN_RUNTIME, DESIGN_RUNTIME_PATH, injectDesignRuntime } from './design-runtime'
+import { journalPath } from '../session/media-journal'
 
 /**
  * Registro dos canvas de design (uma PASTA do app: `canvas.json` + um .html por
@@ -252,7 +253,11 @@ export async function deleteDesignCanvas(id: string): Promise<DesignDeletion> {
     keptBecause = 'the folder is outside the app storage it was registered from'
   }
 
-  if (!keptBecause) await fsp.rm(folder, { recursive: true, force: true })
+  if (!keptBecause) {
+    // No turno do agente (design_delete), a pasta vai para o diário antes.
+    await journalPath(folder, { kind: 'design', id, folder, root: entry.root, sessionId: entry.sessionId })
+    await fsp.rm(folder, { recursive: true, force: true })
+  }
   await unregisterDesign(id)
   return keptBecause ? { removedFolder: false, keptBecause } : { removedFolder: true }
 }
@@ -388,6 +393,14 @@ function watchDesign(id: string, folder: string): void {
       // pasta sumiu desde o registro — o protocolo devolve 404 na hora.
     }
   }
+}
+
+/** Religa o watcher e recarrega a aba depois que a pasta foi trocada inteira (revert). */
+export async function rewatchDesign(id: string): Promise<void> {
+  const entry = await getDesign(id)
+  if (!entry) return
+  watchDesign(id, entry.folder)
+  notifyChanged(id, null)
 }
 
 export function unwatchDesign(id: string): void {

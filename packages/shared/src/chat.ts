@@ -55,6 +55,21 @@ export interface SessionRevert {
   /** Motivo de o filesystem não ter sido restaurado — presente quando
    * filesRestored === false em modo código. */
   reason?: 'no-snapshot' | 'capture-failed'
+  /** O que o revert desfez FORA do repositório, nos dois modos: as peças
+   * (motion, design, slides) e a galeria (artefatos, documentos, imagens,
+   * áudios, vídeos). Ausente quando os turnos desfeitos não tocaram em mídia. */
+  media?: SessionMediaRevert
+}
+
+/** Resumo do revert de mídia — só contagens (o diário fica no disco do main). */
+export interface SessionMediaRevert {
+  /** false quando o diário não pôde ser aplicado — a UI avisa. */
+  restored: boolean
+  /** Peças devolvidas ao estado anterior (ou removidas, se o turno as criou). */
+  pieces: number
+  /** Entradas da galeria devolvidas ao estado anterior (ou removidas). */
+  items: number
+  error?: string
 }
 
 export interface SessionInfo {

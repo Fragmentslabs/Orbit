@@ -3,6 +3,7 @@ import { StorageKeys } from '@shared/chat'
 import { broadcastChatEvent } from '../broadcast'
 import { capture, diff, restore } from '../snapshot'
 import { readJson, writeJson } from '../storage'
+import { discardMediaRevert, revertMedia, unrevertMedia } from './media-revert'
 
 async function loadSession(sessionId: string): Promise<SessionInfo | null> {
   return readJson<SessionInfo>(StorageKeys.session(sessionId))
@@ -66,58 +67,59 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
   broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
 
   const start = startSnapshotFor(messages, targetIdx)
-  if (session.directory) {
-    if (!start) {
-      // Modo código sem snapshot para esta mensagem: não há como restaurar o
-      // filesystem. Em vez do fallback silencioso para "modo chat", sinaliza
-      // explicitamente que os arquivos não puderam ser desfeitos.
-      const revertState: SessionRevert = {
-        messageId,
-        filesRestored: false,
-        reason: 'no-snapshot',
-        discardedMessages: discarded,
-      }
-      await saveSession({ ...session, revert: revertState })
-      return revertState
-    }
+  const revertState: SessionRevert = session.directory
+    ? await revertFiles(session.directory, messageId, discarded, start)
+    : // Modo chat: a conversa não tem pasta de trabalho
+      { messageId, discardedMessages: discarded }
 
-    // Modo código: também restaura o filesystem para o snapshot da mensagem.
-    // O truncamento já foi persistido acima — se a restauração falhar, a
-    // exceção NÃO pode subir: as mensagens ficariam cortadas sem barra de
-    // revert nem unrevert. Persiste o revert com filesRestored:false e
-    // reason:'capture-failed' para a UI avisar explicitamente.
-    try {
-      const current = await capture(session.directory)
-      await restore(session.directory, start)
-      const changes = await diff(session.directory, start, current)
+  // Mídia (peças e galeria): nos DOIS modos — mora no armazenamento do app, que
+  // o snapshot da pasta de trabalho não alcança. Desfaz o que os turnos
+  // descartados produziram, do primeiro ao último.
+  const media = await revertMedia(sessionId, assistantIdsOf(discarded))
+  if (media) revertState.media = media
 
-      const revertState: SessionRevert = {
-        messageId,
-        snapshot: current,
-        files: changes.files,
-        diff: changes.patch,
-        filesRestored: true,
-        discardedMessages: discarded,
-      }
-      await saveSession({ ...session, revert: revertState })
-      return revertState
-    } catch (err) {
-      console.error('[revert] falha ao restaurar o filesystem (truncamento já salvo):', err)
-      const revertState: SessionRevert = {
-        messageId,
-        filesRestored: false,
-        reason: 'capture-failed',
-        discardedMessages: discarded,
-      }
-      await saveSession({ ...session, revert: revertState })
-      return revertState
-    }
-  }
-
-  // Modo chat: apenas truncamento
-  const revertState: SessionRevert = { messageId, discardedMessages: discarded }
   await saveSession({ ...session, revert: revertState })
   return revertState
+}
+
+function assistantIdsOf(messages: ChatMessage[]): string[] {
+  return messages.filter((m) => m.role === 'assistant').map((m) => m.id)
+}
+
+/**
+ * Modo código: restaura a pasta de trabalho para o snapshot do início do turno.
+ * O truncamento já foi persistido por quem chama — se a restauração falhar, a
+ * exceção NÃO pode subir: as mensagens ficariam cortadas sem barra de revert
+ * nem unrevert. Devolve filesRestored:false com o motivo para a UI avisar.
+ */
+async function revertFiles(
+  directory: string,
+  messageId: string,
+  discarded: ChatMessage[],
+  start: string | undefined,
+): Promise<SessionRevert> {
+  if (!start) {
+    // Sem snapshot para esta mensagem: não há como restaurar o filesystem. Em
+    // vez do fallback silencioso para "modo chat", sinaliza explicitamente que
+    // os arquivos não puderam ser desfeitos.
+    return { messageId, filesRestored: false, reason: 'no-snapshot', discardedMessages: discarded }
+  }
+  try {
+    const current = await capture(directory)
+    await restore(directory, start)
+    const changes = await diff(directory, start, current)
+    return {
+      messageId,
+      snapshot: current,
+      files: changes.files,
+      diff: changes.patch,
+      filesRestored: true,
+      discardedMessages: discarded,
+    }
+  } catch (err) {
+    console.error('[revert] falha ao restaurar o filesystem (truncamento já salvo):', err)
+    return { messageId, filesRestored: false, reason: 'capture-failed', discardedMessages: discarded }
+  }
 }
 
 export async function unrevert(sessionId: string): Promise<boolean> {
@@ -136,6 +138,8 @@ export async function unrevert(sessionId: string): Promise<boolean> {
   if (session.directory && session.revert.snapshot) {
     await restore(session.directory, session.revert.snapshot)
   }
+  // Mídia: o redo guardado pelo revert (nos dois modos)
+  await unrevertMedia(sessionId)
 
   const next = { ...session }
   delete next.revert
@@ -158,6 +162,9 @@ export async function cleanupRevert(sessionId: string): Promise<ChatMessage[] | 
     await writeJson(StorageKeys.messages(sessionId), truncated)
     broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
   }
+  // Os turnos descartados não voltam mais: os diários de mídia deles e o redo
+  // deixam de servir.
+  await discardMediaRevert(sessionId, assistantIdsOf(session.revert.discardedMessages ?? []))
 
   const next = { ...session }
   delete next.revert

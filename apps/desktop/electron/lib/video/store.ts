@@ -74,6 +74,20 @@ export async function registerVideo(file: string, sessionId?: string): Promise<{
 }
 
 /**
+ * Põe de volta o registro do player com o MESMO id da URL — o revert devolve à
+ * galeria um vídeo cuja exclusão tinha tirado o registro, e a entrada guarda a
+ * URL antiga (`orbit-video://<id>`), que tem de voltar a tocar.
+ */
+export async function restoreVideoRegistration(url: string, file: string, sessionId?: string): Promise<void> {
+  const id = url.startsWith(`${VIDEO_SCHEME}://`) ? url.slice(`${VIDEO_SCHEME}://`.length) : ''
+  if (!SAFE_VIDEO_ID.test(id)) return
+  const entries = await load()
+  if (entries[id]?.path === path.resolve(file)) return
+  entries[id] = { path: path.resolve(file), sessionId, createdAt: Date.now() }
+  await persist()
+}
+
+/**
  * Tira do registro do player todo vídeo que aponta para este arquivo. Chamado
  * quando o arquivo é apagado (galeria): sem isso o índice guardaria para sempre
  * um caminho morto, e o `orbit-video://` responderia "moved or deleted".

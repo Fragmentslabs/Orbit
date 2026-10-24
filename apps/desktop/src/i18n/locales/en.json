@@ -1342,7 +1342,13 @@
     "filesRestoreFailed": "The conversation was truncated, but the file changes could NOT be undone (failed to restore the snapshot).",
     "continueFromHere": "new message continues from this point",
     "diff": "Diff",
-    "unrevert": "Undo"
+    "unrevert": "Undo",
+    "mediaPieces_one": "{{count}} piece",
+    "mediaPieces_other": "{{count}} pieces",
+    "mediaItems_one": "{{count}} gallery item",
+    "mediaItems_other": "{{count}} gallery items",
+    "mediaReverted": "undone: {{what}}",
+    "mediaFailed": "Pieces and gallery items could NOT be undone."
   },
   "skillProposal": {
     "building": "Building the skill…",

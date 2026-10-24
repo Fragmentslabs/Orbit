@@ -9,6 +9,7 @@ import { resolveSafePath, type ToolContext } from '../tools/context'
 import { isAlphaFormat, motionFormatExt, normalizeMotionFormat, type MotionFormatInput } from './motion-render-args'
 import { renderMotion } from './motion'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './motion-runtime'
+import { journalPath } from '../session/media-journal'
 
 /**
  * Registro das composições de motion (uma PASTA do projeto com um arquivo de
@@ -362,7 +363,12 @@ export async function deleteMotionComposition(id: string): Promise<MotionDeletio
     keptBecause = 'the folder is the project itself (or outside the working folder it was registered from)'
   }
 
-  if (!keptBecause) await fsp.rm(folder, { recursive: true, force: true })
+  if (!keptBecause) {
+    // No turno do agente (motion_delete), a pasta vai para o diário antes: o
+    // revert da mensagem a devolve e registra de novo.
+    await journalPath(folder, { kind: 'motion', id, folder, entry: entry.entry, root: entry.root, sessionId: entry.sessionId })
+    await fsp.rm(folder, { recursive: true, force: true })
+  }
   await unregisterMotion(id)
   return keptBecause ? { removedFolder: false, keptBecause } : { removedFolder: true }
 }
@@ -414,6 +420,18 @@ function watchMotion(id: string, folder: string): void {
       // pasta sumiu desde o registro — o protocolo devolve 404 na hora.
     }
   }
+}
+
+/**
+ * Religa o watcher e manda a aba recarregar — depois que a pasta foi trocada
+ * inteira (o revert apaga e põe a cópia de volta, e o watcher antigo morreu
+ * com a pasta que observava).
+ */
+export async function rewatchMotion(id: string): Promise<void> {
+  const entry = await getMotion(id)
+  if (!entry) return
+  watchMotion(id, entry.folder)
+  notifyChanged(id)
 }
 
 export function unwatchMotion(id: string): void {

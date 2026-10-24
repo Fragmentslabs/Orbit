@@ -19,6 +19,9 @@ import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { MotionPartView } from "@/src/components/ai/motion-part"
+import { DesignPartView } from "@/src/components/ai/design-part"
+import { SlidesPartView } from "@/src/components/ai/slides-part"
+import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool } from "@/src/lib/piece-tools"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
@@ -204,11 +207,9 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       part.tool !== "update_artifact" &&
       part.tool !== "create_document" &&
       part.tool !== "update_document" &&
-      // A peça de motion tem card próprio: sem ele, fechar a aba do painel era
-      // perder a composição de vista — nada a listava na conversa.
-      part.tool !== "motion_preview" &&
-      part.tool !== "motion_write" &&
-      part.tool !== "motion_edit"
+      // As peças (motion, design, slides) têm card próprio, como no chat —
+      // fechar a aba do painel não pode tirá-las de vista.
+      !isPieceCardTool(part.tool)
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
@@ -314,11 +315,12 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <AudioPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "video" ? (
           <VideoPartView key={segment.id} part={segment.part} />
-        ) : segment.part.type === "tool" &&
-          (segment.part.tool === "motion_preview" ||
-            segment.part.tool === "motion_write" ||
-            segment.part.tool === "motion_edit") ? (
+        ) : segment.part.type === "tool" && MOTION_CARD_TOOLS.has(segment.part.tool) ? (
           <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.type === "tool" && DESIGN_CARD_TOOLS.has(segment.part.tool) ? (
+          <DesignPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.type === "tool" && SLIDES_CARD_TOOLS.has(segment.part.tool) ? (
+          <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : null,
       )}
       {message.error && (

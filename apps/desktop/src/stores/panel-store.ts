@@ -171,6 +171,11 @@ export type PanelEvent =
    * no balde do chat ativo (resolvido no App).
    */
   | { type: "slides"; id: string; entry: string; title: string; sessionId?: string; path?: string }
+  /**
+   * Peças que deixaram de existir (excluídas pelo agente ou desfeitas por um
+   * revert): as abas delas fecham em todos os chats.
+   */
+  | { type: "pieces-removed"; motion: string[]; design: string[]; slides: string[] }
 
 /** Registro do browser do agente por sessão de chat/task. */
 export interface AgentBrowserEntry {
@@ -1019,6 +1024,11 @@ export const usePanelStore = create<PanelState>((set, get) => {
             sessionId: event.sessionId,
             path: event.path,
           })
+          break
+        case "pieces-removed":
+          get().closeMotionTabs(event.motion)
+          get().closeDesignTabs(event.design)
+          get().closeSlidesTabs(event.slides)
           break
         case "activity": {
           usePanelStore.getState().pushActivity(event.label)

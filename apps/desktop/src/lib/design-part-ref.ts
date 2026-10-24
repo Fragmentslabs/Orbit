@@ -10,6 +10,8 @@ import type { ToolPart } from "@shared/chat"
  * histórico antigo sem o input completo.
  */
 export interface DesignPartRef {
+  /** Canvas endereçado pelo id (dsg_…) — de qualquer conversa. */
+  id?: string
   path?: string
   name?: string
   label: string
@@ -34,8 +36,9 @@ export function designRefOf(part: ToolPart): DesignPartRef | null {
   const input = part.input as Record<string, unknown> | undefined
   const path = typeof input?.path === "string" ? input.path : undefined
   const name = typeof input?.name === "string" ? input.name : undefined
-  const label = path ? path.split(/[\\/]/).filter(Boolean).pop() : (name ?? designNameInReport(part.output) ?? undefined)
+  const id = typeof input?.id === "string" && input.id.startsWith("dsg_") ? input.id : undefined
+  const label = path ? path.split(/[\\/]/).filter(Boolean).pop() : (name ?? designNameInReport(part.output) ?? id ?? undefined)
   if (!label) return null
   const boards = designBoardsInReport(part.output) ?? undefined
-  return { path, name, label, boards }
+  return { id, path, name, label, boards }
 }

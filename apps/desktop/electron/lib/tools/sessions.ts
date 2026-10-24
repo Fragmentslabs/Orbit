@@ -5,6 +5,7 @@ import { setArchivedState } from '@shared/archive'
 import { listKeys, readJson, removeJson, writeJson } from '../storage'
 import { broadcastSessionEvent } from '../companion-server'
 import { abortChat } from '../chat-engine'
+import { deleteMediaJournals } from '../session/media-journal'
 
 /**
  * Manutenção de chats pelo agente — a base das rotinas de limpeza.
@@ -177,6 +178,7 @@ export function createSessionTools(): ToolSet {
           abortChat(id)
           await removeJson(StorageKeys.session(id))
           await removeJson(StorageKeys.messages(id))
+          await deleteMediaJournals(id).catch(() => {})
           await removeJson(StorageKeys.planReview(id))
           await removeJson(StorageKeys.pendingAsks(id))
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })

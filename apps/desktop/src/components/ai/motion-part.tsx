@@ -30,22 +30,23 @@ export function MotionPartView({ part, sessionId }: { part: ToolPart; sessionId?
   const [opening, setOpening] = useState(false)
   const [gone, setGone] = useState(false)
   const ref = motionRefOf(part)
+  const id = ref?.id
   const path = ref?.path
   const name = ref?.name
   // Composição da conversa precisa da sessão para ser encontrada; a do projeto
   // se resolve pelo caminho sozinha.
-  const canOpen = Boolean(path || (name && sessionId))
+  const canOpen = Boolean(id || path || (name && sessionId))
 
   const open = useCallback(() => {
     if (!canOpen || opening) return
     setOpening(true)
     setGone(false)
     motionApi
-      .open(path ? { path } : { sessionId, name })
+      .open(id ? { id } : path ? { path } : { sessionId, name })
       .then((ok) => setGone(!ok))
       .catch(() => setGone(true))
       .finally(() => setOpening(false))
-  }, [canOpen, opening, path, name, sessionId])
+  }, [canOpen, opening, id, path, name, sessionId])
 
   // Sem referência não há o que reabrir — e uma peça que falhou já é dita em
   // texto pelo agente, que viu o erro da tool.

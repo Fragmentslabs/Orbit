@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import { z } from 'zod'
 import { mediaKind } from '@shared/media'
 import { getMediaEntry, mutateArtifact, saveArtifact, updateArtifact } from '../media'
-import { applyTextEdits } from './motion-chat'
+import { applyTextEdits } from './piece-common'
 
 /**
  * Artefatos HTML: o agente entrega uma página renderizável DENTRO da resposta

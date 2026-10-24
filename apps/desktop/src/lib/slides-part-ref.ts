@@ -11,6 +11,8 @@ import type { ToolPart } from "@shared/chat"
  * histórico antigo sem o input completo.
  */
 export interface SlidesPartRef {
+  /** Deck endereçado pelo id (sld_…) — de qualquer conversa. */
+  id?: string
   path?: string
   name?: string
   label: string
@@ -34,15 +36,17 @@ export function slidesCountInReport(output: string | undefined): number | null {
 export function slidesRefOf(part: ToolPart): SlidesPartRef | null {
   const input = part.input as Record<string, unknown> | undefined
   const rawPath = typeof input?.path === "string" ? input.path : undefined
-  const title = typeof input?.title === "string" ? input.title : undefined
+  // slides_write endereça pelo `title`; slides_edit e slides_preview, pelo `name`.
+  const title = typeof input?.title === "string" ? input.title : typeof input?.name === "string" ? input.name : undefined
+  const id = typeof input?.id === "string" && input.id.startsWith("sld_") ? input.id : undefined
   // `slides_write` endereça pelo TÍTULO e o main resolve a pasta pelo slug do
   // título (slides-slug.ts) — aqui não se normaliza nada, para não duplicar a
   // regra em dois lugares.
   const name = title?.trim() || undefined
   const label = rawPath
     ? rawPath.split(/[\\/]/).filter(Boolean).pop()
-    : (title ?? slidesNameInReport(part.output) ?? undefined)
+    : (title ?? slidesNameInReport(part.output) ?? id ?? undefined)
   if (!label) return null
   const slides = slidesCountInReport(part.output) ?? undefined
-  return { path: rawPath, name, label, slides }
+  return { id, path: rawPath, name, label, slides }
 }

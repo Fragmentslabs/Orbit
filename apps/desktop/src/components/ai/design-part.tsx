@@ -17,22 +17,23 @@ export function DesignPartView({ part, sessionId }: { part: ToolPart; sessionId?
   const [opening, setOpening] = useState(false)
   const [gone, setGone] = useState(false)
   const ref = designRefOf(part)
+  const id = ref?.id
   const path = ref?.path
   const name = ref?.name
   // Canvas do projeto (modo código) se resolve pelo caminho sozinho; canvas da
   // conversa (modo chat) precisa da sessão para ser encontrado.
-  const canOpen = Boolean(path || (name && sessionId))
+  const canOpen = Boolean(id || path || (name && sessionId))
 
   const open = useCallback(() => {
     if (!canOpen || opening) return
     setOpening(true)
     setGone(false)
     designApi
-      .open(path ? { path } : { sessionId, name })
+      .open(id ? { id } : path ? { path } : { sessionId, name })
       .then((ok) => setGone(!ok))
       .catch(() => setGone(true))
       .finally(() => setOpening(false))
-  }, [canOpen, opening, path, sessionId, name])
+  }, [canOpen, opening, id, path, sessionId, name])
 
   if (!ref || part.state === "error") return null
 

@@ -28,7 +28,7 @@ const { runFfmpeg } = await import('../video/ffmpeg')
 const { saveVideoAttachment } = await import('../attachment-ref')
 const { addVideoToGallery } = await import('../video/video-gallery')
 const media = await import('../media')
-const { createChatMotionTools, chatMotionDir } = await import('./motion-chat')
+const { createMotionTools, motionPiecesDir } = await import('./motion')
 
 type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const run = (tools: Record<string, unknown>, name: string, input: unknown) =>
@@ -59,16 +59,16 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
   })
 
   it('o chat ganha video_render e as tools de leitura, que aceitam a referência do anexo', () => {
-    const tools = createChatMotionTools({ sessionId: 'chat1', canRender: true })
+    const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     for (const name of ['video_render', 'video_probe', 'video_transcribe', 'video_timeline', 'motion_asset', 'motion_render']) {
       expect(tools[name], name).toBeDefined()
     }
     // Sem render (sem ffmpeg ou modo plano) não há como produzir vídeo.
-    expect(createChatMotionTools({ sessionId: 'chat1', canRender: false }).video_render).toBeUndefined()
+    expect(createMotionTools({ sessionId: 'chat1', canRender: false }).video_render).toBeUndefined()
   })
 
   it('video_probe lê um anexo pela referência, sem pasta de trabalho', async () => {
-    const tools = createChatMotionTools({ sessionId: 'chat1', canRender: true })
+    const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     const out = String(await run(tools, 'video_probe', { paths: [refA] }))
     expect(out).toContain(refA)
     expect(out).toContain('640x360')
@@ -77,7 +77,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
   })
 
   it('corta e junta dois anexos: a saída vai para o app, entra na galeria e some ao excluir', async () => {
-    const tools = createChatMotionTools({ sessionId: 'chat1', canRender: true })
+    const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     const result = (await run(tools, 'video_render', {
       edl: {
         sources: { A: refA, B: refB },
@@ -92,7 +92,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     expect(result.message).toMatch(/Rendered/)
     expect(result.videoUrl).toMatch(/^orbit-video:\/\//)
     // A saída fica na pasta desta conversa, e não ao lado do anexo.
-    const rendersDir = path.join(chatMotionDir('chat1'), 'renders')
+    const rendersDir = path.join(motionPiecesDir('chat1'), 'renders')
     expect(path.dirname(result.path!)).toBe(rendersDir)
     expect(await exists(result.path!)).toBe(true)
     expect(await exists(path.join(path.dirname(await mediaPath(refA)), 'edit', path.basename(result.path!)))).toBe(false)
@@ -110,7 +110,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
   }, 60_000)
 
   it('cada vídeo final é um item (nome próprio); a prévia é uma só e fica fora da galeria', async () => {
-    const tools = createChatMotionTools({ sessionId: 'chat2', canRender: true })
+    const tools = createMotionTools({ sessionId: 'chat2', canRender: true })
     const edl = { sources: { A: refA }, ranges: [{ source: 'A', start: 0, end: 1 }], snap: false }
     const first = (await run(tools, 'video_render', { edl })) as { path: string }
     await new Promise((resolve) => setTimeout(resolve, 5))
@@ -129,7 +129,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
   }, 120_000)
 
   it('refazer o MESMO arquivo de render não cria um cartão novo na galeria', async () => {
-    const file = path.join(chatMotionDir('chat3'), 'renders', 'peca.mp4')
+    const file = path.join(motionPiecesDir('chat3'), 'renders', 'peca.mp4')
     await fsp.mkdir(path.dirname(file), { recursive: true })
     await fsp.copyFile(await mediaPath(refA), file)
     const first = await addVideoToGallery({ file, name: 'peca.mp4', sessionId: 'chat3', source: 'chat' })

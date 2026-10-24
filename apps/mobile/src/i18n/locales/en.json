@@ -404,7 +404,13 @@
     "filesReverted_other": "{{count}} files reverted",
     "conversationReverted": "Conversation reverted to this point",
     "continuesFromHere": " — new message continues from here",
-    "undo": "Undo"
+    "undo": "Undo",
+    "mediaPieces_one": "{{count}} piece",
+    "mediaPieces_other": "{{count}} pieces",
+    "mediaItems_one": "{{count}} gallery item",
+    "mediaItems_other": "{{count}} gallery items",
+    "mediaReverted": " · undone: {{what}}",
+    "mediaFailed": " · pieces and gallery could NOT be undone"
   },
   "rightPanel": {
     "browser": "Browser",

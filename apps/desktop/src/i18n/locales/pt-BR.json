@@ -1342,7 +1342,13 @@
     "filesRestoreFailed": "A conversa foi truncada, mas as alterações de arquivo NÃO puderam ser desfeitas (falha ao restaurar o snapshot).",
     "continueFromHere": "nova mensagem continua deste ponto",
     "diff": "Diff",
-    "unrevert": "Desfazer"
+    "unrevert": "Desfazer",
+    "mediaPieces_one": "{{count}} peça",
+    "mediaPieces_other": "{{count}} peças",
+    "mediaItems_one": "{{count}} item da galeria",
+    "mediaItems_other": "{{count}} itens da galeria",
+    "mediaReverted": "desfeito: {{what}}",
+    "mediaFailed": "Peças e itens da galeria NÃO puderam ser desfeitos."
   },
   "skillProposal": {
     "building": "Montando a skill…",

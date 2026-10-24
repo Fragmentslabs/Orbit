@@ -183,6 +183,7 @@ import type { Memory, MemoryEvent } from '@shared/memory'
 const execFileAsync = promisify(execFile)
 
 const _require = createRequire(import.meta.url)
+import { pruneMediaJournals } from './lib/session/media-journal'
 const nodePty = _require('node-pty') as typeof NodePty
 const JSZip = _require('jszip') as typeof import('jszip')
 
@@ -1440,6 +1441,10 @@ app.whenReady().then(() => {
   ipcMain.handle('window:isFullscreen', () => win?.isFullScreen() ?? false)
 
   ipcMain.handle('select-folder', async () => {
+  // Diários de mídia (o revert de peças e galeria): saem os de conversas
+  // excluídas e os de mais de 30 dias. Em segundo plano — nada depende disso.
+  void pruneMediaJournals(30 * 24 * 60 * 60 * 1000, async (id) => (await readJson(StorageKeys.session(id))) !== null).catch(() => 0)
+
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
     })

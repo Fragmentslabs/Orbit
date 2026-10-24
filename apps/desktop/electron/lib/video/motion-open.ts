@@ -53,9 +53,9 @@ export async function reopenMotion(id: string): Promise<boolean> {
 /**
  * Abre uma composição na aba Motion e conta ao agente como ela ficou.
  *
- * É o passo comum do `motion_preview` (modo código, composição na pasta do
- * projeto) e do `motion_write`/`motion_edit` (modo chat, composição no
- * armazenamento do Orbit): registra a pasta, manda o painel abrir (ou focar) a
+ * É o passo comum de motion_write, motion_edit e motion_preview (a composição
+ * no armazenamento do Orbit, nos dois modos): registra a pasta, manda o painel
+ * abrir (ou focar) a
  * aba e MEDE a composição na mesma janela offscreen que a aba usa — o agente
  * fica sabendo agora se ela carrega e quem entra e sai, e quando, em vez de
  * descobrir pelo usuário reclamando de uma tela girando.
@@ -72,12 +72,16 @@ export async function openMotionAndReport(input: {
   nextStep: string
   /** O que fazer quando não carregou. */
   fixHint: string
+  /** false num worker: a peça é registrada e medida, mas nenhuma aba abre. */
+  openTab?: boolean
 }): Promise<string> {
   const preview = await prepareMotionPreview(input.target, { root: input.root, sessionId: input.sessionId })
   const name = path.basename(preview.folder)
   // O id faz a mesma composição voltar à MESMA aba; `entry` é o caminho dentro
   // da pasta e `path` o absoluto, que a nota do chat devolve ao agente.
-  panelMotionPreview({ id: preview.id, entry: preview.entry, title: name, path: preview.file, sessionId: input.sessionId })
+  if (input.openTab !== false) {
+    panelMotionPreview({ id: preview.id, entry: preview.entry, title: name, path: preview.file, sessionId: input.sessionId })
+  }
   try {
     const measured = await measureMotionLayers(preview.id, preview.url)
     // A peça entra na galeria na PRIMEIRA vez que abre: é isso que a deixa

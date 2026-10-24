@@ -12,7 +12,9 @@ import type { ToolPart } from "@shared/chat"
  * null, e a composição criada no chat não tinha card na conversa.
  */
 export interface MotionPartRef {
-  /** Composição da pasta do projeto: o caminho que o agente passou à tool. */
+  /** Composição endereçada pelo id (mv_…) — de qualquer conversa. */
+  id?: string
+  /** Composição antiga, da pasta do projeto: o caminho que o agente passou à tool. */
   path?: string
   /** Composição da conversa: o nome (já normalizado) que a tool relata. */
   name?: string
@@ -53,7 +55,10 @@ export function motionRefOf(part: ToolPart): MotionPartRef | null {
   const input = part.input ?? {}
   const reported = motionNameInReport(part.output)
   const format = motionFormatInReport(part.output) ?? undefined
-  // Caminho primeiro: quando ele existe, é o endereço mais preciso da peça.
+  // O id (mv_…) é o endereço exato — a peça pode ser de outra conversa.
+  const id = typeof input.id === "string" && input.id.startsWith("mv_") ? input.id : undefined
+  if (id) return { id, label: reported ?? id, format }
+  // Caminho: as peças antigas do modo código, que moravam na pasta do projeto.
   for (const key of ["path", "target", "file"]) {
     const value = input[key]
     if (typeof value === "string" && value) {

@@ -69,6 +69,18 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
 
   return (
     <Animated.View
+  // Peças e galeria: o desktop desfaz nos dois modos e manda só as contagens.
+  const media = revert.media
+  const mediaParts = [
+    media?.pieces ? t('revertBar.mediaPieces', { count: media.pieces }) : null,
+    media?.items ? t('revertBar.mediaItems', { count: media.items }) : null,
+  ].filter(Boolean)
+  const mediaLabel =
+    media?.restored === false
+      ? t('revertBar.mediaFailed')
+      : mediaParts.length > 0
+        ? t('revertBar.mediaReverted', { what: mediaParts.join(', ') })
+        : ''
       style={{ transform: [{ translateY }] }}
       {...panResponder.panHandlers}
     >
@@ -102,6 +114,7 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
           <Text style={{ color: tokens.mutedForeground }}>
             {t('revertBar.continuesFromHere')}
           </Text>
+          {mediaLabel ? <Text style={{ color: tokens.mutedForeground }}>{mediaLabel}</Text> : null}
         </Text>
         <Pressable
           onPress={() => onUnrevert(session.id)}

@@ -2,14 +2,14 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
-import type { ToolContext } from './context'
 
 /**
- * Design no MODO CÓDIGO: a tool só registra e abre uma pasta que o agente já
- * escreveu com write/edit — espelha o mock de video-chat.test.ts.
+ * Design — as mesmas tools nos dois modos: o canvas mora no armazenamento do app e
+ * entra na galeria — espelha video-chat.test.ts (o mock de 'electron' é o
+ * mesmo molde, sem ffmpeg nenhum envolvido aqui).
  */
 
-const userData = path.join(os.tmpdir(), `orbit-design-code-${process.pid}`)
+const userData = path.join(os.tmpdir(), `orbit-design-chat-${process.pid}`)
 
 vi.mock('electron', () => ({
   app: { getPath: () => userData, getAppPath: () => userData, isPackaged: false },
@@ -20,7 +20,20 @@ vi.mock('electron', () => ({
   dialog: {},
 }))
 
-const { createDesignTools } = await import('./design')
+// design_asset copia um ANEXO para a pasta do canvas — o resolvedor de
+// referências (e o ffmpeg, que ele alcança para vídeo) é o mesmo do
+// motion-asset.test.ts, mockado aqui do mesmo jeito.
+const resolved: Record<string, { kind: string; id: string; file: string; name: string }> = {}
+vi.mock('../attachment-ref', () => ({
+  resolveAttachmentRef: async (ref: string) => resolved[ref.replace(/^ref\s+/, '')] ?? null,
+}))
+vi.mock('../video/ffmpeg', () => ({
+  probeMedia: async () => {
+    throw new Error('no ffmpeg in this test')
+  },
+}))
+
+const { designPiecesDir, createDesignTools, designSlug } = await import('./design')
 
 type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const run = (tools: Record<string, unknown>, name: string, input: unknown) =>
@@ -30,31 +43,231 @@ afterAll(async () => {
   await fsp.rm(userData, { recursive: true, force: true })
 })
 
-describe('design_preview', () => {
-  it('registra e abre um canvas que já existe na pasta de trabalho', async () => {
-    const directory = path.join(userData, 'proj')
-    const canvasFolder = path.join(directory, 'design', 'logo')
-    await fsp.mkdir(canvasFolder, { recursive: true })
-    await fsp.writeFile(
-      path.join(canvasFolder, 'canvas.json'),
-      JSON.stringify({ v: 1, boards: { 'Main.html': { x: 0, y: 0, w: 400, h: 400 } }, order: ['Main.html'] }),
-      'utf8',
-    )
-    await fsp.writeFile(path.join(canvasFolder, 'Main.html'), '<!doctype html><title>F</title><body>F</body>', 'utf8')
+describe('designSlug', () => {
+  it('turns any name into a short, safe folder name', () => {
+    expect(designSlug('Landing page v2')).toBe('landing-page-v2')
+    expect(designSlug('  Apresentação — Orbit 2.0  ')).toBe('apresentacao-orbit-2-0')
+    expect(designSlug('../../etc')).toBe('etc')
+    expect(designSlug('***')).toBe('design')
+  })
+})
 
-    const ctx: ToolContext = { sessionId: 'sess1', directory, extraDirectories: [], abort: new AbortController().signal }
-    const tools = createDesignTools(ctx, { sessionId: 'sess1' })
+describe('designPiecesDir', () => {
+  it('refuses a session id that could escape the folder', () => {
+    expect(() => designPiecesDir('../outro')).toThrow(/invalid session/)
+    expect(designPiecesDir('sess1')).toContain('sess1')
+  })
+})
 
-    const report = await run(tools, 'design_preview', { path: 'design/logo' })
-    expect(report).toContain('is open in the Design tab')
-    expect(report).toContain('with 1 artboard')
+describe('createDesignTools — design_write / design_read / design_edit', () => {
+  const tools = createDesignTools({ sessionId: 'sess1' })
+  const folder = path.join(designPiecesDir('sess1'), 'landing')
+
+  it('design_write creates the canvas.json, the shared stylesheet and each artboard file', async () => {
+    const report = await run(tools, 'design_write', {
+      name: 'Landing',
+      title: 'Landing page',
+      boards: [
+        { file: 'Main.html', title: 'Hero', x: 0, y: 0, w: 1280, h: 800, html: '<!doctype html><title>Hero</title><body>Hi</body>' },
+        { file: 'Pricing.html', x: 1360, y: 0, w: 1280, h: 800, html: '<!doctype html><title>Pricing</title><body>$9</body>' },
+      ],
+      styles: [{ file: 'base.css', css: ':root{--gap:8px} body{margin:0}' }],
+    })
+    // O relatório usa o SLUG da pasta (como o motion), não a grafia original.
+    expect(report).toContain('Design "landing" is open in the Design tab')
+    expect(report).toContain('with 2 artboards')
+    // "Main.html" tem título ("Hero"), então aparece como "Hero" (Main.html, …).
+    expect(report).toContain('"Hero" (Main.html,')
+    expect(report).toContain('"Pricing.html" (Pricing.html,')
+    // A folha compartilhada não está no canvas.json: o relatório a nomeia para o
+    // modelo não repetir o CSS dentro de cada documento.
+    expect(report).toContain('Shared stylesheets: base.css')
+
+    const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
+    expect(canvas.order).toEqual(['Main.html', 'Pricing.html'])
+    expect(canvas.boards['Main.html']).toMatchObject({ title: 'Hero', x: 0, y: 0, w: 1280, h: 800 })
+    expect(await fsp.readFile(path.join(folder, 'Main.html'), 'utf8')).toContain('Hi')
+    expect(await fsp.readFile(path.join(folder, 'base.css'), 'utf8')).toContain('--gap')
   })
 
-  it('recusa um caminho fora da pasta de trabalho', async () => {
-    const directory = path.join(userData, 'proj2')
-    await fsp.mkdir(directory, { recursive: true })
-    const ctx: ToolContext = { sessionId: 'sess1', directory, extraDirectories: [], abort: new AbortController().signal }
-    const tools = createDesignTools(ctx, { sessionId: 'sess1' })
-    await expect(run(tools, 'design_preview', { path: '../../etc' })).rejects.toThrow(/Access denied/)
+  it('rejects an artboard file name that is not a plain .html name', async () => {
+    await expect(
+      run(tools, 'design_write', {
+        name: 'Bad',
+        boards: [{ file: '../escape.html', x: 0, y: 0, w: 100, h: 100, html: '<html></html>' }],
+      }),
+    ).rejects.toThrow(/invalid artboard file name/)
+  })
+
+  it('design_read returns the layout (with the stylesheets), and one file\'s content', async () => {
+    const layout = await run(tools, 'design_read', { name: 'Landing' })
+    expect(JSON.parse(layout).order).toEqual(['Main.html', 'Pricing.html'])
+    // O canvas.json é só o arranjo; as folhas entram na leitura.
+    expect(JSON.parse(layout).styles).toEqual(['base.css'])
+
+    const html = await run(tools, 'design_read', { name: 'Landing', file: 'Main.html' })
+    expect(html).toContain('Hi')
+
+    const css = await run(tools, 'design_read', { name: 'Landing', file: 'base.css' })
+    expect(css).toContain('--gap')
+  })
+
+  it('design_read refuses a file that is neither an artboard nor a stylesheet', async () => {
+    await expect(run(tools, 'design_read', { name: 'Landing', file: '../secret.txt' })).rejects.toThrow(
+      /invalid file name/,
+    )
+  })
+
+  it('design_edit applies exact text edits to the shared stylesheet', async () => {
+    const report = await run(tools, 'design_edit', {
+      name: 'Landing',
+      style: { file: 'base.css', edits: [{ oldText: '--gap:8px', newText: '--gap:16px' }] },
+    })
+    expect(report).toContain('updated "base.css"')
+    const css = await fsp.readFile(path.join(folder, 'base.css'), 'utf8')
+    expect(css).toContain('--gap:16px')
+    expect(css).toContain('body{margin:0}')
+  })
+
+  it('design_edit refuses to edit a stylesheet that does not exist without its css', async () => {
+    await expect(run(tools, 'design_edit', { name: 'Landing', style: { file: 'tokens.css', edits: [{ oldText: 'a', newText: 'b' }] } })).rejects.toThrow(
+      /does not exist yet/,
+    )
+  })
+
+  it('design_write refuses a stylesheet name that is not a plain .css name', async () => {
+    await expect(
+      run(tools, 'design_write', {
+        name: 'Bad',
+        boards: [{ file: 'Main.html', x: 0, y: 0, w: 100, h: 100, html: '<html></html>' }],
+        styles: [{ file: '../base.css', css: 'body{}' }],
+      }),
+    ).rejects.toThrow(/invalid stylesheet file name/)
+  })
+
+  it('design_write refuses more than four artboards in one call (write one, add the rest with design_edit)', async () => {
+    const boards = Array.from({ length: 5 }, (_, i) => ({
+      file: `S${i}.html`,
+      x: i * 100,
+      y: 0,
+      w: 400,
+      h: 300,
+      html: '<!doctype html><title>x</title><body>x</body>',
+    }))
+    await expect(run(tools, 'design_write', { name: 'TooMany', boards })).rejects.toThrow(/at most 4 artboards/)
+  })
+
+  it('design_edit applies exact text edits to an artboard', async () => {
+    const report = await run(tools, 'design_edit', {
+      name: 'Landing',
+      file: 'Main.html',
+      edits: [{ oldText: 'Hi', newText: 'Hello there' }],
+    })
+    expect(report).toContain('updated "Main.html"')
+    expect(await fsp.readFile(path.join(folder, 'Main.html'), 'utf8')).toContain('Hello there')
+  })
+
+  it('design_edit moves/resizes an artboard without touching its HTML', async () => {
+    await run(tools, 'design_edit', { name: 'Landing', file: 'Main.html', x: 40, y: 40, w: 1000, h: 700 })
+    const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
+    expect(canvas.boards['Main.html']).toMatchObject({ x: 40, y: 40, w: 1000, h: 700 })
+    expect(await fsp.readFile(path.join(folder, 'Main.html'), 'utf8')).toContain('Hello there')
+  })
+
+  it('design_edit adds a brand-new artboard', async () => {
+    await run(tools, 'design_edit', {
+      name: 'Landing',
+      file: 'Footer.html',
+      html: '<!doctype html><title>Footer</title><body>© Orbit</body>',
+      x: 0,
+      y: 900,
+      w: 1280,
+      h: 200,
+    })
+    const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
+    expect(canvas.order).toContain('Footer.html')
+    expect(await fsp.readFile(path.join(folder, 'Footer.html'), 'utf8')).toContain('Orbit')
+  })
+
+  it('design_edit reorders the stack', async () => {
+    await run(tools, 'design_edit', { name: 'Landing', order: ['Footer.html', 'Pricing.html', 'Main.html'] })
+    const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
+    expect(canvas.order).toEqual(['Footer.html', 'Pricing.html', 'Main.html'])
+  })
+
+  it('design_edit removes an artboard and deletes its file', async () => {
+    await run(tools, 'design_edit', { name: 'Landing', file: 'Footer.html', remove: true })
+    const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
+    expect(canvas.order).not.toContain('Footer.html')
+    expect(canvas.boards['Footer.html']).toBeUndefined()
+    await expect(fsp.stat(path.join(folder, 'Footer.html'))).rejects.toThrow()
+  })
+
+  it('design_edit refuses editing a canvas that does not exist', async () => {
+    await expect(run(tools, 'design_edit', { name: 'Nope', file: 'Main.html', html: '<html></html>' })).rejects.toThrow(
+      /no design canvas named/,
+    )
+  })
+
+  it('design_read refuses a missing artboard with a helpful error', async () => {
+    await expect(run(tools, 'design_read', { name: 'Landing', file: 'Missing.html' })).rejects.toThrow(/not found/)
+  })
+})
+
+describe('createDesignTools — design_asset', () => {
+  it('copies an attached photo into the canvas folder and hints the relative src', async () => {
+    const source = path.join(userData, 'orig.png')
+    await fsp.writeFile(source, 'PNG')
+    resolved['img_ab1.png'] = { kind: 'image', id: 'img_ab1.png', file: source, name: 'Foto da equipe.png' }
+
+    const tools = createDesignTools({ sessionId: 'sess1' })
+    const report = await run(tools, 'design_asset', { ref: 'img_ab1.png', name: 'Moodboard' })
+
+    expect(report).toContain('Copied: image "Foto da equipe.png" → Foto-da-equipe.png')
+    expect(report).toContain('<img src="Foto-da-equipe.png">')
+    const folder = path.join(designPiecesDir('sess1'), 'moodboard')
+    expect(await fsp.readFile(path.join(folder, 'Foto-da-equipe.png'), 'utf8')).toBe('PNG')
+  })
+
+  it('design_asset refuses a ref that is not an attachment', async () => {
+    const tools = createDesignTools({ sessionId: 'sess1' })
+    await expect(run(tools, 'design_asset', { ref: 'img_naoexiste.png', name: 'Moodboard' })).rejects.toThrow(
+      /attachment not found/,
+    )
+  })
+})
+
+describe('createDesignTools — design_preview / design_delete / código / modo plano', () => {
+  it('design_preview reabre um canvas que existe e recusa um que não existe', async () => {
+    const tools = createDesignTools({ sessionId: 'sess2' })
+    await run(tools, 'design_write', { name: 'Logo', boards: [{ file: 'Main.html', x: 0, y: 0, w: 400, h: 400, html: '<html></html>' }] })
+    expect(await run(tools, 'design_preview', { name: 'Logo' })).toContain('with 1 artboard')
+    await expect(run(tools, 'design_preview', { name: 'Nenhum' })).rejects.toThrow(/no design canvas named "nenhum"/)
+  })
+
+  it('design_delete apaga a pasta do canvas', async () => {
+    const tools = createDesignTools({ sessionId: 'sess2' })
+    expect(await run(tools, 'design_delete', { name: 'Logo' })).toContain('deleted')
+    await expect(fsp.stat(path.join(designPiecesDir('sess2'), 'logo'))).rejects.toThrow()
+  })
+
+  it('no código o canvas mora no Orbit, e um arquivo do projeto entra pelo design_asset({ path })', async () => {
+    const directory = path.join(userData, 'proj')
+    await fsp.mkdir(path.join(directory, 'public'), { recursive: true })
+    await fsp.writeFile(path.join(directory, 'public', 'logo.svg'), '<svg/>')
+    const project = { sessionId: 'sess4', directory, extraDirectories: [], abort: new AbortController().signal }
+    const tools = createDesignTools({ sessionId: 'sess4', project })
+    await run(tools, 'design_write', { name: 'Site', boards: [{ file: 'Home.html', x: 0, y: 0, w: 1280, h: 800, html: '<html></html>' }] })
+    const report = await run(tools, 'design_asset', { name: 'Site', path: 'public/logo.svg' })
+
+    expect(report).toContain('<img src="logo.svg">')
+    expect(await fsp.readFile(path.join(designPiecesDir('sess4'), 'site', 'logo.svg'), 'utf8')).toBe('<svg/>')
+    // Nada foi escrito no projeto.
+    expect(await fsp.readdir(directory)).toEqual(['public'])
+  })
+
+  it('modo plano: só ler e mostrar', () => {
+    const tools = createDesignTools({ sessionId: 'sess4', readOnly: true })
+    expect(Object.keys(tools).sort()).toEqual(['design_preview', 'design_read'])
   })
 })

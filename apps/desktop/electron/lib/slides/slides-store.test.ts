@@ -24,8 +24,8 @@ vi.mock('electron', async () => {
 })
 
 const {
-  chatSlidesDir,
-  chatSlidesRoot,
+  slidesPiecesDir,
+  slidesPiecesRoot,
   deleteSlidesDeck,
   getSlides,
   isSlidesSourceChange,
@@ -207,7 +207,7 @@ describe('isSlidesSourceChange', () => {
   })
 })
 
-describe('chatSlidesDir / deleteSlidesDeck', () => {
+describe('slidesPiecesDir / deleteSlidesDeck', () => {
   const stat = async (target: string) => (await import('node:fs/promises')).stat(target)
 
   async function deckAt(folder: string, opts: { root?: string } = {}) {
@@ -217,12 +217,12 @@ describe('chatSlidesDir / deleteSlidesDeck', () => {
   }
 
   it('a pasta do chat fica sob a raiz do app, com o id da sessão validado', () => {
-    expect(chatSlidesDir('sess-del')).toBe(path.join(chatSlidesRoot(), 'sess-del'))
-    expect(() => chatSlidesDir('../fuga')).toThrow(/invalid session id/)
+    expect(slidesPiecesDir('sess-del')).toBe(path.join(slidesPiecesRoot(), 'sess-del'))
+    expect(() => slidesPiecesDir('../fuga')).toThrow(/invalid session id/)
   })
 
   it('apaga a pasta de um deck do chat, e o registro vai junto', async () => {
-    const reg = await deckAt(chatSlidesDir('sess-del'))
+    const reg = await deckAt(slidesPiecesDir('sess-del'))
     const out = await deleteSlidesDeck(reg.id)
     expect(out.removedFolder).toBe(true)
     expect(await getSlides(reg.id)).toBeUndefined()

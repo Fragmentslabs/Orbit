@@ -13,6 +13,8 @@ import { useSessionStore } from "@/src/stores/session-store"
  * - Modo código sem snapshot: aviso de que a conversa foi truncada, mas os
  *   arquivos não puderam ser desfeitos (filesRestored === false).
  * - Modo chat: indica que a conversa foi truncada até o ponto revertido.
+ * - Nos dois modos: o que foi desfeito fora do repositório — peças (motion,
+ *   design, slides) e itens da galeria —, ou o aviso de que não foi possível.
  * Pode ser fechada com o X (não desfaz o revert, só esconde a barra).
  */
 export function RevertBar({ session }: { session: SessionInfo }) {
@@ -42,17 +44,33 @@ export function RevertBar({ session }: { session: SessionInfo }) {
           : t("revert.filesRevertedMany", { n: count })
       : t("revert.conversationReverted")
 
+  // Mídia: peças e galeria moram no armazenamento do app e têm diário próprio,
+  // nos dois modos (ver session/media-revert.ts).
+  const media = revert.media
+  const mediaFailed = media?.restored === false
+  const mediaParts = [
+    media?.pieces ? t("revert.mediaPieces", { count: media.pieces }) : null,
+    media?.items ? t("revert.mediaItems", { count: media.items }) : null,
+  ].filter(Boolean)
+  const mediaLabel = mediaFailed
+    ? t("revert.mediaFailed")
+    : mediaParts.length > 0
+      ? t("revert.mediaReverted", { what: mediaParts.join(", ") })
+      : null
+  const warn = filesNotRestored || mediaFailed
+
   return (
     <div className="rounded-lg border bg-muted/40 text-xs">
       <div className="flex items-center gap-2 px-3 py-2">
-        {filesNotRestored
+        {warn
           ? <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-          : isCode
+          : isCode || mediaLabel
             ? <History className="size-3.5 shrink-0 text-muted-foreground" />
             : <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
         }
-        <span className="flex-1 truncate">
+        <span className="flex-1 truncate" title={mediaLabel ? `${label} · ${mediaLabel}` : label}>
           {label}
+          {mediaLabel && <span className={cn(mediaFailed && "text-amber-600 dark:text-amber-400")}> · {mediaLabel}</span>}
           <span className="text-muted-foreground"> — {t("revert.continueFromHere")}</span>
         </span>
         {revert.diff && (

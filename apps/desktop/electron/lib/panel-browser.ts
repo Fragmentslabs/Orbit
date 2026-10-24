@@ -147,6 +147,10 @@ export type PanelEvent =
   // `orbit-slides://<id>/<entry>`. O mesmo id volta à MESMA aba.
   | { type: 'slides'; id: string; entry: string; title: string; sessionId?: string; path?: string }
   | { type: 'activity'; label: string; sessionId?: string }
+  // Peças que deixaram de existir — excluídas pelo agente (motion_delete,
+  // design_delete, slides_delete) ou desfeitas pelo revert da mensagem que as
+  // criou. O painel fecha as abas delas em todos os chats.
+  | { type: 'pieces-removed'; motion: string[]; design: string[]; slides: string[] }
 
 function broadcastPanelEvent(event: PanelEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -200,6 +204,13 @@ export function panelSlidesPreview(event: {
   sessionId?: string
 }): void {
   broadcastPanelEvent({ type: 'slides', ...event })
+}
+
+/** Fecha as abas das peças que deixaram de existir (ver o evento 'pieces-removed'). */
+export function panelPiecesRemoved(removed: { motion?: string[]; design?: string[]; slides?: string[] }): void {
+  const event = { type: 'pieces-removed' as const, motion: removed.motion ?? [], design: removed.design ?? [], slides: removed.slides ?? [] }
+  if (event.motion.length + event.design.length + event.slides.length === 0) return
+  broadcastPanelEvent(event)
 }
 
 /** URL atual do browser do painel — vazia quando a sessão não tem webview. */

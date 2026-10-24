@@ -74,6 +74,7 @@ import {
 import * as rotinas from './rotinas'
 import * as esteira from './esteira'
 import { definirModoGlobal } from './permission/modo-global'
+import { deleteMediaJournals } from './session/media-journal'
 import {
   rewriteMediaPart as rewriteMediaPartOne,
   rewriteMessage as rewriteMessageMedia,
@@ -817,6 +818,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           await removeJson(StorageKeys.session(id))
           await removeJson(StorageKeys.messages(id))
           await removeJson(StorageKeys.planReview(id))
+          await deleteMediaJournals(id).catch(() => {})
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })
         }
         sendResponse(ws, requestId, true)

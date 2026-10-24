@@ -404,7 +404,13 @@
     "filesReverted_other": "{{count}} arquivos revertidos",
     "conversationReverted": "Conversa revertida até este ponto",
     "continuesFromHere": " — nova mensagem continua deste ponto",
-    "undo": "Desfazer"
+    "undo": "Desfazer",
+    "mediaPieces_one": "{{count}} peça",
+    "mediaPieces_other": "{{count}} peças",
+    "mediaItems_one": "{{count}} item da galeria",
+    "mediaItems_other": "{{count}} itens da galeria",
+    "mediaReverted": " · desfeito: {{what}}",
+    "mediaFailed": " · peças e galeria NÃO puderam ser desfeitas"
   },
   "rightPanel": {
     "browser": "Navegador",

@@ -47,15 +47,14 @@ import { createComputerTools } from './computer'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
-import { createChatMotionTools } from './motion-chat'
-import { createChatSlidesTools } from './slides-chat'
-import { createSlidesTools } from './slides'
 import { createYtdlpTools } from './ytdlp'
-import { createChatDesignTools } from './design-chat'
-import { createPanelTools } from './panel'
+import { createMotionTools } from './motion'
 import { createDesignTools } from './design'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { createFontTools } from './fonts'
+import { createSlidesTools } from './slides'
+import { createPieceExportTool } from './piece-export'
+import { createPanelTools } from './panel'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -185,17 +184,6 @@ export function buildToolSet(
       if (resolveFfmpeg()) {
         Object.assign(tools, createMediaTools({ sessionId: input.sessionId, canShow: true }, null))
       }
-      // Motion: sem pasta de trabalho, a composição mora no armazenamento do
-      // Orbit (uma pasta por conversa) e é escrita/editada por nome — a mesma
-      // aba Motion, ao vivo. O render só existe com o ffmpeg do app.
-      Object.assign(
-        tools,
-        createChatMotionTools({
-          sessionId: input.sessionId,
-          modelVision: ctx?.modelVision !== false,
-          canRender: resolveFfmpeg() !== null,
-        }),
-      )
       // Mídia por link (yt-dlp): baixar vídeo/áudio, ler a transcrição e, com
       // ela, resumir. No chat o arquivo mora no storage do Orbit e entra na
       // galeria. Sem o binário instalado o conjunto não some: ytdlp_install é
@@ -204,13 +192,22 @@ export function buildToolSet(
         tools,
         createYtdlpTools({ sessionId: input.sessionId, canShow: true, language: input.language }, null),
       )
-      // Design: mesmo molde do motion acima — sem pasta de trabalho, o canvas
-      // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
-      // aba Design, ao vivo.
-      Object.assign(tools, createChatDesignTools({ sessionId: input.sessionId }))
-      // Slides: o deck inteiro entra na CHAMADA da tool (uma por slide), como o
-      // create_artifact — o main monta o arquivo, registra e abre a aba.
-      Object.assign(tools, createChatSlidesTools({ sessionId: input.sessionId }))
+      // Peças do Orbit (motion, design, slides): as MESMAS tools do modo
+      // código — a peça mora no armazenamento do app, é endereçada por nome e
+      // toda escrita passa pelo diário do turno. Sem pasta de trabalho, o
+      // material entra só pelos anexos, e a edição de vídeo (EDL) vem junto do
+      // motion, lendo os anexos pela referência. O render só existe com o
+      // ffmpeg do app.
+      Object.assign(
+        tools,
+        createMotionTools({
+          sessionId: input.sessionId,
+          modelVision: ctx?.modelVision !== false,
+          canRender: resolveFfmpeg() !== null,
+        }),
+      )
+      Object.assign(tools, createDesignTools({ sessionId: input.sessionId }))
+      Object.assign(tools, createSlidesTools({ sessionId: input.sessionId }))
       // Fontes externas (biblioteca do Orbit): instalar não pede permissão nem
       // escreve no projeto — o scheme orbit-font:// entrega o arquivo ao
       // artboard e à composição. Sem toggle: não expõe nada que o app já não
@@ -354,10 +351,9 @@ export function buildToolSet(
       Object.assign(tools, createBackgroundTools(ctx))
     }
   }
-  // Vídeo e motion: precisam de pasta (as saídas vão para edit/ ao lado do
-  // material) e do ffmpeg que vem com o app. Workers entram — a skill manda
-  // fazer cada animação num sub-agente em paralelo —, mas não mostram player:
-  // quem fala com o usuário é a sessão principal.
+  // Edição de vídeo (EDL): precisa de pasta (as saídas vão para edit/ ao lado
+  // do material) e do ffmpeg que vem com o app. Workers entram, mas não
+  // mostram player: quem fala com o usuário é a sessão principal.
   if (ctx && resolveFfmpeg()) {
     Object.assign(
       tools,
@@ -375,19 +371,6 @@ export function buildToolSet(
       createMediaTools({ sessionId: input.sessionId, canShow: input.orchestrationRole !== 'worker' }, ctx),
     )
   }
-  // Design: só precisa de pasta (sem ffmpeg nenhum) — o agente escreve o
-  // canvas com write/edit e design_preview abre a aba, como motion_preview faz
-  // com a composição. Workers ficam de fora: o painel é um recurso visível, só
-  // da sessão principal.
-  if (ctx && input.orchestrationRole !== 'worker') {
-    Object.assign(tools, createDesignTools(ctx, { sessionId: input.sessionId }))
-    // Slides: um arquivo por deck (index.html com <section class="slide">), sem
-    // canvas.json e sem coordenadas — o mesmo molde do design, com metade da
-    // escrita. Workers ficam de fora: o painel é um recurso visível.
-    Object.assign(tools, createSlidesTools(ctx, { sessionId: input.sessionId }))
-    Object.assign(tools, createFontTools())
-  }
-
   // Mídia por link (yt-dlp): depende de pasta, não do ffmpeg — o áudio e a
   // legenda funcionam sem ele, e o merge de vídeo usa o ffmpeg do app quando
   // existe. Fica fora do bloco acima para não sumir num sistema sem ffmpeg.
@@ -419,6 +402,37 @@ export function buildToolSet(
       // usar o navegador, então fica.
       tools.show_image = panelTools.show_image
     }
+  // Peças do Orbit (motion, design, slides): as MESMAS tools do chat. A peça
+  // mora no armazenamento do app, não no repositório — o projeto entra como
+  // FONTE de material (os *_asset com `path`) e como destino só quando o
+  // usuário pede (piece_export, motion_render com `output`). Assim toda
+  // escrita passa pelo diário do turno e o revert da mensagem a desfaz.
+  if (ctx) {
+    const plan = Boolean(input.options.plan)
+    const isWorker = input.orchestrationRole === 'worker'
+    // Motion entra também nos workers — a skill manda fazer cada animação num
+    // sub-agente em paralelo —, mas sem abrir aba: o painel é da sessão
+    // principal, que mostra a peça pelo id que o worker devolve.
+    Object.assign(
+      tools,
+      createMotionTools({
+        sessionId: input.sessionId,
+        project: ctx,
+        modelVision: ctx.modelVision !== false,
+        canRender: resolveFfmpeg() !== null,
+        canShow: !isWorker,
+        readOnly: plan,
+      }),
+    )
+    // Design e slides: só a sessão principal — o painel é um recurso visível.
+    if (!isWorker) {
+      Object.assign(tools, createDesignTools({ sessionId: input.sessionId, project: ctx, readOnly: plan }))
+      Object.assign(tools, createSlidesTools({ sessionId: input.sessionId, project: ctx, readOnly: plan }))
+      if (!plan) tools.piece_export = createPieceExportTool(ctx, { sessionId: input.sessionId })
+      Object.assign(tools, createFontTools())
+    }
+  }
+
   }
   if (allowBrain && ctx) {
     Object.assign(tools, createCodeMemoryTools(input, ctx))

@@ -18,6 +18,7 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { MotionPartView } from "@/src/components/ai/motion-part"
 import { DesignPartView } from "@/src/components/ai/design-part"
 import { SlidesPartView } from "@/src/components/ai/slides-part"
+import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS } from "@/src/lib/piece-tools"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImageGroupView } from "@/src/components/ai/image"
 import { ActionsGroup } from "@/src/components/ai/actions-group"
@@ -147,19 +148,10 @@ const RENDER_PROPRIO = new Set([
   "update_artifact",
   "create_document",
   "update_document",
-  // A peça de motion tem card próprio: sem ele, fechar a aba do painel era
-  // perder a composição de vista — nada a listava na conversa.
-  "motion_preview",
-  "motion_write",
-  "motion_edit",
-  // Mesmo motivo do motion: o canvas de design tem card próprio.
-  "design_write",
-  "design_edit",
-  "design_preview",
-  // E o deck de slides, pelo mesmo motivo: fechar a aba era perder o deck de
-  // vista (o Slides tab não tem outra porta na conversa).
-  "slides_preview",
-  "slides_write",
+  // As peças (motion, design, slides) têm card próprio — ver piece-tools.ts.
+  ...MOTION_CARD_TOOLS,
+  ...DESIGN_CARD_TOOLS,
+  ...SLIDES_CARD_TOOLS,
 ])
 
 function segmentParts(parts: MessagePart[]): Segment[] {
@@ -257,15 +249,11 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
-        ) : segment.part.tool === "motion_preview" ||
-          segment.part.tool === "motion_write" ||
-          segment.part.tool === "motion_edit" ? (
+        ) : MOTION_CARD_TOOLS.has(segment.part.tool) ? (
           <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : segment.part.tool === "design_write" ||
-          segment.part.tool === "design_edit" ||
-          segment.part.tool === "design_preview" ? (
+        ) : DESIGN_CARD_TOOLS.has(segment.part.tool) ? (
           <DesignPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : segment.part.tool === "slides_preview" || segment.part.tool === "slides_write" ? (
+        ) : SLIDES_CARD_TOOLS.has(segment.part.tool) ? (
           <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update" ? (
           <McpProposalCard key={segment.id} part={segment.part} />

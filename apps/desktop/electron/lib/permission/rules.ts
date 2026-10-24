@@ -198,21 +198,28 @@ const NATIVE_TOOLS = new Set([
   // Design (canvas de artboards no painel): mesmo threat model — motor local,
   // entrega é um arquivo no storage do Orbit. Sem entrar aqui cairia no
   // catch-all de MCP como servidor "design" e pediria permissão a cada chamada.
+  'motion_read',
   'design_write',
   'design_edit',
+  'motion_delete',
   'design_read',
   'design_preview',
   'design_asset',
   // Slides (deck no painel): mesmo threat model do design — o deck é um arquivo
-  // escrito por write/edit ou montado no storage do app. Fora desta lista cairia
-  // no catch-all de MCP como servidor "slides" e pediria permissão a cada chamada.
+  // montado no storage do app. Fora desta lista cairia no catch-all de MCP como
+  // servidor "slides" e pediria permissão a cada chamada.
   'slides_preview',
   'slides_write',
+  'design_delete',
   // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
   // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
   'image_search',
   'image_import',
   'motion_frame',
+  'slides_edit',
+  'slides_read',
+  'slides_asset',
+  'slides_delete',
   'show_video',
   'video_guide',
   'video_probe',

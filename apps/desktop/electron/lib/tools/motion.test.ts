@@ -6,7 +6,8 @@ vi.mock('electron', () => ({
   protocol: { handle: () => {} },
 }))
 
-const { applyTextEdits, chatMotionDir, motionSlug } = await import('./motion-chat')
+const { motionPiecesDir, motionSlug } = await import('./motion')
+const { applyTextEdits } = await import('./piece-common')
 
 describe('motionSlug', () => {
   it('turns any name into a short, safe folder name', () => {
@@ -18,10 +19,10 @@ describe('motionSlug', () => {
   })
 })
 
-describe('chatMotionDir', () => {
+describe('motionPiecesDir', () => {
   it('refuses a session id that could escape the folder', () => {
-    expect(() => chatMotionDir('../outro')).toThrow(/invalid session/)
-    expect(chatMotionDir('JwGoW05wNYfnaOkdxxpcR')).toContain('JwGoW05wNYfnaOkdxxpcR')
+    expect(() => motionPiecesDir('../outro')).toThrow(/invalid session/)
+    expect(motionPiecesDir('JwGoW05wNYfnaOkdxxpcR')).toContain('JwGoW05wNYfnaOkdxxpcR')
   })
 })
 

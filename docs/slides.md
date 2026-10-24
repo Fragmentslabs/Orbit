@@ -57,21 +57,33 @@ Slide é narrativa, e narrativa se escreve, não se arrasta.
 - **`?print=1`** na URL serve o mesmo deck empilhado, um slide por página — a
   base do export em PDF, que ainda não existe na interface.
 
-## As duas portas
+## As tools (as mesmas nos dois modos)
 
-| | modo código | modo conversa |
-| --- | --- | --- |
-| tool | `slides_preview({ path })` | `slides_write({ title, slides[] })` |
-| quem escreve | o agente, com `write`/`edit` no arquivo | o main, a partir do array |
-| onde mora | na pasta do projeto (versionável) | `orbit-data/slides/<sessão>/<slug>/` |
-| quando usar | deck que faz parte do repositório | "me faz uma apresentação" |
+O deck é uma peça do Orbit: mora em `orbit-data/slides/<sessão>/<slug>/`, no
+chat e no código, e é endereçado pelo título (ou pelo id `sld_…`, de qualquer
+conversa). O repositório do usuário só recebe o deck quando ele pede
+(`piece_export`).
 
-`slides_write` monta o documento com o tema da casa (fundo escuro, acento
-dourado, tipografia grande) e classes de apoio — `.cover`, `.section`,
+| tool | o que faz |
+| --- | --- |
+| `slides_write({ title, slides[] })` | cria ou substitui o deck com o tema da casa |
+| `slides_write({ title, html })` | o mesmo, com o documento inteiro (tema próprio) |
+| `slides_edit({ name, edits[] })` | trocas exatas no HTML do deck — sem reenviar tudo |
+| `slides_read({ name })` | o HTML atual |
+| `slides_preview({ name })` | reabre a aba (e relata o deck) sem escrever |
+| `slides_asset({ name, ref \| path })` | copia um anexo (ou, no código, um arquivo do projeto) para a pasta do deck |
+| `slides_delete({ name })` | apaga a pasta, o item da galeria e a aba |
+
+`slides_write` com `slides` monta o documento com o tema da casa (fundo escuro,
+acento dourado, tipografia grande) e classes de apoio — `.cover`, `.section`,
 `.kicker`, `.lead`, `.grid.cols-2/3/4`, `.card`, `.stat`, `.quote`, `.pill`.
 É o caminho rápido: uma chamada, sem `write` intermediário.
 
-As duas devolvem o mesmo relatório: quantos slides, o título de cada um e quais
+Toda escrita passa pelo diário de mídia do turno (`session/media-journal.ts`):
+o revert da mensagem devolve o deck ao estado de antes — ou o apaga, se o turno
+o criou — e o unrevert o traz de volta.
+
+Todas as que escrevem ou abrem devolvem o mesmo relatório: quantos slides, o título de cada um e quais
 têm notas — lido do arquivo no main, sem janela offscreen (o deck é HTML
 estático, ao contrário do motion).
 
@@ -86,8 +98,8 @@ electron/lib/slides/
   slides-deck.ts      leitura do HTML (títulos, notas, contagem) — puro
   deck-template.ts    o molde do slides_write (tema + montagem) — puro
 electron/lib/tools/
-  slides.ts           slides_preview (modo código)
-  slides-chat.ts      slides_write (modo conversa)
+  slides.ts           slides_write/edit/read/preview/asset/delete (os dois modos)
+  piece-common.ts     o que as três peças dividem: pastas, diário, asset, exclusão
 src/components/
   slides-tab.tsx      o palco, a lista, as notas e o transporte
 ```
@@ -164,9 +176,9 @@ tamanho declarado no meta dá a capa exata, **sem seek nem medição de camada**
 - `slides-gallery.ts` tem o `registerSlidesCover` e o hook de exclusão; quem
   chama o registro é o `slides_open`, depois de confirmar que o deck TEM slides
   (capa de palco vazio não serve).
-- `slides_write` substitui o deck inteiro, então a capa é refeita a cada
-  escrita (`refreshCover`); no modo código ela só é capturada quando o item
-  ainda não existe — o deck é fonte, não entregável nosso.
+- `slides_write` e `slides_edit` mudam o deck, então a capa é refeita a cada
+  escrita (`refreshCover`); o `slides_preview` só a captura quando o item
+  ainda não existe.
 - Excluir na galeria apaga a pasta do deck, com as travas de
   `deleteSlidesDeck`: a pasta tem de existir, conter a entrada do deck e estar
   DENTRO da raiz do chat ou do projeto que a registrou — **nunca ser o projeto**.

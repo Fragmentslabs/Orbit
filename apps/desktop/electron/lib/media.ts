@@ -24,6 +24,7 @@ import { normalizeStyle, parseMarkdown, renderHtml, renderThumbHtml, type Docume
 import { renderDiagrams } from './mermaid-render'
 import { withAssetLock, writeFileAtomic } from './asset-lock'
 import { fontFacesForFamily, handleFontRequest } from './fonts/store'
+import { journalMediaIndex, journalPath, mediaJournalActive } from './session/media-journal'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -129,6 +130,11 @@ async function readIndex(): Promise<MediaEntry[]> {
 }
 
 async function writeIndex(entries: MediaEntry[]): Promise<void> {
+  // Dentro de um turno do agente, cada entrada criada, alterada ou removida
+  // guarda o estado anterior no diário — é o que deixa o revert da mensagem
+  // desfazer o que ela pôs (ou tirou) da galeria. Sempre sob o withIndexLock
+  // de quem chamou, então o índice lido aqui é o de imediatamente antes.
+  if (mediaJournalActive()) await journalMediaIndex(await readIndex(), entries)
   await fsp.mkdir(mediaDir(), { recursive: true })
   const tmp = `${indexFile()}.${Date.now()}.tmp`
   await fsp.writeFile(tmp, JSON.stringify(entries, null, 2), 'utf8')
@@ -424,6 +430,7 @@ export async function deleteMedia(id: string): Promise<boolean> {
   // o item continua na galeria e a pessoa pode tentar de novo, em vez de sobrar
   // espaço ocupado que nada mais aponta.
   const hook = entry ? deleteHooks.get(mediaKind(entry)) : undefined
+  if (entry) await journalEntryFiles(entry)
   if (entry && hook) await hook(entry)
   await fsp.rm(file, { force: true })
   for (const thumb of [entry?.thumb, entry?.thumbDark]) {
@@ -439,6 +446,72 @@ export async function deleteMedia(id: string): Promise<boolean> {
   })
   notifyMediaChanged()
   return true
+}
+
+/**
+ * Os arquivos que uma entrada da galeria POSSUI: o do registro, as capas e, num
+ * documento, cada renderização com o mesmo id-base (.md, .html, .pdf, .docx).
+ * É a unidade do revert: o que entra no diário antes de ser reescrito, e o que
+ * sai do disco quando a entrada criada no turno é desfeita.
+ */
+export async function entryOwnedFiles(entry: MediaEntry): Promise<string[]> {
+  const files = new Set<string>()
+  if (entry.path) files.add(path.resolve(entry.path))
+  for (const thumb of [entry.thumb, entry.thumbDark]) {
+    if (thumb && SAFE_ARTIFACT_ID.test(thumb)) files.add(path.join(assetFileDir(thumb), thumb))
+  }
+  if (mediaKind(entry) === 'document') {
+    const base = documentBase(entry.id)
+    const names = await fsp.readdir(documentsDir()).catch(() => [] as string[])
+    for (const name of names) {
+      if (name.startsWith(`${base}.`)) files.add(path.join(documentsDir(), name))
+    }
+  }
+  return [...files]
+}
+
+/** Antes de reescrever ou apagar os arquivos de uma entrada (no turno do agente). */
+async function journalEntryFiles(entry: MediaEntry): Promise<void> {
+  if (!mediaJournalActive()) return
+  for (const file of await entryOwnedFiles(entry)) await journalPath(file)
+}
+
+/**
+ * Põe entradas da galeria de volta no estado guardado pelo diário — uma por
+ * uma, sob o lock do índice, sem tocar nas que não estão na lista (outro chat
+ * pode ter gravado as dele no meio). `before: null` tira a entrada. Os
+ * ARQUIVOS são do chamador (o diário os restaura antes); aqui é só o índice e o
+ * aviso às janelas, inclusive aos cards de artefato/documento já na tela.
+ */
+export async function restoreMediaEntries(records: Array<{ id: string; before: MediaEntry | null }>): Promise<void> {
+  if (records.length === 0) return
+  const wanted = new Map(records.map((r) => [r.id, r.before]))
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const next: MediaEntry[] = []
+    for (const entry of entries) {
+      if (!wanted.has(entry.id)) {
+        next.push(entry)
+        continue
+      }
+      const before = wanted.get(entry.id)
+      if (before) next.push(before)
+      wanted.delete(entry.id)
+    }
+    // O que não está mais no índice e existia antes volta ao fim dele.
+    for (const before of wanted.values()) if (before) next.push(before)
+    await writeIndex(next)
+  })
+  notifyMediaChanged()
+  for (const { before } of records) {
+    if (!before) continue
+    const kind = mediaKind(before)
+    if (kind !== 'artifact' && kind !== 'document') continue
+    const artifactId = kind === 'document' ? `${documentBase(before.id)}.html` : before.id
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId, revision: before.revision ?? 1 })
+    }
+  }
 }
 
 /**
@@ -1282,6 +1355,7 @@ export async function mutateArtifact(
   return withAssetLock(`artifact:${id}`, async () => {
     const entry = await getMediaEntry(id)
     if (!entry || mediaKind(entry) !== 'artifact') return null
+    await journalEntryFiles(entry)
 
     let current = ''
     try {
@@ -1615,6 +1689,7 @@ export async function updateDocument(
       ? options.baseRevision !== knownRevision
       : entry.userEdited === true
   if (stale) return { ok: false, reason: 'stale', revision: knownRevision }
+  await journalEntryFiles(entry)
 
   const base = documentBase(id)
   const title = options.title ?? entry.name ?? 'Documento'

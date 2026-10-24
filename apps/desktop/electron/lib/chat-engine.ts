@@ -38,6 +38,7 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
+import { bindMediaJournal, closeMediaJournal, runWithMediaJournal } from './session/media-journal'
 import {
   attachArtifactMessage,
   attachDocumentMessage,
@@ -78,8 +79,8 @@ import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
 import { endActivity } from './computer/session'
-import { designNameFromInputJson, openDesignLive } from './tools/design-chat'
-import { openMotionLive } from './tools/motion-chat'
+import { designNameFromInputJson, openDesignLive } from './tools/design'
+import { openMotionLive } from './tools/motion'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -1216,7 +1217,9 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 }
 
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  return withProviderSession(input.sessionId, () => runChatTurn(win, input))
+  // O diário de mídia do turno (peças e galeria) é o que deixa o revert da
+  // mensagem desfazer o que o agente produziu fora da pasta de trabalho.
+  return withProviderSession(input.sessionId, () => runWithMediaJournal(input.sessionId, () => runChatTurn(win, input)))
 }
 
 async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
@@ -1316,6 +1319,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
   // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
   // independente da pasta de trabalho selecionada (as tools read/glob/bash só
+  bindMediaJournal(assistantMessage.id)
   // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
   // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
   // delega para o modelo de visão configurado (modo Visão) — sob demanda, via
@@ -1940,7 +1944,10 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'tool-input-start':
-            liveOpen.set(part.id, { toolName: part.toolName, json: '', opened: false })
+            // Worker não abre aba: o painel é da sessão que fala com o usuário.
+            if (input.orchestrationRole !== 'worker') {
+              liveOpen.set(part.id, { toolName: part.toolName, json: '', opened: false })
+            }
             break
           case 'tool-input-delta': {
             const entry = liveOpen.get(part.id)
@@ -2533,6 +2540,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     endActivity(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
+    closeMediaJournal()
     activeBashCommands.delete(sessionId)
     if (controller.signal.aborted && activeCmd) {
       console.warn(

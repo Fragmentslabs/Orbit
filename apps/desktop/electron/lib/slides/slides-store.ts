@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { SLIDES_SCHEME } from '@shared/media'
 import { SLIDES_RUNTIME, SLIDES_RUNTIME_PATH, injectSlidesRuntime } from './slides-runtime'
 import { slidesSlug } from './slides-slug'
+import { journalPath } from '../session/media-journal'
 
 /**
  * Registro dos decks de slides (uma PASTA com um HTML de entrada) e o scheme
@@ -28,7 +29,7 @@ import { slidesSlug } from './slides-slug'
 
 const SAFE_SLIDES_ID = /^sld_[a-z0-9]+$/
 
-/** Id de sessão como nome de pasta (ver chatSlidesDir). */
+/** Id de sessão como nome de pasta (ver slidesPiecesDir). */
 const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
 
 /** Canal do renderer para a recarga ao vivo. */
@@ -249,10 +250,10 @@ export async function registerSlides(
   }
 }
 
-// ------------------------------------------------------------- pasta do chat
+// ---------------------------------------------------------- pasta das peças
 
-/** Raiz dos decks do modo chat — fora de qualquer projeto. */
-export function chatSlidesRoot(): string {
+/** Raiz dos decks do Orbit (nos dois modos) — fora de qualquer projeto. */
+export function slidesPiecesRoot(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'slides')
 }
 
@@ -260,9 +261,9 @@ export function chatSlidesRoot(): string {
  * Pasta dos decks de uma conversa. O id da sessão vira nome de pasta, então é
  * validado: sem isso um `../` no sessionId escreveria fora do armazenamento.
  */
-export function chatSlidesDir(sessionId: string): string {
+export function slidesPiecesDir(sessionId: string): string {
   if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
-  return path.join(chatSlidesRoot(), sessionId)
+  return path.join(slidesPiecesRoot(), sessionId)
 }
 
 /** Registro de um deck (valida o id antes de tocar no índice). */
@@ -314,7 +315,7 @@ export async function deleteSlidesDeck(id: string): Promise<SlidesDeletion> {
     keptBecause = 'the folder no longer exists'
   } else if (!hasEntry) {
     keptBecause = 'the folder does not contain the deck entry'
-  } else if (isStrictlyInside(chatSlidesRoot(), folder)) {
+  } else if (isStrictlyInside(slidesPiecesRoot(), folder)) {
     // do Orbit
   } else if (entry.root && isStrictlyInside(entry.root, folder)) {
     // dentro do projeto que o registrou, e não o projeto em si
@@ -322,7 +323,11 @@ export async function deleteSlidesDeck(id: string): Promise<SlidesDeletion> {
     keptBecause = 'the folder is the project itself (or outside the working folder it was registered from)'
   }
 
-  if (!keptBecause) await fsp.rm(folder, { recursive: true, force: true })
+  if (!keptBecause) {
+    // No turno do agente (slides_delete), a pasta vai para o diário antes.
+    await journalPath(folder, { kind: 'slides', id, folder, entry: entry.entry, root: entry.root, sessionId: entry.sessionId })
+    await fsp.rm(folder, { recursive: true, force: true })
+  }
   await unregisterSlides(id)
   return keptBecause ? { removedFolder: false, keptBecause } : { removedFolder: true }
 }
@@ -373,6 +378,14 @@ function watchSlides(id: string, folder: string): void {
       // pasta sumiu desde o registro — o protocolo devolve 404 na hora.
     }
   }
+}
+
+/** Religa o watcher e recarrega a aba depois que a pasta foi trocada inteira (revert). */
+export async function rewatchSlides(id: string): Promise<void> {
+  const entry = await getSlides(id)
+  if (!entry) return
+  watchSlides(id, entry.folder)
+  notifyChanged(id)
 }
 
 export function unwatchSlides(id: string): void {
