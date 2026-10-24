@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -193,12 +194,12 @@ describe('revert de arquivos (S/E/C)', () => {
     expect(await read(dir, 'a.txt')).toBe('salvo à mão')
   })
 
-  it('revert espera o turno de outra conversa na mesma pasta (trava por workspace)', async () => {
+  it('revert espera outra operação travada na mesma pasta (outro revert)', async () => {
     const { dir, sessionId } = await setup({
       initial: { 'a.txt': 'antes' },
       turn: { 'a.txt': 'turno' },
     })
-    // Simula um turno da mesma pasta rodando: o revert tem de esperar.
+    // Simula outro revert da mesma pasta em andamento: este tem de esperar.
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
     let entered!: () => void
@@ -216,6 +217,38 @@ describe('revert de arquivos (S/E/C)', () => {
     await turn
     await pending
     expect(await read(dir, 'a.txt')).toBe('antes')
+  })
+})
+
+describe('revert com a captura do estado atual falhando', () => {
+  it('não toca em arquivo nenhum e avisa capture-failed', async () => {
+    const { dir, sessionId } = await setup({
+      initial: { 'a.txt': 'antes' },
+      turn: { 'a.txt': 'turno', 'novo.txt': 'criado' },
+    })
+    // Um index.lock órfão no repositório auxiliar faz o `add --all` da
+    // captura falhar — o mesmo que um crash no meio de outra captura deixa.
+    const hash = crypto.createHash('sha1').update(path.resolve(dir)).digest('hex').slice(0, 16)
+    const lock = path.join(userData, 'snapshots', hash, 'index.lock')
+    await fs.writeFile(lock, '')
+    try {
+      const state = await revert(sessionId, 'u1')
+
+      expect(state?.filesRestored).toBe(false)
+      expect(state?.reason).toBe('capture-failed')
+      // Sem o estado de antes, desfazer deixaria os arquivos sem volta.
+      expect(await read(dir, 'a.txt')).toBe('turno')
+      expect(await read(dir, 'novo.txt')).toBe('criado')
+      // As mensagens continuam truncadas e o unrevert as devolve.
+      expect(state?.discardedMessages?.map((m) => m.id)).toEqual(['u1', 'a1'])
+    } finally {
+      await fs.rm(lock, { force: true })
+    }
+
+    const result = await unrevert(sessionId)
+    expect(result.done).toBe(true)
+    expect(result.files).toBeUndefined()
+    expect(await read(dir, 'a.txt')).toBe('turno')
   })
 })
 

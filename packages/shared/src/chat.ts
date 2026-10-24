@@ -49,6 +49,14 @@ export interface SessionRevert {
   /** Arquivos que o turno mudou mas que NÃO foram revertidos porque mudaram
    *  depois (outra conversa, edição externa, save manual no painel). */
   conflicts?: string[]
+  /** Arquivos que mudaram na pasta DURANTE os turnos desfeitos mas que as
+   *  ferramentas de escrita do Orbit não gravaram (bash, MCP, algo de fora):
+   *  autor incerto. NÃO são revertidos por padrão — a barra oferece reverter
+   *  também (`session:revertUncertain`). */
+  uncertain?: string[]
+  /** Os turnos desfeitos, do último para o primeiro — o que o revert dos
+   *  caminhos incertos precisa para refazer a transição. Interno. */
+  fileTurns?: RevertFileTurn[]
   /** Diff unificado das mudanças revertidas (modo código) */
   diff?: string
   /** Mensagens descartadas no truncamento — permite unrevert da conversa */
@@ -68,11 +76,27 @@ export interface SessionRevert {
   media?: SessionMediaRevert
 }
 
+/** Um turno desfeito pelo revert (modo código): a transição end → start. */
+export interface RevertFileTurn {
+  /** Tree do fim do turno. */
+  from: string
+  /** Tree do começo do turno. */
+  to: string
+  /** Caminhos de autoria confirmada (e saves manuais, que viram conflito). */
+  paths: string[]
+  /** Caminhos de autor incerto deste turno. */
+  uncertain: string[]
+  /** Saves manuais do painel durante o turno — nunca revertidos. */
+  manual: string[]
+}
+
 /** Resultado do unrevert — o que voltou e o que ficou intacto por conflito. */
 export interface UnrevertResult {
   done: boolean
-  /** Modo código: arquivos devolvidos e os que foram preservados. */
-  files?: { restored: number; conflicts: string[] }
+  /** Modo código: arquivos devolvidos e os que foram preservados. `error`
+   *  quando os arquivos não puderam ser devolvidos de jeito nenhum: o estado
+   *  pós-revert não foi registrado, ou a restauração falhou. */
+  files?: { restored: number; conflicts: string[]; error?: 'no-after' | 'failed' }
   /** Peças/galeria devolvidas e preservadas. */
   media?: SessionMediaRevert
 }
