@@ -16,11 +16,13 @@ import path from 'node:path'
  * terminar. Pastas diferentes seguem em paralelo.
  *
  * REENTRÂNCIA. Um turno pode disparar outro turno na mesma pasta dentro do
- * próprio contexto assíncrono — subchat, worker da orquestra, loop. Esses são
- * parte do MESMO trabalho lógico e não podem esperar por si mesmos (deadlock);
- * o AsyncLocalStorage marca a pasta já adquirida e a chamada aninhada passa
- * direto. É o mesmo critério do `comTrava` do git, mas por turno e não por
- * comando.
+ * próprio contexto assíncrono e esperar por ele — worker da orquestra,
+ * iteração do loop. Esses são parte do MESMO trabalho lógico e não podem
+ * esperar por si mesmos (deadlock); o AsyncLocalStorage marca a pasta já
+ * adquirida e a chamada aninhada passa direto. É o mesmo critério do
+ * `comTrava` do git, mas por turno e não por comando. O que é disparado sem
+ * `await` e vive além do turno (subchat) sai do contexto com
+ * `outsideWorkspaceLocks` e entra na fila.
  *
  * A chave é o `realpath` (symlinks resolvidos) e, no Windows, em caixa baixa:
  * `C:\Proj` e `c:\proj` são a mesma pasta.
@@ -28,6 +30,7 @@ import path from 'node:path'
 const held = new AsyncLocalStorage<Set<string>>()
 const queues = new Map<string, Promise<void>>()
 const keyCache = new Map<string, string>()
+let keyOrder: Promise<void> = Promise.resolve()
 
 async function workspaceKey(directory: string): Promise<string> {
   const resolved = path.resolve(directory)
@@ -57,7 +60,15 @@ function contextoCom(key: string): Set<string> {
  * assíncrono, roda direto (reentrante); senão entra na fila da pasta.
  */
 export async function withWorkspaceLock<T>(directory: string, fn: () => Promise<T> | T): Promise<T> {
-  const key = await workspaceKey(directory)
+  // As chaves saem na ordem das chamadas: o `realpath` é assíncrono, e sem a
+  // corrente um turno que chegou depois (com o caminho já em cache, ou um
+  // realpath mais rápido) entraria na fila na frente do que já esperava.
+  const resolving = keyOrder.then(() => workspaceKey(directory))
+  keyOrder = resolving.then(
+    () => {},
+    () => {},
+  )
+  const key = await resolving
   if (held.getStore()?.has(key)) return fn()
 
   const anterior = queues.get(key) ?? Promise.resolve()
@@ -77,6 +88,69 @@ export async function withWorkspaceLock<T>(directory: string, fn: () => Promise<
   return atual
 }
 
+/**
+ * Roda `fn` SEM herdar as pastas adquiridas pelo chamador.
+ *
+ * Para turnos disparados em paralelo e sem `await` — o subchat é outra
+ * conversa, com revert próprio, e sobrevive ao turno do pai. Herdando o
+ * contexto, ele passaria direto pela trava (reentrância) e continuaria
+ * escrevendo na pasta depois que o pai a soltou, junto com o próximo turno da
+ * fila. Fora do contexto, ele entra na fila como qualquer outro turno.
+ */
+export function outsideWorkspaceLocks<T>(fn: () => T): T {
+  return held.exit(fn)
+}
+
+/**
+ * Turnos esperando a pasta de outro turno, por sessão. Enquanto esperam, eles
+ * ainda não têm o controller do engine — sem este registro, o botão de parar
+ * não fazia nada e o turno rodava mesmo assim quando a pasta ficasse livre.
+ */
+const queuedTurns = new Map<string, Set<AbortController>>()
+
+/**
+ * `withWorkspaceLock` para um turno de conversa: registra o turno como
+ * pendente (parável e visível como "rodando") desde a chegada até o fim. O
+ * sinal entregue a `turn` aborta quando alguém pede para parar — na fila ou
+ * já durante o turno.
+ */
+export async function queuedWorkspaceTurn<T>(
+  sessionId: string,
+  directory: string,
+  turn: (queued: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const queued = new AbortController()
+  let pending = queuedTurns.get(sessionId)
+  if (!pending) {
+    pending = new Set()
+    queuedTurns.set(sessionId, pending)
+  }
+  pending.add(queued)
+  try {
+    return await withWorkspaceLock(directory, () => turn(queued.signal))
+  } finally {
+    pending.delete(queued)
+    if (pending.size === 0 && queuedTurns.get(sessionId) === pending) queuedTurns.delete(sessionId)
+  }
+}
+
+/** Para os turnos da sessão que estão na fila (ou já rodando por ela). */
+export function abortQueuedTurns(sessionId: string): void {
+  for (const queued of queuedTurns.get(sessionId) ?? []) queued.abort()
+}
+
+/** Sessões com turno na fila da pasta ou rodando por ela. */
+export function queuedTurnSessionIds(): string[] {
+  return [...queuedTurns.keys()]
+}
+
+/** Liga o "parar" da fila ao controller do turno: parado antes, nasce abortado. */
+export function linkQueuedAbort(queued: AbortSignal | undefined, controller: AbortController): void {
+  if (!queued) return
+  if (queued.aborted) controller.abort()
+  else queued.addEventListener('abort', () => controller.abort(), { once: true })
+}
+
 /** Há um turno na fila ou rodando nesta pasta? (diagnóstico e teste) */
 export function workspaceLockPending(directory: string): boolean {
   return queues.has(path.resolve(directory))
@@ -86,4 +160,6 @@ export function workspaceLockPending(directory: string): boolean {
 export function __resetWorkspaceLocks(): void {
   queues.clear()
   keyCache.clear()
+  queuedTurns.clear()
+  keyOrder = Promise.resolve()
 }
