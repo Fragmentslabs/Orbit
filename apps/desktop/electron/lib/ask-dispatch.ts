@@ -30,6 +30,7 @@ const batches = new Map<string, PendingBatch>()
  * fallback do lado de cá, em lib/notifications.ts.
  */
 function tituloDoPedido(item: AskItem): string {
+  if (item.kind === 'subchat') return item.subchat?.title ?? ''
   return item.kind === 'permission' ? (item.claim?.title ?? '') : (item.questions?.[0]?.text ?? '')
 }
 
@@ -42,6 +43,17 @@ function emitSingle(target: string, item: AskItem): void {
     tituloDoPedido(item),
     item.questions,
   )
+  if (item.kind === 'subchat') {
+    broadcastChatEvent({
+      type: 'subchat',
+      sessionId: target,
+      requestId: item.requestId,
+      title: item.subchat?.title ?? '',
+      brief: item.subchat?.brief ?? '',
+      origin: item.origin,
+    })
+    return
+  }
   broadcastChatEvent(
     item.kind === 'permission'
       ? {

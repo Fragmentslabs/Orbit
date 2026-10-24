@@ -727,6 +727,10 @@ export interface ChatMessage {
   tokens?: TokenUsage
   /** Mensagem sintética de compactação: resumo do histórico anterior */
   summary?: boolean
+  /** Resumo de ABERTURA de um chat que continua outro (card de compactação):
+   *  mesma mecânica do summary, mas é o brief da conversa anterior, não uma
+   *  compactação desta — a UI usa para rotular o card. */
+  continuation?: boolean
   /** Snapshots start/end do filesystem (assistant, modo código) */
   snapshot?: AssistantSnapshot
   /** true quando a geração parou por atingir o teto de passos (MAX_STEPS) em
@@ -841,10 +845,14 @@ export interface AskOrigin {
 /** Item de pedido pendente (permissão ou question) — eventos individuais, em lote e UI */
 export interface AskItem {
   requestId: string
-  kind: "permission" | "question"
+  kind: "permission" | "question" | "subchat"
   claim?: PermissionClaim
   questions?: Question[]
   origin?: AskOrigin
+  /** Sugestão de abrir uma conversa separada: o título e o brief que ela teria.
+   *  A resposta é "new" (abre e já começa a trabalhar), "here" (faz nesta) ou
+   *  "deny" (deixa de lado). Nunca abre sozinha — quem decide é o usuário. */
+  subchat?: { title: string; brief: string }
 }
 
 export interface PlanReview {
@@ -872,6 +880,12 @@ export interface SendMessageOptions {
   /** Modo chamada (conversa por voz): a resposta será LIDA em voz alta, então
    *  vem curta, direta e sem formatação. */
   voiceCall?: boolean
+  /**
+   * Turno nascido no overlay (⇧⌘espaço): resposta curta e tools para enxergar a
+   * tela e a seleção do app que estava na frente. Não implica falar — o overlay
+   * em modo texto manda `overlay` sem `voiceCall`.
+   */
+  overlay?: boolean
   /** Configuração de reasoning/thinking do modelo quando suportado */
   reasoning?: ReasoningConfig
   /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */
@@ -1150,6 +1164,22 @@ export type ChatEvent =
     }
   /** Próxima mensagem provável do usuário — o input a mostra apagada e Tab completa */
   | { type: "suggestion"; sessionId: string; text: string }
+  /**
+   * A próxima compactação passaria do limite de resumos: a UI oferece continuar
+   * num chat novo (com um resumo do estado atual) ou compactar aqui. Chega só
+   * no FIM de um turno — é quando o usage real é conhecido e não há turno
+   * rodando, que é o que a compactação manual exige (ver compactSession).
+   * É uma oferta, não um bloqueio: ignorada, a compactação automática do
+   * início do turno seguinte roda como sempre.
+   */
+  | {
+      type: "compaction:suggest"
+      sessionId: string
+      /** Resumos já no histórico (= compactações feitas) */
+      summaries: number
+      /** A partir de quantos resumos a sugestão aparece */
+      threshold: number
+    }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
   | { type: "plan:review"; sessionId: string; review: PlanReview }
   /** Session criada/atualizada pelo main process (workers da orquestração) */
@@ -1158,6 +1188,8 @@ export type ChatEvent =
   | { type: "permission"; sessionId: string; requestId: string; claim: PermissionClaim; origin?: AskOrigin }
   /** Perguntas da tool question aguardando resposta */
   | { type: "question"; sessionId: string; requestId: string; questions: Question[]; origin?: AskOrigin }
+  /** Sugestão de levar um assunto para outra conversa — o card decide o destino */
+  | { type: "subchat"; sessionId: string; requestId: string; title: string; brief: string; origin?: AskOrigin }
   /** Lote de pedidos de workers agrupados numa janela de batching (card único) */
   | { type: "ask:batch"; sessionId: string; batchId: string; items: AskItem[] }
   /** Pedido resolvido/cancelado — remove o card da UI */

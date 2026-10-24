@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, ShieldAlert, TriangleAlert } from "lucide-react"
+import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, MessagesSquare, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -307,6 +307,56 @@ function QuestionBody({ ask, submitted, onReply, sessionId }: {
   )
 }
 
+function SubchatBody({ ask, submitted, onReply }: {
+  ask: PendingAskUI
+  submitted: boolean
+  onReply: (value: unknown) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const sugestao = ask.subchat ?? { title: "", brief: "" }
+  return (
+    <>
+      <div className="flex items-start gap-2">
+        <MessagesSquare className="mt-0.5 size-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground">{t("ask.subchat.title")}</p>
+          <p className="mt-1 break-words text-sm font-medium">{sugestao.title}</p>
+          <p className="mt-1 line-clamp-4 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+            {sugestao.brief}
+          </p>
+        </div>
+        {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} t={t} />}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
+          {t("ask.subchat.deny")}
+        </Button>
+        {/* Grupo de botões: o padrão é o chat novo; a seta abre a alternativa,
+            que mantém o trabalho nesta conversa. */}
+        <div className="flex">
+          <Button size="sm" className="rounded-r-none" disabled={submitted} onClick={() => onReply("new")}>
+            {t("ask.subchat.newChat")}
+          </Button>
+          <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger
+              aria-label={t("ask.subchat.moreOptions")}
+              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
+            >
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => { setOpen(false); onReply("here") }}>
+                {t("ask.subchat.here")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export function AskCard({ ask, sessionId }: { ask: PendingAskUI; sessionId?: string }) {
   const [submitted, setSubmitted] = useState(false)
   const reply = (value: unknown) => {
@@ -318,6 +368,8 @@ export function AskCard({ ask, sessionId }: { ask: PendingAskUI; sessionId?: str
     <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-sm">
       {ask.kind === "permission" ? (
         <PermissionBody ask={ask} submitted={submitted} onReply={reply} />
+      ) : ask.kind === "subchat" ? (
+        <SubchatBody ask={ask} submitted={submitted} onReply={reply} />
       ) : (
         <QuestionBody ask={ask} submitted={submitted} onReply={reply} sessionId={sessionId} />
       )}
