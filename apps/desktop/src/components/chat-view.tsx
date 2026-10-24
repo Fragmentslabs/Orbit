@@ -1061,6 +1061,17 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     if (!hasChat) setWelcomeSuggestions(startSuggestions)
   }, [hasChat, startSuggestions])
 
+  /**
+   * A grade é de duas colunas. Uma pill que ocupa a linha inteira ("Retomar")
+   * já fecha a linha sozinha e por isso NÃO entra na paridade: contando com
+   * ela, "Retomar" + duas capacidades dava ímpar e a última capacidade caía
+   * sozinha na linha de baixo, centralizada. A sobra é contada só entre as
+   * pills de meia largura; quando ela é ímpar, a última centraliza.
+   */
+  const halfWidthCount = welcomeSuggestions.filter(suggestion => suggestion.action.kind !== "open").length
+  const oddLeftover =
+    halfWidthCount % 2 === 1 && welcomeSuggestions[welcomeSuggestions.length - 1]?.action.kind !== "open"
+
   const handleStartSuggestion = useCallback(
     (suggestion: StartSuggestion) => {
       if (suggestion.action.kind === "fill") {
@@ -1158,7 +1169,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 <Persona state={centerPersonaState} className="!size-full" />
               </div>
             )}
-            <div className="flex flex-col items-center gap-6">
+            {/* Sem a persona acima, o bloco de texto desce o espaço que ela
+                ocuparia (8rem) mais o gap do container (1rem): o título fica
+                na mesma altura dos dois estados em vez de colar no topo. */}
+            <div className={`flex flex-col items-center gap-6 ${personaOnWelcome ? "" : "pt-36"}`}>
               <div className="flex flex-col items-center gap-2">
                 <div className="relative flex items-center justify-center">
                   <p className={`whitespace-nowrap text-center text-lg font-medium text-foreground ${introLine}`}>
@@ -1225,7 +1239,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 >
                   {welcomeSuggestions.length > 0 && (
                     <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-                      {welcomeSuggestions.map((suggestion) => (
+                      {welcomeSuggestions.map((suggestion, index) => (
                         <Suggestion
                           key={suggestion.id}
                           suggestion={suggestion.label}
@@ -1233,6 +1247,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                           className={cn(
                             "h-auto justify-start gap-2 py-1.5 text-left leading-snug whitespace-normal",
                             suggestion.action.kind === "open" && "sm:col-span-2",
+                            /* Sem sessão para retomar sobram só capacidades, e
+                               três pills deixam uma sozinha na segunda linha:
+                               parece que falta a quarta. A sobra ocupa a linha
+                               e se centraliza, então qualquer contagem fecha. */
+                            oddLeftover && index === welcomeSuggestions.length - 1 &&
+                              "sm:col-span-2 sm:justify-self-center",
                           )}
                           title={suggestion.action.kind === "fill" ? suggestion.action.text : undefined}
                         >
