@@ -858,6 +858,6 @@ public static partial class OrbitHost
             }
             method = "screen";
         }
-        return Obj("file", file, "width", w, "height", h, "method", method, "ms", (int)(DateTime.UtcNow - t0).TotalMilliseconds);
+        return Obj("file", file, "width", w, "height", h, "method", method, "covered", IsCovered(hwnd, fr), "ms", (int)(DateTime.UtcNow - t0).TotalMilliseconds);
     }
 }

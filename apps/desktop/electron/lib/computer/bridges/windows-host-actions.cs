@@ -66,6 +66,8 @@ public static partial class OrbitHost
     [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageText(IntPtr hwnd, int msg, IntPtr wParam, string lParam);
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendMessagePtr(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GUITHREADINFO info);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr hwnd, ref POINT point);
     [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc proc, IntPtr data);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
     [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
@@ -125,6 +127,8 @@ public static partial class OrbitHost
             case "foreground": return OpForeground();
             case "cursor": return OpCursor();
             case "treeBench": return OpTreeBench(a);
+            case "postMouse": return OpPostMouse(a);
+            case "postChars": return OpPostChars(a);
         }
         throw new HostError("badRequest", "Unknown op: " + op);
     }
@@ -1212,5 +1216,52 @@ public static partial class OrbitHost
             catch (Exception) { }
         }
         return Obj("nodes", count, "ms", (int)(DateTime.UtcNow - started).TotalMilliseconds);
+    }
+
+    // ---- Experimentos do probe: mensagens de janela postadas.
+    //
+    // NAO sao usados pelo driver nem pelas acoes (o modo dirigido e so UIA, ver
+    // o cabecalho). Existem para o Stage 0 medir, por tipo de app, se uma
+    // mensagem de mouse/caractere chega de verdade com a janela em segundo plano.
+
+    static object OpPostMouse(Dictionary<string, object> a)
+    {
+        CheckDesktop();
+        IntPtr window = new IntPtr(Convert.ToInt64(a["windowId"]));
+        POINT pt = new POINT();
+        pt.X = (int)Math.Round(Dbl(a, "x", 0));
+        pt.Y = (int)Math.Round(Dbl(a, "y", 0));
+        IntPtr target = WindowFromPoint(pt);
+        if (GetAncestor(target, GA_ROOT) != window) return Obj("sent", false, "reason", "covered");
+        string button = Str(a, "button") ?? "left";
+        int down = button == "right" ? 0x0204 : 0x0201;
+        int up = button == "right" ? 0x0205 : 0x0202;
+        ScreenToClient(target, ref pt);
+        IntPtr lp = new IntPtr((pt.Y << 16) | (pt.X & 0xFFFF));
+        PostMessage(target, 0x0200, IntPtr.Zero, lp);
+        PostMessage(target, down, new IntPtr(button == "right" ? 2 : 1), lp);
+        Thread.Sleep(35);
+        PostMessage(target, up, IntPtr.Zero, lp);
+        return Obj("sent", true, "hwnd", target.ToInt64(), "class", ClassOf(target));
+    }
+
+    static object OpPostChars(Dictionary<string, object> a)
+    {
+        CheckDesktop();
+        int pid = Int(a, "pid", 0);
+        IntPtr window = WindowArg(a, pid);
+        GUITHREADINFO info = new GUITHREADINFO();
+        info.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+        uint ignored;
+        uint thread = GetWindowThreadProcessId(window, out ignored);
+        IntPtr target = window;
+        if (GetGUIThreadInfo(thread, ref info) && info.hwndFocus != IntPtr.Zero) target = info.hwndFocus;
+        string text = Str(a, "text") ?? "";
+        foreach (char c in text)
+        {
+            PostMessage(target, 0x0102, new IntPtr(c), IntPtr.Zero);
+            Thread.Sleep(8);
+        }
+        return Obj("sent", true, "hwnd", target.ToInt64(), "class", ClassOf(target));
     }
 }
