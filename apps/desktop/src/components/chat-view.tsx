@@ -61,6 +61,7 @@ import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { detectUserName } from "@shared/user-name"
+import { pickWelcomeTitle } from "@shared/welcome-title"
 import { VOICE_DEFAULTS } from "@shared/voice"
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
@@ -940,20 +941,18 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     t("chat.empty.greetingRole"),
   ]
 
-  // A saudação está FIXA por enquanto: sempre "Pronto para começar?", nunca
-  // "Olá, {nome}". A lógica do nome continua viva em volta — aprendida na
-  // conversa, salva nas Preferências e injetada no system prompt — só a tela
-  // inicial ainda não a usa. Para religar, o `title` volta a escolher entre
-  // `chat.empty.hello` (quando houver `userName`) e `startTitle`.
+  // O título é sorteado a cada abertura do app e depende do modo e do nome
+  // aprendido: no chat cumprimenta (com o nome, quando existe), no código fala
+  // de trabalho. O sorteio é estável por processo — ver welcome-title.ts.
   //
-  // O que segue variando é informação funcional, não saudação: sem provedor o
-  // subtítulo explica o bloqueio e o botão aparece; com provedor não há o que
-  // explicar.
+  // O subtítulo é que segue informação funcional: sem provedor ele explica o
+  // bloqueio e o botão aparece; com provedor não há o que explicar.
   const showProviderSetup = noProvider
+  const userName = useAppSettings((s) => s.settings.userName)
 
   const baseSubtitle = viewMode === "chat" ? t("chat.empty.chatSubtitle") : t("chat.empty.codeSubtitle")
   const emptyState = {
-    title: t("chat.empty.startTitle"),
+    title: t(pickWelcomeTitle({ mode: viewMode, userName }), { name: userName ?? "" }),
     subtitle: showProviderSetup ? t("chat.empty.providerSubtitle") : baseSubtitle,
     cta: showProviderSetup ? (t("chat.empty.providerCta") as string | null) : (null as string | null),
   }
