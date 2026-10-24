@@ -894,10 +894,15 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'sessions:unrevert': {
-        const done = await unrevertSession(req.sessionId)
-        if (done) {
+        const result = await unrevertSession(req.sessionId)
+        if (result.done) {
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
-          sendResponse(ws, requestId, true, { messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages })
+          // `result` descreve o que voltou e o que ficou intacto por conflito —
+          // o mobile mostra o aviso quando há conflito.
+          sendResponse(ws, requestId, true, {
+            messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
+            result,
+          })
         } else {
           sendResponse(ws, requestId, false, undefined, 'Nada para desfazer')
         }

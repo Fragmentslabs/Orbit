@@ -40,8 +40,15 @@ export interface SessionRevert {
   messageId: string
   /** Tree hash capturado antes do restore (modo código) — permite unrevert do filesystem */
   snapshot?: string
-  /** Arquivos afetados pelo revert (modo código) */
+  /** Tree hash DEPOIS do restore (modo código). O unrevert só devolve um
+   *  caminho se ele ainda estiver exatamente neste estado; se outra conversa
+   *  (ou a pessoa) mexeu no meio, o caminho é preservado e vira conflito. */
+  after?: string
+  /** Arquivos efetivamente revertidos (modo código) */
   files?: string[]
+  /** Arquivos que o turno mudou mas que NÃO foram revertidos porque mudaram
+   *  depois (outra conversa, edição externa, save manual no painel). */
+  conflicts?: string[]
   /** Diff unificado das mudanças revertidas (modo código) */
   diff?: string
   /** Mensagens descartadas no truncamento — permite unrevert da conversa */

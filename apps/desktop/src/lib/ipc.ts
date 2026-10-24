@@ -12,6 +12,7 @@ import type {
   ReasoningConfig,
   SendMessageInput,
   SessionRevert,
+  UnrevertResult,
 } from "@shared/chat"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
@@ -247,7 +248,7 @@ export const sessionApi = {
   revert: (sessionId: string, messageId: string) =>
     window.ipcRenderer.invoke("session:revert", sessionId, messageId) as Promise<SessionRevert | null>,
   unrevert: (sessionId: string) =>
-    window.ipcRenderer.invoke("session:unrevert", sessionId) as Promise<boolean>,
+    window.ipcRenderer.invoke("session:unrevert", sessionId) as Promise<UnrevertResult>,
 }
 
 export const chatApi = {

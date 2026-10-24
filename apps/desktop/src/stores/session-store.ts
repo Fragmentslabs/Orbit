@@ -13,6 +13,7 @@ import type {
   RotationFallbackInfo,
   SendMessageOptions,
   SessionInfo,
+  SessionMediaRevert,
   SessionMode,
   TextPart,
 } from "@shared/chat"
@@ -75,6 +76,13 @@ export interface LiveContext {
   /** Da entrada da última chamada: quanto veio do cache e quanto foi gravado nele. */
   cacheRead?: number
   cacheWrite?: number
+}
+
+/** Aviso transitório do unrevert: o que ficou intacto por ter mudado depois. */
+export interface RevertNotice {
+  sessionId: string
+  files: string[]
+  media?: SessionMediaRevert
 }
 
 interface SessionState {
@@ -141,6 +149,9 @@ interface SessionState {
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
   /** Desfaz um revert ativo */
   unrevert: (sessionId: string) => Promise<void>
+  /** Resultado do último unrevert (conflitos preservados); só memória. */
+  revertNotice: RevertNotice | null
+  dismissRevertNotice: () => void
 
   createFolder: (mode: SessionMode, name: string) => FolderInfo
   renameFolder: (id: string, name: string) => void
@@ -322,6 +333,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   fallback: {},
   liveContext: {},
   suggestions: {},
+  revertNotice: null,
+  dismissRevertNotice: () => set({ revertNotice: null }),
   clearSuggestion: (sessionId) =>
     set((state) => (state.suggestions[sessionId] ? { suggestions: { ...state.suggestions, [sessionId]: undefined } } : state)),
   activeIds: { chat: null, code: null },
@@ -1226,7 +1239,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   revertToMessage: async (sessionId, messageId) => {
     const revert = await sessionApi.revert(sessionId, messageId)
     if (!revert) return
-    set((state) => updateSessionIn(state, sessionId, { revert }))
+    // Um revert novo substitui o aviso do unrevert anterior.
+    set((state) => ({ ...updateSessionIn(state, sessionId, { revert }), revertNotice: null }))
     // A mensagem revertida volta para o input, como se estivesse sendo editada.
     // O texto sai de `discardedMessages` em vez de vir num campo próprio do
     // SessionRevert: anexos são data URLs e duplicá-los dobraria o tamanho da
@@ -1245,8 +1259,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   unrevert: async (sessionId) => {
-    const done = await sessionApi.unrevert(sessionId)
-    if (done) set((state) => updateSessionIn(state, sessionId, { revert: undefined }))
+    const result = await sessionApi.unrevert(sessionId)
+    if (!result?.done) return
+    set((state) => updateSessionIn(state, sessionId, { revert: undefined }))
+    // O que não pôde voltar (mudou entre o revert e agora) fica visível como
+    // aviso transitório — não silencioso.
+    const kept = (result.files?.conflicts.length ?? 0) + (result.media?.conflicts ?? 0)
+    if (kept > 0) {
+      set({
+        revertNotice: {
+          sessionId,
+          files: result.files?.conflicts ?? [],
+          media: result.media,
+        },
+      })
+    }
   },
 }))
 

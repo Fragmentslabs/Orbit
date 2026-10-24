@@ -64,11 +64,20 @@ export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = tru
 
   const isCode = Boolean(revert.files || revert.diff)
   const count = revert.files?.length ?? 0
-  const label = isCode
-    ? count === 0
-      ? t('revertBar.filesRevertedNone')
-      : t('revertBar.filesReverted', { count })
-    : t('revertBar.conversationReverted')
+  const filesNotRestored = Boolean(session.directory) && revert.filesRestored === false
+  const label = filesNotRestored
+    ? t(
+        revert.reason === 'capture-failed'
+          ? 'revertBar.filesRestoreFailed'
+          : revert.reason === 'no-end-snapshot'
+            ? 'revertBar.filesNoEndSnapshot'
+            : 'revertBar.filesNotRestored',
+      )
+    : isCode
+      ? count === 0
+        ? t('revertBar.filesRevertedNone')
+        : t('revertBar.filesReverted', { count })
+      : t('revertBar.conversationReverted')
   // Peças e galeria: o desktop desfaz nos dois modos e manda só as contagens.
   const media = revert.media
   const mediaParts = [
@@ -81,6 +90,22 @@ export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = tru
       : mediaParts.length > 0
         ? t('revertBar.mediaReverted', { what: mediaParts.join(', ') })
         : ''
+  // O que mudou depois do turno e ficou intacto.
+  const filesKept = revert.conflicts?.length ?? 0
+  const mediaKept = media?.conflicts ?? 0
+  const keptParts = [
+    filesKept > 0
+      ? filesKept === 1
+        ? t('revertBar.filesKept', { count: 1 })
+        : t('revertBar.filesKept', { count: filesKept })
+      : null,
+    mediaKept > 0
+      ? mediaKept === 1
+        ? t('revertBar.mediaKept', { count: 1 })
+        : t('revertBar.mediaKept', { count: mediaKept })
+      : null,
+  ].filter(Boolean)
+  const keptLabel = keptParts.length > 0 ? ` · ${keptParts.join(', ')}` : ''
 
   return (
     <Animated.View
@@ -115,6 +140,7 @@ export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = tru
         >
           {label}
           {mediaLabel ? <Text style={{ color: tokens.mutedForeground }}>{mediaLabel}</Text> : null}
+          {keptLabel ? <Text style={{ color: tokens.destructive }}>{keptLabel}</Text> : null}
           <Text style={{ color: tokens.mutedForeground }}>
             {t('revertBar.continuesFromHere')}
           </Text>

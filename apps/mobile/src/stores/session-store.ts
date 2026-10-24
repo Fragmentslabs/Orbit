@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { Alert } from 'react-native'
 import type {
   SessionInfo,
   SessionMode,
@@ -14,6 +15,7 @@ import type {
   OrchestrationPlan,
   PermissionMode,
   SessionStateResponse,
+  UnrevertResult,
 } from '@orbit/shared'
 import { parseMessageReply, SESSION_BUSY_ERROR } from '@orbit/shared'
 import { useReply } from '~/stores/reply-store'
@@ -40,6 +42,8 @@ export interface RevertResponse {
 
 export interface MessagesResponse {
   messages: ChatMessage[]
+  /** Resumo do unrevert: o que voltou e o que ficou intacto por conflito. */
+  result?: UnrevertResult
 }
 
 // ─── Modelo efetivo da sessão ────────────────────────────────────────────────
@@ -945,13 +949,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const res = await wsClient.send({ type: 'sessions:unrevert', sessionId })
       if (res.ok && res.data) {
-        const { messages } = res.data as MessagesResponse
+        const { messages, result } = res.data as MessagesResponse
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId ? { ...s, revert: undefined } : s,
           ),
           messages: { ...state.messages, [sessionId]: messages },
         }))
+        // O que não voltou (mudou entre o revert e agora) não pode passar em
+        // silêncio no celular.
+        const kept =
+          (result?.files?.conflicts.length ?? 0) + (result?.media?.conflicts ?? 0)
+        if (kept > 0) {
+          Alert.alert(i18n.t('revertBar.undo'), i18n.t('revertBar.unrevertKept', { count: kept }))
+        }
       }
     } catch {
       // Silently fail
