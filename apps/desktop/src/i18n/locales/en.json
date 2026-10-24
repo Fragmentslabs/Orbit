@@ -72,7 +72,7 @@
       },
       "computer": {
         "label": "Computer",
-        "description": "The agent sees and operates other apps on your Mac"
+        "description": "The agent sees and operates other apps on your computer"
       }
     },
     "about": {
@@ -3139,18 +3139,25 @@
     },
     "safety": {
       "title": "Safety",
-      "description": "Password managers, System Settings and security prompts are blocked. The agent never types into password fields. Each app (and each site, in browsers) asks for approval in the conversation, and ⌘⇧. stops everything at once."
+      "description": "Password managers, System Settings and security prompts are blocked. The agent never types into password fields. Each app (and each site, in browsers) asks for approval in the conversation, and {{shortcut}} stops everything at once."
+    },
+    "windows": {
+      "title": "Windows",
+      "description": "Windows asks for no permission. Orbit uses UI Automation through a PowerShell that stays open in the background.",
+      "ready": "Ready: the UI Automation host is working.",
+      "down": "The UI Automation host did not start: {{reason}}",
+      "elevated": "Apps running as administrator cannot be controlled by Orbit; neither can the UAC prompt or the lock screen."
     },
     "unavailable": {
       "mas": "Unavailable in the Mac App Store version: the store sandbox blocks accessibility and event posting. Use the version from the website.",
-      "platform": "For now, available on macOS only."
+      "platform": "For now, available on macOS and Windows only."
     }
   },
   "computer": {
     "chip": {
       "controlling": "Controlling {{app}}",
       "stop": "Stop",
-      "stopTitle": "Stop controlling the computer (⌘⇧.)"
+      "stopTitle": "Stop controlling the computer ({{shortcut}})"
     },
     "panels": {
       "chat": "Conversation",

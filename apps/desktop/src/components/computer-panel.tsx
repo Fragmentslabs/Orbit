@@ -2,15 +2,15 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FlaskConical, Image, KeyRound, Monitor, MousePointer2, ShieldCheck } from "lucide-react"
 import { COMPUTER_SCREENSHOT_EDGES, type ComputerPointer } from "@shared/app-settings"
-import type { ComputerStatus, ComputerTestResult } from "@shared/computer"
+import { computerStopShortcut, type ComputerStatus, type ComputerTestResult } from "@shared/computer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
-import { computerApi } from "@/src/lib/ipc"
+import { computerApi, windowApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
 
-/** Preferências → Computador: o interruptor geral, o ponteiro e as permissões do macOS. */
+/** Preferências → Computador: o interruptor geral, o ponteiro e as permissões do macOS (no Windows, o estado do host de UI Automation). */
 export function ComputerPanel() {
   const { t } = useTranslation()
   const computer = useAppSettings((s) => s.settings.computer)
@@ -89,38 +89,61 @@ export function ComputerPanel() {
           />
         </SettingRow>
 
-        <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
-              <KeyRound className="size-4 text-muted-foreground" />
+        {windowApi.platform === "win32" ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                <KeyRound className="size-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">{t("computerSettings.windows.title")}</p>
+                <p className="text-[11px] leading-tight text-muted-foreground">{t("computerSettings.windows.description")}</p>
+              </div>
+              <Badge variant="outline" className={cn("text-[10px]", status?.accessibility ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "border-amber-500/40 text-amber-600 dark:text-amber-400")}>
+                {status?.accessibility ? t("computerSettings.permissions.granted") : t("computerSettings.permissions.missing")}
+              </Badge>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium">{t("computerSettings.permissions.title")}</p>
-              <p className="text-[11px] leading-tight text-muted-foreground">{t("computerSettings.permissions.description")}</p>
-            </div>
-          </div>
-          <PermissionLine
-            label={t("computerSettings.permissions.accessibility")}
-            granted={Boolean(status?.accessibility)}
-            onRequest={() => void computerApi.requestAccessibility().then(refresh)}
-            onOpen={() => void computerApi.openPane("accessibility")}
-          />
-          <PermissionLine
-            label={t("computerSettings.permissions.screen")}
-            granted={screenOk}
-            onRequest={() => void computerApi.requestScreen().then(refresh)}
-            onOpen={() => void computerApi.openPane("screen")}
-          />
-          {/* Aberto por um terminal, o dono das permissões é o terminal — o
-              usuário libera o "Electron" e nada muda (Fase 0). */}
-          {status?.responsible ? (
-            <p className="pl-11 text-[11px] text-amber-700 dark:text-amber-300">
-              {t("computerSettings.permissions.responsible", { app: status.responsible })}
+            <p className="pl-11 text-[11px] text-muted-foreground">
+              {status?.accessibility
+                ? t("computerSettings.windows.ready")
+                : t("computerSettings.windows.down", { reason: status?.notes?.[0] ?? "" })}
             </p>
-          ) : (
-            status?.dev && <p className="pl-11 text-[11px] text-muted-foreground">{t("computerSettings.permissions.dev")}</p>
-          )}
-        </div>
+            <p className="pl-11 text-[11px] text-muted-foreground">{t("computerSettings.windows.elevated")}</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                <KeyRound className="size-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">{t("computerSettings.permissions.title")}</p>
+                <p className="text-[11px] leading-tight text-muted-foreground">{t("computerSettings.permissions.description")}</p>
+              </div>
+            </div>
+            <PermissionLine
+              label={t("computerSettings.permissions.accessibility")}
+              granted={Boolean(status?.accessibility)}
+              onRequest={() => void computerApi.requestAccessibility().then(refresh)}
+              onOpen={() => void computerApi.openPane("accessibility")}
+            />
+            <PermissionLine
+              label={t("computerSettings.permissions.screen")}
+              granted={screenOk}
+              onRequest={() => void computerApi.requestScreen().then(refresh)}
+              onOpen={() => void computerApi.openPane("screen")}
+            />
+            {/* Aberto por um terminal, o dono das permissões é o terminal — o
+                usuário libera o "Electron" e nada muda (Fase 0). */}
+            {status?.responsible ? (
+              <p className="pl-11 text-[11px] text-amber-700 dark:text-amber-300">
+                {t("computerSettings.permissions.responsible", { app: status.responsible })}
+              </p>
+            ) : (
+              status?.dev && <p className="pl-11 text-[11px] text-muted-foreground">{t("computerSettings.permissions.dev")}</p>
+            )}
+          </div>
+        )}
 
         <SettingRow icon={FlaskConical} title={t("computerSettings.test.title")} description={t("computerSettings.test.description")}>
           <div className="flex items-center gap-2">
@@ -135,7 +158,7 @@ export function ComputerPanel() {
           </div>
         </SettingRow>
 
-        <SettingRow icon={ShieldCheck} title={t("computerSettings.safety.title")} description={t("computerSettings.safety.description")}>
+        <SettingRow icon={ShieldCheck} title={t("computerSettings.safety.title")} description={t("computerSettings.safety.description", { shortcut: computerStopShortcut(windowApi.platform) })}>
           <span />
         </SettingRow>
       </div>

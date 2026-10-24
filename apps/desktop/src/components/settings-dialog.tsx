@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bell, BookOpen, Database, Globe, KeyRound, Monitor, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, Volume2, X, Pencil, Info, ChevronDown, Loader2 } from "lucide-react"
 import type { CatalogProvider, ProviderProtocol } from "@shared/chat"
+import { isComputerPlatform } from "@shared/computer"
 import {
   Dialog,
   DialogContent,
@@ -59,7 +60,7 @@ function useTabs(): TabDef[] {
     { id: "about", label: t("settings.tabs.about.label"), icon: Info, description: t("settings.tabs.about.description") },
   ]
   return tabs.filter(
-    (tab) => (tab.id !== "system" || windowApi.platform === "win32") && (tab.id !== "computer" || windowApi.platform === "darwin"),
+    (tab) => (tab.id !== "system" || windowApi.platform === "win32") && (tab.id !== "computer" || isComputerPlatform(windowApi.platform)),
   )
 }
 

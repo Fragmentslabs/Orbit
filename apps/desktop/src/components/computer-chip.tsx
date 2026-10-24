@@ -4,7 +4,8 @@ import { MonitorIcon, SquareIcon } from "lucide-react"
 import type { ComputerActivity } from "@shared/computer"
 import { cn } from "@/lib/utils"
 import { Shimmer } from "@/src/components/ai/shimmer"
-import { computerApi } from "@/src/lib/ipc"
+import { computerStopShortcut } from "@shared/computer"
+import { computerApi, windowApi } from "@/src/lib/ipc"
 
 /**
  * Chip "Controlando <app>" no header enquanto o agente desta conversa controla
@@ -71,8 +72,8 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
       <span className="font-mono tabular-nums text-muted-foreground">{elapsed(entry.startedAt)}</span>
       <button
         type="button"
-        title={t("computer.chip.stopTitle")}
-        aria-label={t("computer.chip.stopTitle")}
+        title={t("computer.chip.stopTitle", { shortcut: computerStopShortcut(windowApi.platform) })}
+        aria-label={t("computer.chip.stopTitle", { shortcut: computerStopShortcut(windowApi.platform) })}
         onClick={() => void computerApi.stop(sessionId)}
         className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-foreground transition-colors hover:bg-primary/85"
       >

@@ -1,3 +1,4 @@
+import { isComputerPlatform } from "@shared/computer"
 import { windowApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useModeActive } from "@/src/stores/mode-overrides"
@@ -9,7 +10,7 @@ import { useModeActive } from "@/src/stores/mode-overrides"
  */
 export function useComputerMode(sessionId?: string | null): { visible: boolean; active: boolean } {
   const enabled = useAppSettings((s) => s.settings.computer.enabled)
-  const visible = enabled && windowApi.platform === "darwin"
+  const visible = enabled && isComputerPlatform(windowApi.platform)
   const active = useModeActive("computer", sessionId, false)
   return { visible, active: visible && active }
 }

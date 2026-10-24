@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { PERSONA_VISIBILITY, type PersonaVisibility } from "@shared/appearance"
+import { isComputerPlatform } from "@shared/computer"
 import {
   Select,
   SelectContent,
@@ -68,8 +69,8 @@ function useModeRowOptions(): { id: ModeId; label: string; icon: typeof Search }
     { id: "subagents", label: t("codeInput.modes.subagents.label"), icon: Bot },
     { id: "orchestra", label: t("codeInput.modes.orchestra.label"), icon: Network },
     { id: "loop", label: t("codeInput.modes.loop.label"), icon: RefreshCw },
-    // Computador só existe no macOS (v1): nas outras plataformas a opção some.
-    ...(windowApi.platform === "darwin" ? [{ id: "computer" as const, label: t("input.modes.computer.label"), icon: Monitor }] : []),
+    // Computador existe no macOS e no Windows: nas outras plataformas a opção some.
+    ...(isComputerPlatform(windowApi.platform) ? [{ id: "computer" as const, label: t("input.modes.computer.label"), icon: Monitor }] : []),
   ]
 }
 

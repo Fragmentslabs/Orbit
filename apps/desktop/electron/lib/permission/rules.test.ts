@@ -81,6 +81,41 @@ describe('computer use', () => {
     expect(pedido?.ruleId).toBe('cu:app:com.apple.Safari@banco.com.br')
     expect(pedido?.claim.title).toBe('Controlar Safari em banco.com.br')
   })
+
+  it('Windows: navegador sem URL (a UIA não tem) aprova o navegador inteiro e avisa', async () => {
+    const { computerRegistry } = await import('../computer/registry')
+    computerRegistry.record({
+      id: 'obs_w',
+      sessionId: 's1',
+      createdAt: Date.now(),
+      app: { pid: 654, bundleId: 'firefox.exe', exe: 'firefox.exe', name: 'Firefox', active: true, hidden: false },
+      window: { id: 2, pid: 654, title: 'Qualquer', frame: [0, 0, 10, 10] },
+      geometry: { frame: [0, 0, 10, 10], width: 10, height: 10 },
+      hasScreenshot: true,
+      url: null,
+      elements: new Map(),
+      digest: null,
+    })
+    const pedido = assess('cu_computer', { action: 'left_click', app: 'firefox', x: 1, y: 1 }, null)
+    expect(pedido?.ruleId).toBe('cu:app:firefox.exe')
+    expect(pedido?.claim.detail).toContain('TODAS as abas')
+    // Com a URL lida da barra de endereço, volta a ser por site.
+    computerRegistry.record({
+      id: 'obs_w2',
+      sessionId: 's1',
+      createdAt: Date.now(),
+      app: { pid: 655, bundleId: 'chrome.exe', exe: 'chrome.exe', name: 'Google Chrome', active: true, hidden: false },
+      window: { id: 3, pid: 655, title: 'Banco', frame: [0, 0, 10, 10] },
+      geometry: { frame: [0, 0, 10, 10], width: 10, height: 10 },
+      hasScreenshot: true,
+      url: 'https://banco.com.br/extrato',
+      elements: new Map(),
+      digest: null,
+    })
+    const porSite = assess('cu_computer', { action: 'left_click', app: 'chrome', x: 1, y: 1 }, null)
+    expect(porSite?.ruleId).toBe('cu:app:chrome.exe@banco.com.br')
+    expect(porSite?.claim.detail).not.toContain('TODAS as abas')
+  })
 })
 
 describe('controle de tela pelo bash', () => {
@@ -88,5 +123,8 @@ describe('controle de tela pelo bash', () => {
     const pedido = assess('bash', { command: `osascript -e 'tell application "TextEdit" to activate' -e 'tell application "System Events" to keystroke "oi"'` }, '/repo')
     expect(pedido?.ruleId).toBe('bash:gui-automation')
     expect(assess('bash', { command: 'osascript -e \'display notification "ok"\'' }, '/repo')).toBeNull()
+    const win = assess('bash', { command: `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('hi')"` }, '/repo')
+    expect(win?.ruleId).toBe('bash:gui-automation')
+    expect(assess('bash', { command: 'powershell -Command "Get-Date"' }, '/repo')).toBeNull()
   })
 })

@@ -3,6 +3,16 @@
  * (chip no header, painel das Preferências).
  */
 
+/** Plataformas com driver de Computer Use (macOS e Windows; ver docs/computer-use-windows.md). */
+export function isComputerPlatform(platform: string): boolean {
+  return platform === "darwin" || platform === "win32"
+}
+
+/** O atalho global que para o controle na hora, como aparece na faixa e nas Preferências. */
+export function computerStopShortcut(platform: string): string {
+  return platform === "win32" ? "Ctrl+Shift+." : "⌘⇧."
+}
+
 /** Uma sessão de chat que está controlando (ou acabou de controlar) um app. */
 export interface ComputerActivity {
   sessionId: string

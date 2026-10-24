@@ -3,14 +3,16 @@ import { promisify } from 'node:util'
 import { app, desktopCapturer, shell, systemPreferences } from 'electron'
 import type { ComputerStatus, ComputerTestResult } from '@shared/computer'
 import { createMacosDriver } from './drivers/macos'
+import { createWindowsDriver, disposeWindowsHost } from './drivers/windows'
 import { computerRegistry } from './registry'
 import { disposeComputerSessions, setComputerRestoreHandler } from './session'
 import { ComputerError, type ComputerDriver } from './types'
 
 /**
- * Fachada do Computer Use. A v1 só tem driver para o macOS e fica desligada
- * na Mac App Store: o sandbox de lá bloqueia acessibilidade e injeção de
- * eventos, e anunciar uma tool que não funciona é pior do que não ter.
+ * Fachada do Computer Use. Há driver para o macOS e para o Windows (ver
+ * docs/computer-use-windows.md) e fica desligada na Mac App Store: o sandbox de
+ * lá bloqueia acessibilidade e injeção de eventos, e anunciar uma tool que não
+ * funciona é pior do que não ter.
  */
 
 export { computerRegistry }
@@ -19,7 +21,7 @@ let driver: ComputerDriver | null = null
 
 export function computerSupport(): { available: boolean; reason: ComputerStatus['reason'] } {
   if (process.mas) return { available: false, reason: 'mas' }
-  if (process.platform !== 'darwin') return { available: false, reason: 'platform' }
+  if (process.platform !== 'darwin' && process.platform !== 'win32') return { available: false, reason: 'platform' }
   return { available: true, reason: null }
 }
 
@@ -30,7 +32,7 @@ export function isComputerAvailable(): boolean {
 export function getComputerDriver(): ComputerDriver {
   if (!driver) {
     if (!isComputerAvailable()) throw new ComputerError('unavailable', 'Computer use is not available on this platform.')
-    driver = createMacosDriver()
+    driver = process.platform === 'win32' ? createWindowsDriver() : createMacosDriver()
     const d = driver
     setComputerRestoreHandler((pids) => d.restore(pids))
   }
@@ -77,6 +79,20 @@ export async function computerStatus(): Promise<ComputerStatus> {
     responsible: null,
   }
   if (!support.available) return base
+  if (process.platform === 'win32') {
+    // Sem TCC: "accessibility" diz se o host de UI Automation sobe, e as notas
+    // dizem o que mais limita (PowerShell restrito, Orbit sem administrador).
+    base.screen = 'granted'
+    try {
+      const perms = await getComputerDriver().perms()
+      base.accessibility = perms.accessibility
+      base.notes = perms.notes
+    } catch (err) {
+      base.accessibility = false
+      base.notes = [err instanceof Error ? err.message : String(err)]
+    }
+    return base
+  }
   base.responsible = await responsibleApp()
   try {
     base.accessibility = systemPreferences.isTrustedAccessibilityClient(false)
@@ -94,6 +110,8 @@ export async function computerStatus(): Promise<ComputerStatus> {
 /** Pede a permissão de Acessibilidade (o macOS abre o próprio diálogo). */
 export function requestAccessibility(): boolean {
   if (!isComputerAvailable()) return false
+  // O Windows não tem permissão a pedir (o UIA não pede autorização).
+  if (process.platform === 'win32') return true
   return systemPreferences.isTrustedAccessibilityClient(true)
 }
 
@@ -120,13 +138,14 @@ export async function testComputer(): Promise<ComputerTestResult> {
     const d = getComputerDriver()
     const perms = await d.perms()
     if (!perms.accessibility) {
-      return { ok: false, ms: Date.now() - started, message: 'axDenied' }
+      // No Windows o motivo está nas notas do host (PowerShell restrito etc.).
+      return { ok: false, ms: Date.now() - started, message: (process.platform === 'win32' && perms.notes?.[0]) || 'axDenied' }
     }
     const snapshot = await d.apps()
     const front = snapshot.apps.find((a) => a.active && a.pid !== process.pid) ?? snapshot.apps.find((a) => a.pid !== process.pid)
     const win = front ? snapshot.windows.find((w) => w.pid === front.pid) : undefined
     if (front && win) {
-      const tree = await d.tree({ pid: front.pid, window: { frame: win.frame, title: win.title }, maxNodes: 60 })
+      const tree = await d.tree({ pid: front.pid, window: { id: win.id, frame: win.frame, title: win.title }, maxNodes: 60 })
       return { ok: true, ms: Date.now() - started, message: `${front.name}: ${tree.nodes.length}` }
     }
     return { ok: true, ms: Date.now() - started, message: '' }
@@ -137,6 +156,7 @@ export async function testComputer(): Promise<ComputerTestResult> {
 
 export async function disposeComputerUse(): Promise<void> {
   await disposeComputerSessions()
+  disposeWindowsHost()
 }
 
 export { ComputerError } from './types'

@@ -1,5 +1,5 @@
 import { BrowserWindow, globalShortcut, screen } from 'electron'
-import type { ComputerActivity, ComputerEvent } from '@shared/computer'
+import { computerStopShortcut, type ComputerActivity, type ComputerEvent } from '@shared/computer'
 import { tNow } from '../i18n'
 import { disposeComputerPanels, setComputerPanelsSession } from './panels'
 import { finishOrphanRecording, disposeRecordings } from './recording'
@@ -20,8 +20,13 @@ import { forgetShots } from './shots'
  * parava nada (relatado no teste no app).
  */
 const IDLE_MS = 5 * 60_000
-/** ⌘⇧. é o anunciado na faixa; ⌘⇧Esc é a reserva, para quem procura "Esc". */
-export const PANIC_SHORTCUTS = ['CommandOrControl+Shift+.', 'CommandOrControl+Shift+Escape']
+/**
+ * macOS: ⌘⇧. é o anunciado na faixa; ⌘⇧Esc é a reserva, para quem procura "Esc".
+ * Windows: só Ctrl+Shift+. — Ctrl+Shift+Esc abre o Gerenciador de Tarefas (o
+ * sistema não deixa registrar) e Win+. é o painel de emojis, então o atalho
+ * não colide com nenhum do sistema.
+ */
+export const PANIC_SHORTCUTS = process.platform === 'win32' ? ['Control+Shift+.'] : ['CommandOrControl+Shift+.', 'CommandOrControl+Shift+Escape']
 
 interface Live {
   activity: ComputerActivity
@@ -160,7 +165,7 @@ const STOP_URL = 'orbit-computer://stop'
 const OVERLAY_PAD_X = 12
 const OVERLAY_HEIGHT = 52
 
-function overlayHtml(text: string, stop: string): string {
+function overlayHtml(text: string, stop: string, shortcut: string): string {
   const esc = (value: string) => value.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c)
   // Amarelo primário do Orbit (--primary do tema escuro). O body ocupa a
   // janela toda: com a altura do conteúdo, o overflow:hidden dele cortava o
@@ -177,7 +182,7 @@ background:rgba(16,16,20,.86);color:#fff;box-shadow:0 0 0 2px oklch(0.795 0.184 
 .sq{width:7px;height:7px;border-radius:1.5px;background:currentColor}
 kbd{font:600 10px -apple-system,system-ui,sans-serif;opacity:.7}
 </style></head><body><div class="bar"><span class="dot"></span><span>${esc(text)}</span>
-<a class="stop" href="${STOP_URL}" draggable="false"><span class="sq"></span>${esc(stop)}<kbd>⌘⇧.</kbd></a></div></body></html>`
+<a class="stop" href="${STOP_URL}" draggable="false"><span class="sq"></span>${esc(stop)}<kbd>${esc(shortcut)}</kbd></a></div></body></html>`
 }
 
 /**
@@ -228,7 +233,7 @@ function showOverlay(): void {
   overlayText = text
   const target = overlay
   void target
-    .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(text, tNow('computer.overlayStop')))}`)
+    .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(text, tNow('computer.overlayStop'), computerStopShortcut(process.platform)))}`)
     .then(() => fitOverlay(target))
     .then(() => {
       if (!target.isDestroyed() && !target.isVisible()) target.showInactive()

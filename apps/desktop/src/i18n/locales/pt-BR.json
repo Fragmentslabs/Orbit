@@ -72,7 +72,7 @@
       },
       "computer": {
         "label": "Computador",
-        "description": "O agente vê e opera outros apps do seu Mac"
+        "description": "O agente vê e opera outros apps do seu computador"
       }
     },
     "about": {
@@ -3139,18 +3139,25 @@
     },
     "safety": {
       "title": "Segurança",
-      "description": "Cofres de senha, Ajustes do Sistema e prompts de segurança são bloqueados. O agente nunca digita em campos de senha. Cada app (e cada site, nos navegadores) pede aprovação na conversa, e ⌘⇧. para tudo na hora."
+      "description": "Cofres de senha, Ajustes do Sistema e prompts de segurança são bloqueados. O agente nunca digita em campos de senha. Cada app (e cada site, nos navegadores) pede aprovação na conversa, e {{shortcut}} para tudo na hora."
+    },
+    "windows": {
+      "title": "Windows",
+      "description": "O Windows não pede permissão. O Orbit usa a Automação da Interface (UI Automation) por um PowerShell que fica aberto em segundo plano.",
+      "ready": "Pronto: o host de Automação da Interface está funcionando.",
+      "down": "O host de Automação da Interface não subiu: {{reason}}",
+      "elevated": "Apps abertos como administrador não podem ser controlados pelo Orbit; o UAC e a tela de bloqueio também não."
     },
     "unavailable": {
       "mas": "Indisponível na versão da Mac App Store: o sandbox da loja bloqueia acessibilidade e envio de eventos. Use a versão do site.",
-      "platform": "Por enquanto, disponível só no macOS."
+      "platform": "Por enquanto, disponível só no macOS e no Windows."
     }
   },
   "computer": {
     "chip": {
       "controlling": "Controlando {{app}}",
       "stop": "Parar",
-      "stopTitle": "Parar o controle do computador (⌘⇧.)"
+      "stopTitle": "Parar o controle do computador ({{shortcut}})"
     },
     "panels": {
       "chat": "Conversa",

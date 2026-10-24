@@ -3,7 +3,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { dataDir } from '../storage'
 import { isMcpServerName } from '../mcp'
 import { computerRegistry } from '../computer/registry'
-import { approvalKey, isDeniedQuery } from '../computer/safety'
+import { approvalKey, isBrowserId, isDeniedQuery } from '../computer/safety'
 import type { PermissionClaim } from '@shared/chat'
 
 export interface Assessment {
@@ -248,6 +248,9 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
   const name = target?.name ?? (query || '?')
   const ruleId = approvalKey(app, target?.url)
   const host = ruleId.includes('@') ? ruleId.split('@')[1] : null
+  // Navegador sem site conhecido (a UIA do Windows não tem URL): a aprovação
+  // vale pelo navegador inteiro, e o usuário precisa saber disso.
+  const wholeBrowser = !host && isBrowserId(app)
   const what =
     action === 'type' || action === 'set_value'
       ? `${action}: ${shorten(String(args.text ?? ''), 60)}`
@@ -265,7 +268,8 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
       title: host ? `Controlar ${name} em ${host}` : `Controlar ${name}`,
       detail:
         `O agente quer agir no app ${name}${host ? ` (site ${host})` : ''} — ${what}. ` +
-        'A aprovação vale para este app' + (host ? ' e este site' : '') + '; outro app ou outro site pede de novo.',
+        'A aprovação vale para este app' + (host ? ' e este site' : '') + '; outro app ou outro site pede de novo.' +
+        (wholeBrowser ? ' Atenção: o site desta aba não pôde ser lido, então a aprovação vale para TODAS as abas deste navegador.' : ''),
     },
   }
 }
@@ -366,6 +370,10 @@ function assessBash(command: string, dir: string | null): Assessment | null {
     // denylist, sem a aprovação por app, sem a recusa de campo de senha.
     if (cmd === 'osascript' && /system events|keystroke|key code|click at/i.test(command)) {
       found.push(claim('bash:gui-automation', 'controla outros apps pela interface (osascript/System Events)'))
+    }
+    // Windows: PowerShell com SendKeys/SendInput/UI Automation faz o mesmo por fora.
+    if (/^(powershell|pwsh)(\.exe)?$/.test(cmd) && /sendkeys|sendinput|mouse_event|keybd_event|system\.windows\.automation|uiautomation/i.test(command)) {
+      found.push(claim('bash:gui-automation', 'controla outros apps pela interface (PowerShell/UI Automation)'))
     }
 
     if (cmd.startsWith('npx') || cmd.startsWith('npm') || cmd.startsWith('pnpm') || cmd.startsWith('yarn') || cmd.startsWith('bun')) {
