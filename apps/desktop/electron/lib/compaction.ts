@@ -113,6 +113,29 @@ export function splitForCompaction(
   return { old: history.slice(start, cut), cutIndex: cut }
 }
 
+/**
+ * Texto enviado ao prompt de resumo. O trecho começa no resumo anterior (ver
+ * splitForCompaction), e cortar só pelo fim, como antes, descartava esse
+ * resumo inteiro assim que o trecho passava do teto — a conversa esquecia
+ * tudo o que veio antes da última compactação. O resumo anterior entra sempre
+ * completo; o teto vale só para as mensagens novas, das quais fica o fim.
+ */
+export function buildCompactionTranscript(old: ChatMessage[]): string {
+  const render = (m: ChatMessage) => {
+    const text = textOf(m)
+    return text ? `${m.role === 'user' ? 'User' : 'Assistant'}: ${text}` : null
+  }
+  const previous = old[0]?.summary ? render(old[0]) : null
+  const rest = (previous ? old.slice(1) : old)
+    .map(render)
+    .filter(Boolean)
+    .join('\n\n')
+  if (!previous) return rest.slice(-MAX_SUMMARY_INPUT_CHARS)
+  const budget = Math.max(0, MAX_SUMMARY_INPUT_CHARS - previous.length - 2)
+  const tail = budget > 0 ? rest.slice(-budget) : ''
+  return tail ? `${previous}\n\n${tail}` : previous
+}
+
 function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
@@ -129,19 +152,13 @@ export async function compactHistory(
   const split = splitForCompaction(history)
   if (!split) return null
 
-  const transcript = split.old
-    .map((m) => {
-      const text = textOf(m)
-      return text ? `${m.role === 'user' ? 'User' : 'Assistant'}: ${text}` : null
-    })
-    .filter(Boolean)
-    .join('\n\n')
+  const transcript = buildCompactionTranscript(split.old)
   if (!transcript) return null
 
   const { text } = await generateText({
     model,
     system: COMPACT_PROMPT,
-    prompt: transcript.slice(-MAX_SUMMARY_INPUT_CHARS),
+    prompt: transcript,
     providerOptions,
   })
   if (!text.trim()) return null

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
-import { findLastSummaryIndex, shouldCompact, splitForCompaction } from './compaction'
+import { buildCompactionTranscript, findLastSummaryIndex, shouldCompact, splitForCompaction } from './compaction'
 
 /**
  * Decisões que só falham em conversa longa, onde o defeito é caro e difícil de
@@ -125,5 +125,39 @@ describe('splitForCompaction', () => {
 
   it('histórico vazio não compacta', () => {
     expect(splitForCompaction([])).toBeNull()
+  })
+})
+
+describe('buildCompactionTranscript', () => {
+  const said = (role: 'user' | 'assistant', text: string, over: Partial<ChatMessage> = {}) =>
+    msg(role, { parts: [{ id: 'p', type: 'text', text, state: 'done' }], ...over } as Partial<ChatMessage>)
+
+  it('mantém o resumo anterior inteiro mesmo quando o trecho novo passa do teto', () => {
+    // Antes o texto era cortado só pelo fim: com 100k+ de mensagens novas, o
+    // resumo anterior — que fica no início — sumia e a conversa esquecia tudo
+    // o que veio antes da última compactação.
+    const old = [
+      said('assistant', 'DECISÃO-ANTIGA: usar SQLite', { summary: true }),
+      ...Array.from({ length: 30 }, (_, i) => said(i % 2 ? 'assistant' : 'user', `turno ${i} ` + 'x'.repeat(5_000))),
+    ]
+    const transcript = buildCompactionTranscript(old)
+    expect(transcript).toContain('DECISÃO-ANTIGA: usar SQLite')
+    expect(transcript.startsWith('Assistant: DECISÃO-ANTIGA')).toBe(true)
+    // O fim do trecho novo também fica; o teto continua valendo.
+    expect(transcript).toContain('turno 29')
+    expect(transcript.length).toBeLessThanOrEqual(100_000)
+  })
+
+  it('sem resumo anterior, fica o fim do trecho dentro do teto', () => {
+    const old = Array.from({ length: 30 }, (_, i) => said(i % 2 ? 'assistant' : 'user', `turno ${i} ` + 'x'.repeat(5_000)))
+    const transcript = buildCompactionTranscript(old)
+    expect(transcript).toContain('turno 29')
+    expect(transcript).not.toContain('turno 0 ')
+    expect(transcript.length).toBe(100_000)
+  })
+
+  it('trecho pequeno passa inteiro', () => {
+    const old = [said('assistant', 'resumo', { summary: true }), said('user', 'oi'), said('assistant', 'olá')]
+    expect(buildCompactionTranscript(old)).toBe('Assistant: resumo\n\nUser: oi\n\nAssistant: olá')
   })
 })
