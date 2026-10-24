@@ -83,6 +83,7 @@ export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): 
     changeAfterAction: true,
     capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: options.messageMouse ?? false }),
     perms: async () => ({ accessibility: true }),
+    requestScreen: async () => ({ before: true, granted: true }),
     apps: async (): Promise<AppsSnapshot> => ({
       apps: [
         { pid: FAKE_PID, bundleId: 'com.apple.TextEdit', name: 'TextEdit', active: false, hidden: false },

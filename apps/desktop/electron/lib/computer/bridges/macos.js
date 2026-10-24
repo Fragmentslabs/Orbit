@@ -265,6 +265,18 @@ function resolvePath(pid, target, path, expect) {
 
 // ---------------------------------------------------------------- operações
 
+// Pedido de Gravação de Tela pelo caminho oficial do macOS. Roda num filho do
+// Orbit, então o pedido sai em nome do Orbit (processo responsável). O
+// desktopCapturer sozinho não bastou no build instalado: o macOS negava "por
+// política" sem diálogo e sem pôr o Orbit na lista.
+function opRequestScreen() {
+  ObjC.bindFunction('CGPreflightScreenCaptureAccess', ['bool', []])
+  ObjC.bindFunction('CGRequestScreenCaptureAccess', ['bool', []])
+  var before = $.CGPreflightScreenCaptureAccess()
+  var granted = before ? true : $.CGRequestScreenCaptureAccess()
+  return { before: before === true, granted: granted === true }
+}
+
 function opPerms() {
   var trusted = $.AXIsProcessTrusted()
   return { accessibility: trusted === true || trusted === 1 }
@@ -723,6 +735,7 @@ function opFocused(args) {
 
 var OPS = {
   perms: opPerms,
+  requestScreen: opRequestScreen,
   apps: opApps,
   tree: opTree,
   restore: opRestore,

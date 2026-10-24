@@ -154,6 +154,8 @@ export interface ComputerDriver {
   capabilities(): Capabilities
   /** `notes`: o que mais limita o controle nesta máquina (Windows: CLM, integridade) */
   perms(signal?: AbortSignal): Promise<{ accessibility: boolean; notes?: string[] }>
+  /** Pede a Gravação de Tela pelo CGRequestScreenCaptureAccess (diálogo do sistema) */
+  requestScreen(): Promise<{ before: boolean; granted: boolean }>
   apps(signal?: AbortSignal): Promise<AppsSnapshot>
   tree(request: TreeRequest, signal?: AbortSignal): Promise<TreeSnapshot>
   /** PNG da janela (CGWindowID) */

@@ -121,10 +121,18 @@ export function requestAccessibility(): boolean {
  * deste projeto (Fase 0: liberar o Electron de outro projeto não vale). Pedir
  * as fontes de captura cria a entrada certa; depois abre o painel.
  */
-export async function requestScreenRecording(): Promise<void> {
-  if (!isComputerAvailable()) return
+export async function requestScreenRecording(): Promise<{ granted: boolean }> {
+  if (!isComputerAvailable()) return { granted: false }
+  // 1) O pedido oficial (diálogo do sistema, em nome do Orbit); 2) o
+  // desktopCapturer, que em algumas versões é o que põe o app na lista.
+  const asked = await getComputerDriver().requestScreen().catch(() => ({ before: false, granted: false }))
+  if (asked.granted) return { granted: true }
   await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }).catch(() => undefined)
+  // Sem a permissão, abre o painel: o macOS pode NÃO ter posto o Orbit na
+  // lista (visto no build não notarizado) — aí só o "+" resolve, e as
+  // Preferências explicam isso.
   await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture').catch(() => undefined)
+  return { granted: false }
 }
 
 /**

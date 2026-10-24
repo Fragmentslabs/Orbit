@@ -68,6 +68,8 @@ export function createMacosDriver(): ComputerDriver {
     platform: 'darwin',
     capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: false }),
     perms: (signal) => run('perms', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
+    // O diálogo do sistema pode ficar aberto: prazo folgado.
+    requestScreen: () => run('requestScreen', {}, { timeoutMs: 60_000 }),
     apps: (signal) => run<AppsSnapshot>('apps', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
     tree: (request: TreeRequest, signal) => run<TreeSnapshot>('tree', request, { timeoutMs: READ_TIMEOUT_MS, signal }),
     act: (action: BridgeAction, signal) => {
