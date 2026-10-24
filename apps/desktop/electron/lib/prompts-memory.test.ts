@@ -16,6 +16,8 @@ vi.mock('./memory/service', () => ({ loadPromptContext: (...args: unknown[]) => 
 vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))
 vi.mock('./past-chats', () => ({ buildPastChatsContext: async () => '', detectPastChatsIntent: () => false }))
+// Subchats leem o storage (app.getPath), que não existe fora do Electron.
+vi.mock('./subchats', () => ({ listSubchats: async () => [], formatSubchatsBlock: () => '' }))
 vi.mock('./app-settings', async () => {
   const { DEFAULT_APP_SETTINGS } = await import('@shared/app-settings')
   return { agentMayUseBrowser: () => false, agentMayControlComputer: () => false, getAppSettings: () => DEFAULT_APP_SETTINGS }
