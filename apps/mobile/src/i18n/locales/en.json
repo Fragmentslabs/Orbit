@@ -214,6 +214,10 @@
     "assistant": "Assistant"
   },
   "chatScreen": {
+    "subchatAsk": "This belongs in another chat",
+    "subchatDeny": "Decline",
+    "subchatHere": "This chat",
+    "subchatNew": "New chat",
     "newConversationTitle": "New conversation",
     "newConversationSubtitle": "Start chatting with the assistant.",
     "implementPlan": "Implement plan",
@@ -233,7 +237,9 @@
         "Refactor something in the code"
       ]
     },
-    "folderRequired": "Pick a folder to work in code mode."
+    "folderRequired": "Pick a folder to work in code mode.",
+    "pendingAsk_one": "{{count}} pending question",
+    "pendingAsk_other": "{{count}} pending questions"
   },
   "sendButtonGroup": {
     "sendOptions": "Send options",

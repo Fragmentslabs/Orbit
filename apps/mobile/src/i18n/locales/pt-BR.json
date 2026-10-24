@@ -214,6 +214,10 @@
     "assistant": "Assistente"
   },
   "chatScreen": {
+    "subchatAsk": "Isto cabe em outro chat",
+    "subchatDeny": "Negar",
+    "subchatHere": "Neste chat",
+    "subchatNew": "Novo chat",
     "newConversationTitle": "Nova conversa",
     "newConversationSubtitle": "Comece a conversar com o assistente.",
     "implementPlan": "Implementar plano",
@@ -233,7 +237,9 @@
         "Refatore algo no código"
       ]
     },
-    "folderRequired": "Escolha uma pasta para trabalhar no modo código."
+    "folderRequired": "Escolha uma pasta para trabalhar no modo código.",
+    "pendingAsk_one": "{{count}} pergunta pendente",
+    "pendingAsk_other": "{{count}} perguntas pendentes"
   },
   "sendButtonGroup": {
     "sendOptions": "Opções de envio",

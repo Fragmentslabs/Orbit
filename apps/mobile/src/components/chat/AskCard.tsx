@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { View, Text, Pressable, TextInput, Platform } from 'react-native'
-import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown } from 'lucide-react-native'
+import { View, Text, Pressable, TextInput, Platform, type StyleProp, type ViewStyle } from 'react-native'
+import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown, MessagesSquare } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { formatAskAnswer } from '@orbit/shared'
 import type { PendingAsk } from '~/stores/chat-store'
@@ -10,6 +10,9 @@ import { useThemeStore } from '~/stores/theme-store'
 interface AskCardProps {
   ask: PendingAsk
   onReply: (value: unknown) => void
+  /** Ajuste de fora: dentro da lista da conversa a margem lateral da barra
+   *  fixa virava recuo duplo (o conteúdo da lista já tem paddingHorizontal). */
+  style?: StyleProp<ViewStyle>
 }
 
 function btnMuted(tokens: Record<string, string>) {
@@ -38,7 +41,7 @@ function btnPrimary(tokens: Record<string, string>) {
   }
 }
 
-export function AskCard({ ask, onReply }: AskCardProps) {
+export function AskCard({ ask, onReply, style }: AskCardProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [submitted, setSubmitted] = useState(false)
@@ -63,12 +66,47 @@ export function AskCard({ ask, onReply }: AskCardProps) {
     padding: 12,
   }
 
+  // ─── Sugestão de subchat ──────────────────────────────────────────────
+  // O agente sugere levar um assunto para outra conversa; quem decide é o
+  // usuário. "Novo chat" abre uma conversa anexada que já começa a trabalhar.
+  if (ask.kind === 'subchat') {
+    const titulo = ask.subchat?.title ?? ''
+    const brief = ask.subchat?.brief ?? ''
+    return (
+      <View style={[cardBg, style]}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <MessagesSquare size={16} color={tokens.primary} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ color: tokens.mutedForeground, fontSize: 12 }}>{t('chatScreen.subchatAsk')}</Text>
+            <Text style={{ color: tokens.foreground, fontWeight: '600', marginTop: 2 }}>{titulo}</Text>
+            <Text numberOfLines={3} style={{ color: tokens.mutedForeground, fontSize: 12, marginTop: 2 }}>
+              {brief}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          <Pressable style={btnMuted(tokens)} onPress={() => reply('deny')}>
+            <Text style={{ color: tokens.foreground, fontSize: 12 }}>{t('chatScreen.subchatDeny')}</Text>
+          </Pressable>
+          <Pressable style={btnMuted(tokens)} onPress={() => reply('here')}>
+            <Text style={{ color: tokens.foreground, fontSize: 12 }}>{t('chatScreen.subchatHere')}</Text>
+          </Pressable>
+          <Pressable style={btnPrimary(tokens)} onPress={() => reply('new')}>
+            <Text style={{ color: tokens.primaryForeground, fontSize: 12, fontWeight: '600' }}>
+              {t('chatScreen.subchatNew')}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    )
+  }
+
   // ─── Permissions ──────────────────────────────────────────────────────
 
   if (ask.kind === 'permission' && ask.claim) {
     const critical = ask.claim.critical
     return (
-      <View style={cardBg}>
+      <View style={[cardBg, style]}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           {critical ? (
@@ -252,7 +290,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
     }
 
     return (
-      <View style={cardBg}>
+      <View style={[cardBg, style]}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <HelpCircle size={16} color={tokens.primary} />
