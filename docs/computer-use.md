@@ -391,9 +391,7 @@ Testes automáticos (`vitest`, com driver falso, sem tocar no SO):
 
 ## Fora da v1
 
-- **Windows**: UIA via PowerShell. Ficam para o plano dele o custo do `Add-Type`
-  (bridge persistente), a lentidão da UIA em árvores grandes, o UIPI com janelas
-  elevadas e a conversão DPI/DIP.
+- **Windows**: plano e estado em [computer-use-windows.md](computer-use-windows.md).
 - **Linux**: AT-SPI via PyGObject. Ficam para o plano dele a dependência de
   `python3-gi`, a acessibilidade habilitada e o Wayland (captura e injeção só
   via portal, best-effort).
