@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import { accessSync, constants } from 'node:fs'
 import fs from 'node:fs/promises'
@@ -264,18 +264,12 @@ export async function capture(directory: string): Promise<string> {
 }
 
 /**
- * Restaura o worktree para um tree hash. O índice é sincronizado com o
- * estado atual antes (add --all) para que read-tree --reset -u também
- * remova arquivos criados depois do snapshot.
+ * A restauração GLOBAL da pasta (`read-tree --reset -u`) foi removida de
+ * propósito: ela devolvia o repositório inteiro ao início do turno e engolia
+ * o trabalho de outra conversa na mesma pasta. O revert agora usa
+ * `transition` (S/E/C por caminho), que só toca no que o turno mudou e ainda
+ * está como ele deixou.
  */
-export async function restore(directory: string, tree: string): Promise<void> {
-  return comTrava(gitDirFor(directory), async () => {
-    await ensureRepo(directory)
-    await snapshotGitCru(directory, ['add', '--all'])
-    await snapshotGitCru(directory, ['read-tree', '--reset', '-u', tree])
-  })
-}
-
 export interface SnapshotDiff {
   files: string[]
   /** Diff unificado (pode ser grande — truncado em ~200kB) */
@@ -299,5 +293,176 @@ export async function diff(directory: string, from: string, to: string): Promise
       }
     }
     return { files, patch }
+  })
+}
+
+/**
+ * Estado de um caminho num tree hash ou no worktree.
+ *
+ * `hash` é o blob do git (o mesmo que `add`/`write-tree` gravaram); `mode`
+ * separa arquivo comum, executável e symlink. Comparar hash + modo é o que
+ * responde "o worktree AINDA está como o turno deixou?" sem olhar conteúdo de
+ * arquivo por arquivo em Node.
+ */
+export interface PathState {
+  exists: boolean
+  hash: string | null
+  mode: string | null
+}
+
+export interface TransitionResult {
+  /** Caminhos que voltaram ao estado `to` (o que o revert realmente desfez). */
+  applied: string[]
+  /** Caminhos que mudaram depois do turno — preservados, não tocados. */
+  conflicts: string[]
+  /** Caminhos que já estavam no estado `to` (nada a fazer). */
+  already: string[]
+}
+
+/**
+ * Mesmo blob em ambos: o sha1 do git para um symlink é o blob do TEXTO do
+ * alvo, e `git hash-object <symlink>` segue o link (falha se o alvo não
+ * existe). Aqui o conteúdo vai por stdin, no formato de objeto do repositório
+ * auxiliar (sha1 por padrão, sha256 se o git do usuário configurou assim).
+ */
+function gitHashStdin(directory: string, content: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      gitBinary.binary,
+      ['--git-dir', gitDirFor(directory), '--work-tree', directory, 'hash-object', '--stdin'],
+      { cwd: directory, env: gitBinary.env },
+    )
+    let out = ''
+    let err = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => (out += chunk))
+    child.stderr.on('data', (chunk: string) => (err += chunk))
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve(out.trim())
+      else reject(new Error(err.trim() || `git hash-object exited ${code}`))
+    })
+    child.stdin.end(content)
+  })
+}
+
+/** Estado de `rel` dentro de um tree hash (sem tocar no worktree). */
+async function entryState(directory: string, tree: string, rel: string): Promise<PathState> {
+  const out = (await snapshotGitCru(directory, ['ls-tree', tree, '--', rel])).trim()
+  if (!out) return { exists: false, hash: null, mode: null }
+  // "<mode> <type> <hash>\t<path>" — o path pode vir citado, mas os três
+  // primeiros campos nunca vêm.
+  const [mode, type, hash] = out.split('\t')[0].split(/\s+/)
+  if (!mode || !hash || type !== 'blob') return { exists: true, hash: hash ?? null, mode: mode ?? null }
+  return { exists: true, hash, mode }
+}
+
+/** Estado de `rel` no worktree agora. */
+async function worktreeState(directory: string, rel: string): Promise<PathState> {
+  const abs = path.join(directory, rel)
+  const st = await fs.lstat(abs).catch(() => null)
+  if (!st) return { exists: false, hash: null, mode: null }
+  if (st.isSymbolicLink()) {
+    const target = await fs.readlink(abs).catch(() => null)
+    if (target === null) return { exists: true, hash: null, mode: '120000' }
+    return { exists: true, hash: await gitHashStdin(directory, target), mode: '120000' }
+  }
+  if (!st.isFile()) return { exists: true, hash: null, mode: null }
+  const hash = (
+    await snapshotGitCru(directory, ['hash-object', `--path=${rel}`, '--', abs])
+  ).trim()
+  const mode = process.platform === 'win32' ? '100644' : st.mode & 0o111 ? '100755' : '100644'
+  return { exists: true, hash, mode }
+}
+
+function samePathState(a: PathState, b: PathState): boolean {
+  return a.exists === b.exists && a.hash === b.hash && (a.mode ?? null) === (b.mode ?? null)
+}
+
+/**
+ * Transição S/E/C POR CAMINHO — o coração do revert sem restauração global.
+ *
+ * `from` é o estado que o worktree deveria ter (o `end` do turno, no revert;
+ * o estado pós-revert, no unrevert) e `to` é o estado a que ele deve voltar.
+ * Para cada caminho que difere entre os dois:
+ *
+ * - worktree == `from` → AINDA é o que o turno deixou: volta para `to`;
+ * - worktree == `to`   → já está desfeito: nada a fazer;
+ * - qualquer outra coisa → alguém mexeu depois (outra conversa, o usuário
+ *   fora do Orbit, um agente externo): NÃO toca e reporta conflito.
+ *
+ * O resto da pasta não é lido além dos caminhos do diff, e nada é apagado em
+ * bloco. `skip` são caminhos que o turno mudou mas que não são dele (saves
+ * manuais do painel) — entram como conflito, preservados.
+ */
+export async function transition(
+  directory: string,
+  from: string,
+  to: string,
+  skip?: Set<string>,
+): Promise<TransitionResult> {
+  return comTrava(gitDirFor(directory), async () => {
+    await ensureRepo(directory)
+    const raw = await snapshotGitCru(directory, ['diff', '--name-only', '-z', '--no-renames', from, to])
+    const paths = raw
+      .split('\0')
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const applied: string[] = []
+    const conflicts: string[] = []
+    const already: string[] = []
+
+    for (const rel of paths) {
+      if (skip?.has(rel)) {
+        conflicts.push(rel)
+        continue
+      }
+      try {
+        const expected = await entryState(directory, from, rel)
+        const target = await entryState(directory, to, rel)
+        const current = await worktreeState(directory, rel)
+        if (samePathState(current, expected)) {
+          if (target.exists) {
+            // checkout restaura conteúdo, modo e symlink de uma vez.
+            await snapshotGitCru(directory, ['checkout', to, '--', rel])
+          } else {
+            await fs.rm(path.join(directory, rel), { force: true })
+            // Mantém o índice coerente com o que sobrou; o próximo capture
+            // faria isso de qualquer forma.
+            await snapshotGitCru(directory, ['rm', '--cached', '--ignore-unmatch', '--', rel]).catch(() => '')
+          }
+          applied.push(rel)
+        } else if (samePathState(current, target)) {
+          already.push(rel)
+        } else {
+          conflicts.push(rel)
+        }
+      } catch (err) {
+        // Um caminho ilegível não pode derrubar o revert inteiro — e não é
+        // seguro sobrescrevê-lo sem saber o estado atual.
+        console.error('[snapshot] transição falhou em', rel, err)
+        conflicts.push(rel)
+      }
+    }
+
+    return { applied, conflicts, already }
+  })
+}
+
+/** Diff entre dois trees limitado a caminhos — é o que a barra de revert mostra. */
+export async function diffPaths(
+  directory: string,
+  from: string,
+  to: string,
+  paths: string[],
+): Promise<SnapshotDiff> {
+  if (paths.length === 0) return { files: [], patch: '' }
+  return comTrava(gitDirFor(directory), async () => {
+    let patch = await snapshotGitCru(directory, ['diff', '--no-ext-diff', from, to, '--', ...paths])
+    if (patch.length > MAX_PATCH_CHARS) {
+      patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
+    }
+    return { files: paths, patch }
   })
 }
