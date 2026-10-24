@@ -1,6 +1,7 @@
 import { BrowserWindow, Notification } from 'electron'
 import type { AskItem, ChatMessage, MessageErrorKind } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
+import { lastProseText } from '@shared/chat-text'
 import { readJson } from './storage'
 import { somCustomDisponivel, tocarSom } from './sound'
 import { notifyCompanionMessage } from './companion-server'
@@ -41,16 +42,17 @@ function appVisivel(): boolean {
   return !!win && win.isVisible() && win.isFocused()
 }
 
-/** Preview da primeira parte de texto "de verdade" (ignora nudge/internal). */
+/**
+ * Preview da RESPOSTA do turno — o último bloco de prosa da mensagem, a mesma
+ * regra que a bolha do chat e a leitura em voz alta usam (ver `lastProseText`).
+ * Pegar a primeira parte de texto pegava a narração: num turno com
+ * ferramentas ela é o preâmbulo ("vou implementar…"), não a resposta que a
+ * pessoa lê no fim.
+ */
 function previewDe(mensagem: ChatMessage, max = 140): string {
-  for (const part of mensagem.parts) {
-    if (part.type !== 'text') continue
-    if (part.source === 'internal' || part.source === 'nudge') continue
-    const texto = part.text.replace(/\s+/g, ' ').trim()
-    if (!texto) continue
-    return texto.length > max ? `${texto.slice(0, max)}…` : texto
-  }
-  return ''
+  const texto = lastProseText(mensagem).replace(/\s+/g, ' ').trim()
+  if (!texto) return ''
+  return texto.length > max ? `${texto.slice(0, max)}…` : texto
 }
 
 async function tituloDaSessao(sessionId: string): Promise<string> {

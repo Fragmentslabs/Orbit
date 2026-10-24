@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat": "./src/chat.ts",
+    "./chat-text": "./src/chat-text.ts",
     "./companion": "./src/companion.ts",
     "./models": "./src/models.ts",
     "./memory": "./src/memory.ts",
