@@ -113,10 +113,17 @@ export const DESIGN_RUNTIME = `(() => {
   let drag = null
   let pendingDown = null
   let suppressClick = false
+  // A árvore do DOM custa para montar (até MAX_NODES nós) e só as Camadas a
+  // usam. Ela passa a ser enviada quando o painel PEDE ('tree') e, daí em
+  // diante, a cada mudança estrutural — nunca antes disso, e nunca depois de o
+  // painel fechar (o mesmo pedido com want:false).
+  let treeWanted = false
 
   const post = (message) => {
     try { parent.postMessage(Object.assign({ source: SOURCE }, message), '*') } catch (_) {}
   }
+
+  const sendTree = () => { if (treeWanted) post({ type: 'tree', tree: tree() }) }
 
   const pathOf = (el) => {
     if (!el || el.nodeType !== 1) return null
@@ -1152,7 +1159,12 @@ export const DESIGN_RUNTIME = `(() => {
       syncDots()
       return
     }
-    if (msg.type === 'tree') { post({ type: 'tree', tree: tree() }); return }
+    if (msg.type === 'tree') {
+      if (msg.want === false) { treeWanted = false; return }
+      treeWanted = true
+      sendTree()
+      return
+    }
     if (msg.type === 'blur') { finishEditing(true); return }
     if (msg.type === 'select') {
       selected = byPath(msg.path)
@@ -1192,7 +1204,7 @@ export const DESIGN_RUNTIME = `(() => {
       selected = moving
       group = [moving]
       post({ type: 'select', path: pathOf(moving), info: infoOf(moving), shift: false, group: groupPaths() })
-      post({ type: 'tree', tree: tree() })
+      sendTree()
       sendRects()
       return
     }
@@ -1201,7 +1213,7 @@ export const DESIGN_RUNTIME = `(() => {
       if (!parent || !Array.isArray(msg.order)) return
       applyOrder(parent, msg.order)
       post({ type: 'select', path: pathOf(selected), info: infoFor(selected), shift: false, group: groupPaths() })
-      post({ type: 'tree', tree: tree() })
+      sendTree()
       sendRects()
       return
     }
@@ -1219,7 +1231,7 @@ export const DESIGN_RUNTIME = `(() => {
       selected = null
       group = []
       post({ type: 'select', path: null, info: null, shift: false, group: [] })
-      post({ type: 'tree', tree: tree() })
+      sendTree()
       sendRects()
       return
     }
@@ -1243,7 +1255,7 @@ export const DESIGN_RUNTIME = `(() => {
       selected = wrapper
       group = [wrapper]
       post({ type: 'select', path: pathOf(wrapper), info: infoFor(wrapper), shift: false, group: groupPaths() })
-      post({ type: 'tree', tree: tree() })
+      sendTree()
       sendRects()
       return
     }
@@ -1270,7 +1282,7 @@ export const DESIGN_RUNTIME = `(() => {
     if (!selected || selected === el) selected = el
     sendInfo()
     sendRects()
-    post({ type: 'tree', tree: tree() })
+    sendTree()
   })
 
   const links = () => {
@@ -1285,12 +1297,27 @@ export const DESIGN_RUNTIME = `(() => {
 
   const ready = () => {
     const doc = document.documentElement
-    post({ type: 'ready', tree: tree(), width: doc.scrollWidth, height: doc.scrollHeight, links: links() })
+    // A árvore NÃO vai junto: montá-la custa (até 1500 nós, ver MAX_NODES) e
+    // só as Camadas a usam — o painel pede a mensagem 'tree' quando está à
+    // vista, e aí sim ela é montada (ver design-tab.tsx).
+    post({ type: 'ready', width: doc.scrollWidth, height: doc.scrollHeight, links: links() })
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready)
   else ready()
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(sendRects)
 })()`
+
+/**
+ * Versão do runtime, derivada do próprio fonte: só muda quando ele muda. Vai no
+ * URL para o iframe poder reaproveitar o script (e o código já compilado) entre
+ * remontagens — o `immutable` do Cache-Control em design-store.ts só é seguro
+ * porque a versão muda junto com o conteúdo.
+ */
+const DESIGN_RUNTIME_VERSION = (() => {
+  let hash = 0
+  for (let i = 0; i < DESIGN_RUNTIME.length; i += 1) hash = (Math.imul(hash, 31) + DESIGN_RUNTIME.charCodeAt(i)) | 0
+  return (hash >>> 0).toString(36)
+})()
 
 /**
  * Põe a ponte como primeiro script do <head> (idempotente) e, logo depois, o
@@ -1305,7 +1332,7 @@ export const DESIGN_RUNTIME = `(() => {
 export function injectDesignRuntime(html: string, fontCss = ''): string {
   if (html.includes(RUNTIME_MARK)) return html
   const fontTag = fontCss.trim() ? `<style data-orbit-fonts>${fontCss}</style>` : ''
-  const tag = `<script ${RUNTIME_MARK} src="${DESIGN_RUNTIME_PATH}"></script>${fontTag}`
+  const tag = `<script ${RUNTIME_MARK} src="${DESIGN_RUNTIME_PATH}?v=${DESIGN_RUNTIME_VERSION}"></script>${fontTag}`
   const head = /<head[^>]*>/i.exec(html)
   if (head) return `${html.slice(0, head.index + head[0].length)}${tag}${html.slice(head.index + head[0].length)}`
   const htmlTag = /<html[^>]*>/i.exec(html)

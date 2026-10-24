@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
@@ -35,6 +35,8 @@ import { IconAction } from "@/src/components/ai/artifact-part"
 import { DesignCode } from "@/src/components/design/design-code"
 import { DesignLayers } from "@/src/components/design/design-layers"
 import { DesignPresenter } from "@/src/components/design/design-presenter"
+import { planDesignReload } from "@/src/components/design/design-reload"
+import { isBoardInView } from "@/src/components/design/design-view"
 import { DesignProperties, type DesignBoardView, type DesignPropertiesTarget } from "@/src/components/design/design-properties"
 import {
   DESIGN_SOURCE,
@@ -121,6 +123,9 @@ const UNDO_LIMIT = 50
  *  NOSSA que já está aplicada ao vivo — recarregar ali só piscaria a tela. */
 const QUIET_MS = 1500
 const STYLE_PERSIST_MS = 300
+/** Margem (em px de TELA) em volta da viewport em que o artboard ainda monta:
+ *  é o que evita o iframe aparecer em branco quando a pessoa dá um pan rápido. */
+const VIRTUAL_MARGIN = 480
 
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
@@ -168,6 +173,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
    *  que decide quem ganha o botão Play. */
   const [links, setLinks] = useState<Record<string, string[]>>({})
   const [reloads, setReloads] = useState(0)
+  /** Versão de cada artboard: quando o agente grava um arquivo, só ELE remonta
+   *  (o `reloads` global fica para a recarga manual e para mudanças que podem
+   *  afetar todas as telas — CSS, imagem, fonte da pasta). */
+  const [fileVersions, setFileVersions] = useState<Record<string, number>>({})
   const [selection, setSelection] = useState<Selection | null>(null)
   const selectionRef = useRef(selection)
   selectionRef.current = selection
@@ -181,6 +190,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   groupPathsRef.current = groupPaths
   const [hover, setHover] = useState<{ file: string; rect: DesignRect } | null>(null)
   const [trees, setTrees] = useState<Record<string, DesignTreeNode | undefined>>({})
+  /** Árvores já pedidas e ainda sem resposta (as Camadas pedem uma por artboard). */
+  const treeRequests = useRef<Set<string>>(new Set())
+  /** Tamanho da viewport do canvas: é o que decide quais artboards montam. */
+  const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("properties")
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [codeFile, setCodeFile] = useState<string | null>(null)
@@ -232,6 +245,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     setState({ status: "loading" })
     setSelection(null)
     setTrees({})
+    treeRequests.current.clear()
+    setFileVersions({})
     load()
   }, [load])
 
@@ -244,6 +259,37 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   }, [state, overrides])
   const boardsRef = useRef(boards)
   boardsRef.current = boards
+
+  /** As Camadas estão à vista? É a única coisa que precisa da árvore do DOM. */
+  const layersVisible = fullscreen ? leftSideOpen : inspectorOpen && inspectorTab === "layers"
+  const layersVisibleRef = useRef(layersVisible)
+  layersVisibleRef.current = layersVisible
+
+  /**
+   * Que artboards têm iframe montado agora. Cada um é um DOCUMENTO inteiro com
+   * a ponte injetada; com dez telas no canvas, montar todas na abertura custa
+   * caro e não muda nada para quem está olhando uma. Fora da vista o board
+   * vira um retângulo — e o iframe monta quando ele entra na tela.
+   */
+  const mounted = useMemo(() => {
+    const files = new Set<string>()
+    const { w: vw, h: vh } = viewportSize
+    // Antes da primeira medição não dá para saber o que está à vista — e até o
+    // primeiro `fit` a vista ainda é a de origem: monta tudo, senão a abertura
+    // mostraria retângulos vazios por um quadro.
+    const everything = vw === 0 || vh === 0 || autoFit.current
+    for (const board of boards) {
+      // Play e seleção precisam do iframe mesmo fora da vista; com as Camadas
+      // abertas também — o painel lista a estrutura de TODOS e clicar numa
+      // linha tem de selecionar de verdade.
+      if (everything || layersVisible || board.file === playing || board.file === selection?.file) {
+        files.add(board.file)
+        continue
+      }
+      if (isBoardInView(board, view, viewportSize, VIRTUAL_MARGIN)) files.add(board.file)
+    }
+    return files
+  }, [boards, layersVisible, playing, selection?.file, view, viewportSize])
 
   const bounds = useMemo(() => {
     if (boards.length === 0) return null
@@ -333,6 +379,20 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     const el = rootRef.current
     if (!el) return
     const update = () => setWide(el.clientWidth >= WIDE_LAYOUT_PX)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // O canvas é uma camada transformada: para saber o que está à vista é preciso
+  // o tamanho da viewport (o pan e o zoom saem do `view`). `useLayoutEffect`
+  // porque a primeira medição tem de valer já no primeiro paint — senão a
+  // abertura montaria todos os artboards e desmontaria metade no quadro seguinte.
+  useLayoutEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const update = () => setViewportSize({ w: el.clientWidth, h: el.clientHeight })
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
@@ -814,8 +874,19 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       const sel = selectionRef.current
       switch (msg.type) {
         case "ready": {
-          setTrees((prev) => ({ ...prev, [file]: msg.tree }))
+          // Documento novo (primeira carga ou recarga): a árvore que estava
+          // guardada é do HTML anterior. Se as Camadas estão à vista já se pede
+          // a nova; senão, só quando o painel abrir (efeito logo abaixo).
+          treeRequests.current.delete(file)
+          setTrees((prev) => {
+            const next = msg.tree ?? undefined
+            return prev[file] === next ? prev : { ...prev, [file]: next }
+          })
           setLinks((prev) => ({ ...prev, [file]: msg.links }))
+          if (!msg.tree && layersVisibleRef.current) {
+            treeRequests.current.add(file)
+            post(file, { type: "tree" })
+          }
           setGroupRects([])
           post(file, modeFor(file))
           // Recarga (o agente editou, desfazer, código): a seleção volta no MESMO
@@ -929,6 +1000,24 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => window.removeEventListener("message", onMessage)
   }, [blurInspector, fileOf, handleKey, mutateSource, mutateSourceHtml, modeFor, post, startPlay, wheel])
 
+  // A árvore do DOM só serve às Camadas — ela é pedida na hora em que o painel
+  // fica à vista (e de novo a cada recarga, no `ready`). Sem o painel aberto
+  // nenhum artboard paga por montá-la.
+  useEffect(() => {
+    const files = [...iframes.current.keys()]
+    if (!layersVisible) {
+      // Painel fechado: a ponte para de montar árvores que ninguém vai ver.
+      treeRequests.current.clear()
+      for (const file of files) post(file, { type: "tree", want: false })
+      return
+    }
+    for (const file of files) {
+      if (treeRequests.current.has(file)) continue
+      treeRequests.current.add(file)
+      post(file, { type: "tree" })
+    }
+  }, [layersVisible, post])
+
   // Qualquer clique FORA dos artboards encerra a edição de texto em andamento
   // (eventos do iframe não chegam aqui, então um pointerdown no painel significa
   // que o clique foi fora). O `blur` da janela do artboard também cobre isso, mas
@@ -967,16 +1056,27 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     }
   }, [fullscreen, handleKey])
 
-  // O agente (ou outra janela) mudou a pasta: recarrega índice e artboards —
-  // menos quando a mudança é nossa e já está na tela.
+  // O agente (ou outra janela) mudou a pasta: recarrega o índice e SÓ os
+  // artboards que mudaram — menos quando a mudança é nossa e já está na tela.
+  // O watcher manda os nomes (ver design-store.ts); antes, qualquer gravação
+  // remontava todos os iframes, e gerar 4 telas remontava o canvas 4 vezes.
   useEffect(() => {
     if (!designId) return
     return designApi.onChanged((payload) => {
       if (payload.id !== designId) return
       setCodeVersion((n) => n + 1)
       if (Date.now() < quietUntil.current) return
-      setReloads((n) => n + 1)
-      load()
+      const plan = planDesignReload(payload.files)
+      if (plan.index) load()
+      if (plan.boards.length > 0) {
+        setFileVersions((prev) => {
+          const next = { ...prev }
+          for (const file of plan.boards) next[file] = (next[file] ?? 0) + 1
+          return next
+        })
+      }
+      // CSS, imagem ou fonte da pasta (ou evento sem nome): todas recarregam.
+      if (plan.all) setReloads((n) => n + 1)
     })
   }, [designId, load])
 
@@ -1401,6 +1501,19 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})` }}
           >
             {boards.map((board) => {
+              // Fora da vista: só o retângulo (o iframe monta quando o board
+              // entra na tela — ver `mounted`). `data-canvas-layer` mantém o pan
+              // funcionando se o ponteiro cair aqui.
+              if (!mounted.has(board.file)) {
+                return (
+                  <div
+                    key={board.file}
+                    data-canvas-layer=""
+                    className="absolute rounded-sm border border-border/50 bg-card/30"
+                    style={{ left: board.x, top: board.y, width: board.w, height: board.h }}
+                  />
+                )
+              }
               const isBoardSelected = selection?.file === board.file && selection.path === null
               const isPlaying = playing === board.file
               const elementRect = selection?.file === board.file && selection.path ? selRect : null
@@ -1490,8 +1603,12 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
                         if (el) iframes.current.set(board.file, el)
                         else iframes.current.delete(board.file)
                       }}
-                      key={`${board.file}:${reloads}`}
-                      src={`${DESIGN_SCHEME}://${designId}/${encodeFile(board.file)}?r=${reloads}`}
+                      // A chave carrega a versão do ARQUIVO: um artboard que não
+                      // mudou segue montado (com o scroll e a seleção dele).
+                      key={`${board.file}:${reloads}:${fileVersions[board.file] ?? 0}`}
+                      // A versão do arquivo entra pela chave, não pelo URL: assim
+                      // o endereço fica estável e o ETag do scheme pode dar 304.
+                      src={`${DESIGN_SCHEME}://${designId}/${encodeFile(board.file)}?v=${reloads}`}
                       title={board.title ?? board.file}
                       sandbox="allow-scripts"
                       allow=""

@@ -1,19 +1,9 @@
+import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { listMedia } from '../media'
 import { panelDesignPreview } from '../panel-browser'
 import { readDesignCanvas } from './design-canvas'
-import { registerDesignCover } from './design-gallery'
+import { refreshDesignCover } from './design-gallery'
 import { getDesign, registerDesign } from './design-store'
-
-/** O canvas já tem item na galeria? O `designId` é o vínculo, não a pasta. */
-async function isInGallery(id: string): Promise<boolean> {
-  try {
-    const items = await listMedia({ kind: 'design' })
-    return items.some((item) => item.designId === id)
-  } catch {
-    return false
-  }
-}
 
 /**
  * Reabre um canvas que JÁ está no registro — o card do chat, o tile da Mídia.
@@ -48,16 +38,24 @@ export async function openDesignAndReport(input: {
   try {
     const canvas = await readDesignCanvas(input.target)
     if (canvas.order.length === 0) throw new Error('canvas.json has no artboards in "order"')
-    if (!(await isInGallery(reg.id))) {
-      await registerDesignCover(reg.id, { sessionId: input.sessionId }).catch(() => false)
-    }
+    // A capa sai em BACKGROUND: o canvas já está aberto no painel, e o
+    // resultado da tool não tem por que esperar a janela offscreen carregar,
+    // fotografar e o sharp redimensionar (ver design-gallery.ts).
+    refreshDesignCover(reg.id, { sessionId: input.sessionId })
     const boards = canvas.order.map((file) => {
       const b = canvas.boards[file]
       if (!b) return `"${file}" (missing from boards!)`
       return `"${b.title ?? file}" (${file}, ${Math.round(b.w)}×${Math.round(b.h)} at ${Math.round(b.x)},${Math.round(b.y)})`
     })
+    // As folhas de estilo compartilhadas não estão no canvas.json (o índice é só
+    // o ARRANJO): sem esta linha o agente esquece que base.css existe e volta a
+    // repetir o CSS dentro de cada documento.
+    const styles = (await fsp.readdir(input.target).catch(() => [] as string[]))
+      .filter((file) => file.toLowerCase().endsWith('.css'))
+      .sort()
+    const stylesNote = styles.length > 0 ? ` Shared stylesheets: ${styles.join(', ')}.` : ''
     return [
-      `Design "${name}" is open in the Design tab of the right panel (${input.label}) with ${boards.length} artboard${boards.length === 1 ? '' : 's'}: ${boards.join('; ')}.`,
+      `Design "${name}" is open in the Design tab of the right panel (${input.label}) with ${boards.length} artboard${boards.length === 1 ? '' : 's'}: ${boards.join('; ')}.${stylesNote}`,
       input.nextStep,
     ].join('\n')
   } catch (err) {

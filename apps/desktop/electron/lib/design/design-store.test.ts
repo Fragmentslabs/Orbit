@@ -4,9 +4,12 @@ import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
 /** Espelha motion-store.test.ts: `protocol.handle` é mockado, mas guarda quem
- *  chegou — é por aqui que o teste chama o scheme de verdade. */
+ *  chegou — é por aqui que o teste chama o scheme de verdade. `windows` são as
+ *  janelas que recebem o design:changed (o teste do watcher põe uma e lê o
+ *  payload que a aba Design usa para recarregar só o artboard que mudou). */
 const registered = vi.hoisted(() => ({
   handlers: new Map<string, (request: Request) => Promise<Response>>(),
+  windows: [] as Array<{ isDestroyed: () => boolean; webContents: { send: (channel: string, payload: unknown) => void } }>,
 }))
 
 // O módulo toca em `app`/`protocol`/`BrowserWindow` (é do main). O índice cai
@@ -16,7 +19,7 @@ vi.mock('electron', async () => {
   const nodeOs = await import('node:os')
   return {
     app: { getPath: () => nodePath.join(nodeOs.tmpdir(), `orbit-design-store-test-${process.pid}`) },
-    BrowserWindow: { getAllWindows: () => [] },
+    BrowserWindow: { getAllWindows: () => registered.windows },
     protocol: {
       handle: (scheme: string, handler: (request: Request) => Promise<Response>) => {
         registered.handlers.set(scheme, handler)
@@ -172,6 +175,9 @@ describe('registerDesignProtocol', () => {
     await mkdir(folder, { recursive: true })
     await writeFile(path.join(folder, 'canvas.json'), '{"v":1,"boards":{"Main.html":{"x":0,"y":0,"w":800,"h":600}},"order":["Main.html"]}', 'utf8')
     await writeFile(path.join(folder, 'Main.html'), '<!doctype html><title>t</title><body>hi</body>', 'utf8')
+    // Folha compartilhada: um <link rel="stylesheet" href="base.css"> dentro do
+    // artboard resolve aqui, com o tipo certo.
+    await writeFile(path.join(folder, 'base.css'), ':root{--gap:8px}', 'utf8')
 
     registerDesignProtocol()
     const handler = registered.handlers.get('orbit-design')
@@ -183,20 +189,42 @@ describe('registerDesignProtocol', () => {
     expect(indexRes.status).toBe(200)
     expect(await indexRes.text()).toContain('"Main.html"')
 
+    const cssRes = await handler!(new Request(`orbit-design://${id}/base.css`))
+    expect(cssRes.status).toBe(200)
+    expect(cssRes.headers.get('Content-Type')).toContain('text/css')
+    expect(await cssRes.text()).toBe(':root{--gap:8px}')
+
     const boardRes = await handler!(new Request(`orbit-design://${id}/Main.html`))
     expect(boardRes.status).toBe(200)
     expect(boardRes.headers.get('Content-Type')).toContain('text/html')
     const served = await boardRes.text()
     expect(served).toContain('hi')
     // O artboard sai com a ponte do editor; `?raw` é o fonte como está no disco.
-    expect(served).toContain(DESIGN_RUNTIME_PATH)
+    // O URL da ponte leva a versão dela (é o que deixa o cache ser imutável).
+    expect(served).toContain(`${DESIGN_RUNTIME_PATH}?v=`)
+
+    // ETag + revalidação: remontar um artboard sem mudança vira 304 sem corpo.
+    const etag = boardRes.headers.get('ETag')
+    expect(etag).toBeTruthy()
+    expect(boardRes.headers.get('Cache-Control')).toBe('no-cache')
+    const notModified = await handler!(new Request(`orbit-design://${id}/Main.html`, { headers: { 'If-None-Match': etag! } }))
+    expect(notModified.status).toBe(304)
+
     const raw = await (await handler!(new Request(`orbit-design://${id}/Main.html?raw=1`))).text()
     expect(raw).not.toContain(DESIGN_RUNTIME_PATH)
     expect(raw).toBe('<!doctype html><title>t</title><body>hi</body>')
 
+    // Mudou o arquivo: o etag antigo não vale mais e o corpo novo vem inteiro.
+    await writeFile(path.join(folder, 'Main.html'), '<!doctype html><title>t</title><body>hi 2</body>', 'utf8')
+    const changed = await handler!(new Request(`orbit-design://${id}/Main.html`, { headers: { 'If-None-Match': etag! } }))
+    expect(changed.status).toBe(200)
+    expect(await changed.text()).toContain('hi 2')
+
     const runtime = await handler!(new Request(`orbit-design://${id}${DESIGN_RUNTIME_PATH}`))
     expect(runtime.status).toBe(200)
     expect(runtime.headers.get('Content-Type')).toContain('javascript')
+    // A ponte é constante do build e o URL dela carrega a versão.
+    expect(runtime.headers.get('Cache-Control')).toContain('immutable')
     expect(await runtime.text()).toContain('orbit-design')
 
     const missing = await handler!(new Request(`orbit-design://${id}/nope.html`))
@@ -204,5 +232,35 @@ describe('registerDesignProtocol', () => {
 
     const unknownId = await handler!(new Request('orbit-design://dsg_doesnotexist/canvas.json'))
     expect(unknownId.status).toBe(404)
+  })
+})
+
+describe('watcher', () => {
+  it('avisa a janela com os ARQUIVOS que mudaram (a aba recarrega só eles)', async () => {
+    const folder = path.join(tempRoot, 'sess1', 'watch-canvas')
+    await mkdir(folder, { recursive: true })
+    await writeFile(path.join(folder, 'canvas.json'), '{"v":1,"boards":{},"order":[]}', 'utf8')
+    const { id } = await registerDesign(folder, { sessionId: 'sess1' })
+
+    const sent: Array<{ id: string; files?: string[] }> = []
+    registered.windows.push({
+      isDestroyed: () => false,
+      webContents: { send: (_channel, payload) => sent.push(payload as { id: string; files?: string[] }) },
+    })
+    try {
+      await writeFile(path.join(folder, 'Main.html'), '<p>a</p>', 'utf8')
+      // O debounce do watcher é 150 ms (teto de 400 numa rajada): espera o
+      // payload CHEGAR em vez de dormir um valor fixo — o fs.watch pode atrasar
+      // sob carga e uma espera curta deixa o teste instável.
+      const deadline = Date.now() + 3000
+      while (Date.now() < deadline && !sent.some((item) => item.id === id)) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+    } finally {
+      registered.windows.length = 0
+    }
+
+    const payload = sent.find((item) => item.id === id)
+    expect(payload?.files).toContain('Main.html')
   })
 })

@@ -53,7 +53,7 @@ export interface DesignElementInfo {
 }
 
 export type RuntimeMessage =
-  | { type: "ready"; tree: DesignTreeNode; width: number; height: number; links: string[] }
+  | { type: "ready"; tree: DesignTreeNode | null; width: number; height: number; links: string[] }
   | { type: "navigate"; href: string }
   | { type: "tree"; tree: DesignTreeNode }
   | { type: "hover"; path: ElementPath | null; rect: DesignRect | null }
@@ -177,18 +177,16 @@ export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
   const m = raw as Record<string, unknown> | null
   if (!m || typeof m !== "object" || m.source !== DESIGN_SOURCE) return null
   switch (m.type) {
-    case "ready": {
-      const tree = asTree(m.tree)
-      return tree
-        ? {
-            type: "ready",
-            tree,
-            width: isNum(m.width) ? m.width : 0,
-            height: isNum(m.height) ? m.height : 0,
-            links: Array.isArray(m.links) ? m.links.filter((l): l is string => typeof l === "string").slice(0, 50) : [],
-          }
-        : null
-    }
+    case "ready":
+      // A árvore é OPCIONAL: a ponte só a manda quando as Camadas pedem (a
+      // mensagem `tree`), não no load do documento.
+      return {
+        type: "ready",
+        tree: asTree(m.tree),
+        width: isNum(m.width) ? m.width : 0,
+        height: isNum(m.height) ? m.height : 0,
+        links: Array.isArray(m.links) ? m.links.filter((l): l is string => typeof l === "string").slice(0, 50) : [],
+      }
     case "navigate":
       return typeof m.href === "string" ? { type: "navigate", href: m.href.slice(0, 500) } : null
     case "tree": {

@@ -27,6 +27,13 @@ export const DESIGN_CHANGED_CHANNEL = 'design:changed'
 
 /** Debounce do fs.watch: o editor grava em rajada e não queremos N eventos. */
 const WATCH_DEBOUNCE_MS = 150
+/**
+ * Teto do debounce. Numa geração o agente escreve uma tela atrás da outra sem
+ * pausa suficiente para o debounce "fechar": sem teto, o aviso só sairia no
+ * fim da rajada (ou sairia N vezes). Com ele, o canvas atualiza no máximo a
+ * cada WATCH_MAX_WAIT_MS contados da PRIMEIRA mudança.
+ */
+const WATCH_MAX_WAIT_MS = 400
 
 export interface DesignEntry {
   /** Pasta raiz do canvas: o scheme não serve nada fora dela. */
@@ -306,25 +313,72 @@ export async function updateDesignBoard(
 
 // ------------------------------------------------------------------ watcher
 const watchers = new Map<string, fs.FSWatcher>()
-const debounces = new Map<string, ReturnType<typeof setTimeout>>()
 
-function notifyChanged(id: string): void {
-  const pending = debounces.get(id)
-  if (pending) clearTimeout(pending)
-  debounces.set(
-    id,
-    setTimeout(() => {
-      debounces.delete(id)
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send(DESIGN_CHANGED_CHANNEL, { id })
-      }
-    }, WATCH_DEBOUNCE_MS),
-  )
+/**
+ * Mudanças pendentes por canvas. O debounce junta os nomes que o fs.watch
+ * mandou e manda UMA mensagem — com a LISTA de arquivos: é ela que deixa a aba
+ * Design recarregar só o artboard que mudou, em vez de remontar todos os
+ * iframes a cada gravação (ver design-tab.tsx).
+ */
+const pendingChanges = new Map<
+  string,
+  { files: Set<string>; firstAt: number; timer: ReturnType<typeof setTimeout> }
+>()
+
+function notifyChanged(id: string, file?: string | null): void {
+  const now = Date.now()
+  let pending = pendingChanges.get(id)
+  if (!pending) {
+    pending = { files: new Set(), firstAt: now, timer: setTimeout(() => flushChanged(id), WATCH_DEBOUNCE_MS) }
+    pendingChanges.set(id, pending)
+  } else {
+    clearTimeout(pending.timer)
+    // Espera o silêncio, mas nunca além do teto contado da primeira mudança.
+    const wait = Math.max(0, Math.min(WATCH_DEBOUNCE_MS, pending.firstAt + WATCH_MAX_WAIT_MS - now))
+    pending.timer = setTimeout(() => flushChanged(id), wait)
+  }
+  // Separador normalizado: o renderer compara com os nomes do canvas.json.
+  if (file) pending.files.add(file.replace(/\\/g, '/'))
+}
+
+function flushChanged(id: string): void {
+  const pending = pendingChanges.get(id)
+  if (!pending) return
+  pendingChanges.delete(id)
+  const files = [...pending.files]
+  forgetInjectedDocuments(id, files)
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(DESIGN_CHANGED_CHANNEL, { id, files })
+  }
+}
+
+/**
+ * O watcher é a fonte da verdade sobre o que mudou: esquecer o documento
+ * injetado aqui cobre o caso em que `mtime` e tamanho repetem (disco com
+ * resolução de milissegundo e a mesma contagem de bytes). Sem nomes, esquece
+ * tudo o que é daquela pasta.
+ */
+function forgetInjectedDocuments(id: string, files: string[]): void {
+  const folder = index?.[id]?.folder
+  if (!folder) return
+  const root = path.resolve(folder)
+  if (files.length === 0) {
+    for (const key of [...injectedDocuments.keys()]) {
+      if (key === root || key.startsWith(`${root}${path.sep}`)) injectedDocuments.delete(key)
+    }
+    return
+  }
+  for (const file of files) injectedDocuments.delete(path.resolve(root, file))
 }
 
 function watchDesign(id: string, folder: string): void {
   unwatchDesign(id)
-  const listener = () => notifyChanged(id)
+  // O nome vem relativo à pasta (recursivo) e é o que permite a recarga
+  // cirúrgica; sem ele (ou fora do macOS, quando o watcher não informa), a
+  // mensagem sai sem lista e a aba recarrega tudo, como antes.
+  const listener = (_event: string, filename: string | Buffer | null) => {
+    notifyChanged(id, filename ? filename.toString() : null)
+  }
   try {
     watchers.set(id, fs.watch(folder, { recursive: true }, listener))
   } catch {
@@ -346,15 +400,64 @@ export function unwatchDesign(id: string): void {
     }
     watchers.delete(id)
   }
-  const pending = debounces.get(id)
+  const pending = pendingChanges.get(id)
   if (pending) {
-    clearTimeout(pending)
-    debounces.delete(id)
+    clearTimeout(pending.timer)
+    pendingChanges.delete(id)
   }
 }
 
 // ----------------------------------------------------------------- protocol
 const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' } as const
+
+/**
+ * Documento já com a ponte injetada, por arquivo. Cada montagem de artboard
+ * custava reler o disco, reinjetar a ponte e remontar o CSS das fontes; numa
+ * aba com várias telas isso se multiplica. A validade é `mtime`/tamanho + a
+ * versão do CSS de fontes (que muda quando a biblioteca muda).
+ */
+interface InjectedDocument {
+  mtimeMs: number
+  size: number
+  fontCss: string
+  body: string
+  etag: string
+}
+
+const injectedDocuments = new Map<string, InjectedDocument>()
+/** Teto do cache: um canvas grande não pode virar memória presa. */
+const INJECTED_DOCUMENTS_LIMIT = 64
+
+async function injectedDocument(file: string, fontCss: string): Promise<InjectedDocument | null> {
+  const stat = await fsp.stat(file).catch(() => null)
+  if (!stat?.isFile()) return null
+  const cached = injectedDocuments.get(file)
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size && cached.fontCss === fontCss) {
+    // Reinserir mantém a ordem de uso: o primeiro do Map é o mais antigo.
+    injectedDocuments.delete(file)
+    injectedDocuments.set(file, cached)
+    return cached
+  }
+  const html = await fsp.readFile(file, 'utf8').catch(() => null)
+  if (html === null) return null
+  const body = injectDesignRuntime(html, fontCss)
+  const entry: InjectedDocument = {
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    fontCss,
+    body,
+    // ETag do documento JÁ injetado: muda com o fonte e com a biblioteca de
+    // fontes, que é tudo o que entra nele.
+    etag: `"${createHash('sha1').update(body).digest('base64url')}"`,
+  }
+  injectedDocuments.delete(file)
+  injectedDocuments.set(file, entry)
+  if (injectedDocuments.size > INJECTED_DOCUMENTS_LIMIT) {
+    const oldest = injectedDocuments.keys().next().value
+    if (oldest) injectedDocuments.delete(oldest)
+  }
+  return entry
+}
 
 function respond(body: BodyInit | null, type: string, status = 200, extra: Record<string, string> = {}): Response {
   const length = typeof body === 'string' ? Buffer.byteLength(body) : body instanceof Uint8Array ? body.byteLength : null
@@ -385,8 +488,15 @@ export function registerDesignProtocol(): void {
     if (!SAFE_DESIGN_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
     const entry = await getDesign(id)
     if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
-    // Caminho reservado: a ponte de seleção/edição (ver design-runtime.ts).
-    if (url.pathname === DESIGN_RUNTIME_PATH) return respond(DESIGN_RUNTIME, 'text/javascript; charset=utf-8')
+    // Caminho reservado: a ponte de seleção/edição (ver design-runtime.ts). O
+    // conteúdo é uma constante do build do app e o URL carrega a versão dele
+    // (`?v=`, ver injectDesignRuntime): pode ser guardado para sempre, e o
+    // iframe reaproveita o script já compilado entre remontagens.
+    if (url.pathname === DESIGN_RUNTIME_PATH) {
+      return respond(DESIGN_RUNTIME, 'text/javascript; charset=utf-8', 200, {
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      })
+    }
     const file = resolveDesignFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)
     const ext = path.extname(file).toLowerCase()
@@ -394,11 +504,16 @@ export function registerDesignProtocol(): void {
     // O artboard sai com a ponte no <head>; `?raw` é o FONTE, como está no disco
     // — é o que a aba de código mostra e o que a edição reescreve.
     if ((ext === '.html' || ext === '.htm') && !url.searchParams.has('raw')) {
-      const html = await fsp.readFile(file, 'utf8').catch(() => null)
-      if (html === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
       // A biblioteca de fontes do Orbit entra em TODO artboard (ver
       // injectDesignRuntime): a família instalada é usada pelo nome.
-      return respond(injectDesignRuntime(html, await allFontFacesCss()), type)
+      const artboard = await injectedDocument(file, await allFontFacesCss())
+      if (!artboard) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
+      // `no-cache` = pode guardar, mas revalida sempre: o canvas é editado com a
+      // aba aberta e servir a versão antiga pareceria a recarga não funcionar.
+      // Com o ETag do documento injetado, uma remontagem sem mudança vira 304.
+      const headers = { ETag: artboard.etag, 'Cache-Control': 'no-cache' }
+      if (request.headers.get('if-none-match') === artboard.etag) return respond(null, type, 304, headers)
+      return respond(artboard.body, type, 200, headers)
     }
     const size = await fsp
       .stat(file)

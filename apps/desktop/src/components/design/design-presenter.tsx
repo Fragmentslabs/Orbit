@@ -9,6 +9,7 @@ import { designApi } from "@/src/lib/ipc"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { cn } from "@/lib/utils"
 import { DESIGN_SOURCE, boardForHref, parseRuntimeMessage } from "./design-protocol"
+import { planDesignReload } from "./design-reload"
 
 /**
  * Modo apresentação do canvas, na aba própria: uma tela por vez, na proporção
@@ -80,13 +81,22 @@ export function DesignPresenter({
 
   useEffect(() => load(), [load])
 
-  // O agente mexeu no canvas: recarrega a tela em que a pessoa está.
+  /** A tela que está na frente, sem re-assinar o listener a cada navegação. */
+  const currentRef = useRef(current)
+  currentRef.current = current
+
+  // O agente mexeu no canvas: recarrega a tela em que a pessoa está — e só
+  // quando a mudança é dela, do índice ou de um arquivo que ela usa (CSS,
+  // imagem, fonte). O watcher manda os nomes (ver design-store.ts).
   useEffect(
     () =>
       designApi.onChanged((payload) => {
         if (payload.id !== designId) return
-        load()
-        setReloads((n) => n + 1)
+        const plan = planDesignReload(payload.files)
+        if (plan.index) load()
+        // A tela da frente só remonta se ELA mudou (ou se a mudança pode afetar
+        // qualquer tela: CSS, imagem, fonte da pasta).
+        if (plan.all || plan.boards.includes(currentRef.current)) setReloads((n) => n + 1)
       }),
     [designId, load],
   )

@@ -678,9 +678,11 @@ export const designApi = {
    *  quando o canvas saiu do registro. */
   open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("design:open", ref) as Promise<boolean>,
-  /** A pasta do canvas mudou no disco: remonta os iframes dos artboards. */
-  onChanged: (listener: (payload: { id: string }) => void) => {
-    const wrapper = window.ipcRenderer.on("design:changed", (payload) => listener(payload as { id: string }))
+  /** A pasta do canvas mudou no disco: recarrega só os artboards que mudaram.
+   *  `files` são os nomes relativos à pasta (como no canvas.json); vazio ou
+   *  ausente = não deu para saber, recarregue tudo. */
+  onChanged: (listener: (payload: { id: string; files?: string[] }) => void) => {
+    const wrapper = window.ipcRenderer.on("design:changed", (payload) => listener(payload as { id: string; files?: string[] }))
     return () => window.ipcRenderer.off("design:changed", wrapper)
   },
   /** O fonte de um artboard, como está no disco (sem a ponte do editor). */

@@ -156,9 +156,19 @@ export function fontFaceCss(fonts: OrbitFont[]): string {
   return blocks.join('\n')
 }
 
+/** O CSS de todas as fontes, montado uma vez por versão do índice: `listFonts`
+ *  devolve o MESMO array enquanto o arquivo não muda, então a identidade dele é
+ *  a chave. É chamado a cada artboard servido (ver design-store.ts), não a cada
+ *  requisição. */
+let facesCache: { fonts: OrbitFont[]; css: string } | null = null
+
 /** Todas as fontes da biblioteca, prontas para injetar num documento. */
 export async function allFontFacesCss(): Promise<string> {
-  return fontFaceCss(await listFonts())
+  const fonts = await listFonts()
+  if (facesCache && facesCache.fonts === fonts) return facesCache.css
+  const css = fontFaceCss(fonts)
+  facesCache = { fonts, css }
+  return css
 }
 
 /**

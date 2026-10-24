@@ -30,6 +30,12 @@ describe("boardForHref", () => {
       links: ["A.html", 7, "B.html"],
     })
     expect(ready).toMatchObject({ type: "ready", links: ["A.html", "B.html"] })
+    // A árvore é opcional: a ponte só a manda quando as Camadas pedem.
+    expect(parseRuntimeMessage({ source: DESIGN_SOURCE, type: "ready", links: ["A.html"] })).toMatchObject({
+      type: "ready",
+      tree: null,
+      links: ["A.html"],
+    })
   })
 })
 

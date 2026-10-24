@@ -66,24 +66,69 @@ async function captureCover(id: string, folder: string): Promise<CoverShot | nul
   }
 }
 
+/** Piso entre duas capturas do MESMO canvas: uma rajada de edições não pode
+ *  abrir uma janela offscreen por chamada. */
+const MIN_REFRESH_MS = 10_000
+
+interface CoverJob {
+  running: boolean
+  /** O canvas mudou de novo enquanto a foto era tirada: refaz ao terminar. */
+  again: boolean
+  lastAt: number
+  opts: { title?: string; sessionId?: string }
+}
+
+const coverJobs = new Map<string, CoverJob>()
+
 /**
- * Põe (ou atualiza) o canvas na galeria, com a capa tirada agora. Idempotente:
- * registrar o mesmo canvas de novo cai no MESMO item — é o `designId` que
- * manda, não o momento.
+ * Põe (ou atualiza) a capa do canvas na galeria SEM segurar quem chamou.
+ *
+ * Capturar custa abrir uma janela offscreen, carregar o artboard, esperar as
+ * fontes e o sharp redimensionar — 0,4–2 s (até 15 s no pior caso) que estavam
+ * no fim do design_write/design_edit, atrasando o resultado da tool. Aqui a
+ * captura vira trabalho de fundo: a tool responde na hora e o tile aparece um
+ * instante depois. É idempotente (o item é o `designId`, não o momento) e uma
+ * rajada de edições vira uma captura só — a última vence.
  */
-export async function registerDesignCover(id: string, opts: { title?: string; sessionId?: string } = {}): Promise<boolean> {
-  const entry = await getDesign(id)
-  if (!entry) return false
-  const shot = await captureCover(id, entry.folder).catch(() => null)
-  await saveDesignMedia(shot?.png ?? null, {
-    designId: id,
-    title: opts.title ?? path.basename(entry.folder),
-    directory: entry.root,
-    sessionId: opts.sessionId ?? entry.sessionId,
-    width: shot?.width,
-    height: shot?.height,
-  })
-  return true
+export function refreshDesignCover(id: string, opts: { title?: string; sessionId?: string } = {}): void {
+  const job = coverJobs.get(id) ?? { running: false, again: false, lastAt: 0, opts: {} }
+  coverJobs.set(id, job)
+  job.opts = { ...job.opts, ...opts }
+  if (job.running) {
+    job.again = true
+    return
+  }
+  if (Date.now() - job.lastAt < MIN_REFRESH_MS) return
+  void shoot(job, id)
+}
+
+async function shoot(job: CoverJob, id: string): Promise<void> {
+  job.running = true
+  try {
+    const entry = await getDesign(id)
+    if (entry) {
+      const shot = await captureCover(id, entry.folder).catch(() => null)
+      await saveDesignMedia(shot?.png ?? null, {
+        designId: id,
+        title: job.opts.title ?? path.basename(entry.folder),
+        directory: entry.root,
+        sessionId: job.opts.sessionId ?? entry.sessionId,
+        width: shot?.width,
+        height: shot?.height,
+      })
+    }
+  } catch {
+    // A capa é acessório: nenhuma falha aqui pode aparecer em outro lugar.
+  } finally {
+    job.running = false
+    job.lastAt = Date.now()
+    // O job FICA no mapa: é o `lastAt` dele que segura a próxima captura do
+    // mesmo canvas (um por canvas, barato).
+    if (job.again) {
+      job.again = false
+      void shoot(job, id)
+    }
+  }
 }
 
 // Excluir o canvas na galeria apaga o de verdade (a pasta, o registro e o
