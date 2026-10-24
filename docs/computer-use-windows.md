@@ -160,10 +160,10 @@ AXToggle`, `SelectionItem → AXPick`, `ExpandCollapse → AXExpand/AXCollapse`,
 | `focused` | `GetGUIThreadInfo(hwndFocus)` → UIA; também `ES_PASSWORD` no Edit | `AXFocusedUIElement` |
 | `selection` | `TextPattern.GetSelection` + `MoveEndpointByRange` para a `location` | `AXSelectedTextRange` |
 | `scrollAx` | `ScrollPattern` no ancestral sob o ponto (`SetScrollPercent` calculado pelo `ViewSize`) | barra de rolagem AX |
-| `mouse` | dirigido: `PostMessage` `WM_*BUTTON*` no filho sob o ponto (`ChildWindowFromPointEx`); global: `SendInput` com deslize do cursor | CGEvent |
-| `scroll` | dirigido: `WM_MOUSEWHEEL`/`WM_MOUSEHWHEEL`; global: `SendInput` | CGEvent |
+| `mouse` | **só global**: `SendInput` com deslize do cursor. Sem mensagem de janela (decisão: ver "Decisão de entrada") | CGEvent |
+| `scroll` | dirigido: `ScrollPattern` (`scrollAx`); global: `SendInput` | CGEvent |
 | `drag` | só global (`SendInput`) | só global |
-| `keys` | dirigido: `WM_KEYDOWN/UP` (com `lParam` de scan code) no `hwndFocus`; modificadores por `AttachThreadInput` + `SetKeyboardState`; texto: `EM_REPLACESEL` (Edit/RichEdit) → `WM_CHAR` → `ValuePattern` (conferido pela releitura); global: `SendInput` (`KEYEVENTF_UNICODE` para texto) | CGEvent por pid |
+| `keys` | só global: `SendInput` por VK e `KEYEVENTF_UNICODE` para texto. O texto no modo dirigido vai pelo `set_value`/`ValuePattern`, com `EM_REPLACESEL` só como fallback em Edit/RichEdit nativo | CGEvent por pid |
 | `openApp` | já aberto → traz para a frente; senão caminho, App Paths, atalho do Menu Iniciar ou `shell:AppsFolder` (UWP), esperando a janela | `open -a/-b` |
 | `restore` | no-op (não há flag a desligar) | `AXManualAccessibility` |
 
@@ -172,17 +172,26 @@ Sem `SetFocus` em lugar nenhum: no Windows, focar um controle de outro app
 no-op de sucesso que só guarda o elemento como alvo da próxima digitação
 daquele pid (expira em 10 s).
 
-### Ordem de tentativas no clique (modo dirigido)
+### Decisão de entrada: o modo dirigido é só UI Automation
 
-1. Elemento por índice: padrão de UIA (`press`).
+Mensagens de janela postadas (`PostMessage` de mouse e teclado) e o truque dos
+modificadores (`AttachThreadInput` + `SetKeyboardState`) falham sem avisar em
+Chromium, UWP e WPF e são o padrão que EDR marca como suspeito. Por isso, como
+no macOS (Fase 0), o modo dirigido vai **só pela UIA**:
+
+1. Elemento por índice: padrão de UIA (`press`: Invoke, Toggle, SelectionItem,
+   ExpandCollapse).
 2. Ponto: `hit` + padrão de UIA no elemento sob o ponto.
-3. Sem padrão (ou janela coberta): **mensagem de janela** no filho sob o ponto
-   — só no Windows (`capabilities().messageMouse`). O retorno avisa que o app
-   não confirma e pede para conferir a próxima observação.
-4. Ponteiro global (opt-in): `SendInput`, que move o cursor real.
+3. Sem padrão: erro explicando que o modo dirigido só clica em controles, e
+   oferecendo o ponteiro global.
+4. Ponteiro global (opt-in nas Preferências): `SendInput`, que move o cursor
+   real e traz o app para a frente, com a faixa avisando.
 
-No macOS o passo 3 não existe (a Fase 0 mostrou que o AppKit ignora mouse por
-pid) e o comportamento não mudou.
+`capabilities().messageMouse` fica `false` no driver do Windows (o caminho
+genérico em `act.ts` continua coberto por teste, caso o Stage 0 mostre que vale
+ligar para algum tipo de app). O texto em segundo plano vai por `set_value`
+(ValuePattern) e, em campos Edit/RichEdit nativos sem ValuePattern, por
+`EM_REPLACESEL`. `focus` nunca usa `SetFocus`.
 
 ## Stages
 
@@ -207,7 +216,8 @@ o modo dirigido teve de ir todo pela acessibilidade. No Windows, Chromium, UWP
 e WPF podem ignorar mensagens de mouse sintéticas ou não levar `WM_CHAR` ao
 elemento com foco. Para cada app — **Bloco de Notas (Win32/RichEdit), Explorer,
 Chrome, um app Electron, Calculadora (UWP), um app WPF, Excel** — com a janela
-**atrás de outra**:
+**atrás de outra** (o probe também mede as mensagens de janela como
+experimento, para decidir se `messageMouse` volta a ser ligado):
 
 | Cenário | Como o probe confere |
 |---|---|
@@ -240,7 +250,7 @@ de janela no host) e texto no prompt.
 - `window.id` opcional em `TreeRequest`/`element` (o `HWND`); o macOS ignora.
 - `keys.ts` por plataforma.
 - `capabilities()` honesto: `messageMouse` (mouse por mensagem chega ao app) —
-  `false` no macOS, `true` no Windows até o Stage 0 dizer o contrário.
+  `false` nos dois; o Stage 0 pode ligar no Windows por tipo de app.
 - `perms()` com `notes` (CLM, integridade).
 - `AppInfo.elevated`; erros `elevated`, `secureDesktop`, `staleRef`.
 - `normalizeRole()` no `format.ts`.

@@ -64,7 +64,7 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
-  driver = createFakeDriver(png, { platform: 'win32' })
+  driver = createFakeDriver(png, { platform: 'win32', messageMouse: false })
   driver.tree = async () => notepadTree()
   driver.apps = async () => ({
     apps: [{ pid: FAKE_PID, bundleId: 'Microsoft.WindowsNotepad_8wekyb3d8bbwe!App', exe: 'Notepad.exe', name: 'Bloco de Notas', active: false, hidden: false }],
@@ -112,7 +112,32 @@ describe('papéis da UIA', () => {
   })
 })
 
-describe('act no Windows', () => {
+describe('act no Windows (modo dirigido só pela UIA)', () => {
+  it('ponto sem nada para apertar pela UIA é recusado, como no macOS', async () => {
+    await look()
+    driver.hitResult = { done: null, node: { ...notepadTree().nodes[1] } }
+    await expect(run({ x: 500, y: 400 })).rejects.toThrow(/Nothing clickable/)
+    expect(driver.actions.map((a) => a.op)).toEqual(['hit'])
+  })
+
+  it('duplo clique e hover exigem o ponteiro global', async () => {
+    await look()
+    await expect(run({ action: 'double_click', x: 100, y: 100 })).rejects.toThrow(/global pointer/)
+    await expect(run({ action: 'move', x: 100, y: 100 })).rejects.toThrow(/global pointer/)
+  })
+})
+
+// O driver real do Windows deixa messageMouse desligado; estes casos ligam a
+// capability para cobrir o caminho genérico do act.ts (um driver futuro que o tenha).
+describe('act com a capability messageMouse', () => {
+  beforeEach(() => {
+    driver = createFakeDriver(png, { platform: 'win32', messageMouse: true })
+    driver.tree = async () => notepadTree()
+    driver.apps = async () => ({
+      apps: [{ pid: FAKE_PID, bundleId: 'Microsoft.WindowsNotepad_8wekyb3d8bbwe!App', exe: 'Notepad.exe', name: 'Bloco de Notas', active: false, hidden: false }],
+      windows: [{ id: 0x40a2c, pid: FAKE_PID, title: 'Sem título - Bloco de Notas', frame: [100, 50, 1000, 800] }],
+    })
+  })
   it('elemento por índice manda ref, path de fallback, HWND e a identidade no papel nativo', async () => {
     await look()
     await run({ element: 2 })

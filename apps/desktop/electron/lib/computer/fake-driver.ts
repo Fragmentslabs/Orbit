@@ -64,8 +64,9 @@ export interface FakeDriver extends ComputerDriver {
 }
 
 export interface FakeDriverOptions {
-  /** 'win32' liga o clique por mensagem de janela (capabilities.messageMouse) */
   platform?: NodeJS.Platform
+  /** Liga o clique por mensagem de janela (capabilities.messageMouse); o driver real do Windows deixa desligado */
+  messageMouse?: boolean
 }
 
 export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): FakeDriver {
@@ -80,7 +81,7 @@ export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): 
     scrollResult: { done: 'scroll' },
     selection: { location: 0, length: 49, text: 'Rascunho — esta linha será selecionada e trocada.' },
     changeAfterAction: true,
-    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: platform === 'win32' }),
+    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: options.messageMouse ?? false }),
     perms: async () => ({ accessibility: true }),
     apps: async (): Promise<AppsSnapshot> => ({
       apps: [
