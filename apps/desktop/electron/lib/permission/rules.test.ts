@@ -128,3 +128,20 @@ describe('controle de tela pelo bash', () => {
     expect(assess('bash', { command: 'powershell -Command "Get-Date"' }, '/repo')).toBeNull()
   })
 })
+
+describe('assess — subchats', () => {
+  it('instruir um subchat pede permissão e mostra a instrução', () => {
+    const a = assess('send_to_subchat', { subchatId: 'ses_f1', message: 'Agora cubra aspas escapadas' }, null)
+    expect(a).not.toBeNull()
+    expect(a!.ruleId).toBe('subchat:send')
+    // Não é "sempre": o modo irrestrito e o "permitir no turno" valem como nas outras.
+    expect(a!.sempre).toBeUndefined()
+    expect(a!.claim.detail).toContain('Agora cubra aspas escapadas')
+  })
+
+  it('ler e abrir um subchat não caem no catch-all de MCP, nem com servidor homônimo', () => {
+    expect(assess('read_subchat', { subchatId: 'ses_f1' }, null)).toBeNull()
+    expect(assess('open_subchat', { title: 'X', brief: 'Y'.repeat(30) }, null)).toBeNull()
+    expect(assess('suggest_subchat', { title: 'X', brief: 'Y'.repeat(30) }, null)).toBeNull()
+  })
+})

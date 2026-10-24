@@ -11,7 +11,7 @@ vi.mock('./storage', () => ({
   listKeys: vi.fn(async (prefix: string) => [...store.keys()].filter((k) => k.startsWith(prefix))),
 }))
 
-const { createSubchatRecord, formatSubchatsBlock, listSubchats } = await import('./subchats')
+const { createSubchatRecord, findSubchat, formatSubchatsBlock, listSubchats, readSubchatMessages } = await import('./subchats')
 
 const T0 = 1_000_000
 
@@ -128,8 +128,73 @@ describe('formatSubchatsBlock', () => {
     const bloco = formatSubchatsBlock(await listSubchats('pai'))
     expect(bloco).toContain('Subchats opened from this conversation')
     expect(bloco).toContain('**Layout**')
+    // O id é o que o modelo usa em read_subchat / send_to_subchat.
+    expect(bloco).toContain('id: f1')
+    expect(bloco).toContain('send_to_subchat')
     expect(bloco).toContain('Latest: AAAA')
     expect(bloco).toContain('…')
     expect(bloco.length).toBeLessThan(1200)
+  })
+})
+
+describe('findSubchat', () => {
+  it('só devolve o filho da conversa que pergunta', async () => {
+    store.clear()
+    store.set('session/pai', sessao('pai'))
+    store.set('session/outro', sessao('outro'))
+    store.set('session/f1', sessao('f1', 'pai'))
+    expect((await findSubchat('pai', 'f1'))?.id).toBe('f1')
+    // Id de outra árvore, conversa solta e id inventado: nunca valem.
+    expect(await findSubchat('outro', 'f1')).toBeNull()
+    expect(await findSubchat('pai', 'outro')).toBeNull()
+    expect(await findSubchat('pai', 'fantasma')).toBeNull()
+  })
+
+  it('recusa worker de orquestração — esses são assunto do workers.ts', async () => {
+    store.clear()
+    store.set('session/w1', sessao('w1', 'pai', { orchestration: { role: 'worker', parentSessionId: 'pai' } as never }))
+    expect(await findSubchat('pai', 'w1')).toBeNull()
+  })
+})
+
+describe('readSubchatMessages', () => {
+  const dez = Array.from({ length: 10 }, (_, i) => texto(`m${i}`, i % 2 ? 'assistant' : 'user', `mensagem ${i}`))
+
+  it('devolve as últimas, da mais antiga para a mais recente', async () => {
+    store.clear()
+    store.set('messages/f1', dez)
+    const r = await readSubchatMessages('f1', 3)
+    expect(r).toMatchObject({ from: 8, to: 10, total: 10 })
+    expect(r.messages.map((m) => m.text)).toEqual(['mensagem 7', 'mensagem 8', 'mensagem 9'])
+  })
+
+  it('pagina para trás com skip', async () => {
+    store.clear()
+    store.set('messages/f1', dez)
+    const r = await readSubchatMessages('f1', 3, 3)
+    expect(r).toMatchObject({ from: 5, to: 7 })
+    expect(r.messages[0].text).toBe('mensagem 4')
+  })
+
+  it('corta mensagem longa e lista as tools só pelo nome', async () => {
+    store.clear()
+    store.set('messages/f1', [
+      {
+        ...texto('m1', 'assistant', 'A'.repeat(6000)),
+        parts: [
+          { id: 'p1', type: 'text', text: 'A'.repeat(6000), state: 'done' },
+          { id: 'p2', type: 'tool', tool: 'bash', state: 'done' },
+        ],
+      } as ChatMessage,
+    ])
+    const [m] = (await readSubchatMessages('f1', 5)).messages
+    expect(m.text.length).toBeLessThan(4100)
+    expect(m.text).toContain('[truncated]')
+    expect(m.tools).toEqual(['bash'])
+  })
+
+  it('subchat sem mensagens devolve vazio', async () => {
+    store.clear()
+    expect(await readSubchatMessages('f1', 5)).toMatchObject({ total: 0, messages: [] })
   })
 })

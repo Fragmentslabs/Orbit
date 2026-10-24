@@ -138,6 +138,9 @@ const NATIVE_TOOLS = new Set([
   'chat_list',
   'chat_archive',
   'chat_delete',
+  // Subchats: ler a conversa de um filho é leitura pura do storage do Orbit.
+  // Instruir um (send_to_subchat) tem regra própria no assess().
+  'read_subchat',
   // Relatorios de uso (leitura pura do proprio historico): horas por projeto,
   // custo e tokens. Nativas — sem isto caem no catch-all de MCP como servidor
   // 'work'/'usage' e pedem permissao a cada chamada.
@@ -449,6 +452,23 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
         detail:
           'Apaga a pasta do worktree — alterações não commitadas nela são perdidas.' +
           (args.apagarBranch === true ? ' O branch dele também é apagado.' : ' O branch é mantido.'),
+      },
+    }
+  }
+  // Instruir um subchat faz outra conversa trabalhar (e escrever na pasta) em
+  // paralelo: o usuário precisa ver o que vai ser mandado. É o card de
+  // permissão de sempre — "permitir" vale pelo turno; no modo irrestrito passa
+  // direto. read_subchat só lê (está em NATIVE_TOOLS) e open_subchat não
+  // pergunta aqui: quem confirma é o card de sugestão (suggest_subchat), ou o
+  // próprio pedido do usuário ("faça num chat novo").
+  if (toolName === 'send_to_subchat') {
+    const message = typeof args.message === 'string' ? args.message : ''
+    return {
+      ruleId: 'subchat:send',
+      claim: {
+        tool: toolName,
+        title: 'Enviar uma instrução a um subchat',
+        detail: shorten(message, 300),
       },
     }
   }

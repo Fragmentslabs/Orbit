@@ -73,6 +73,51 @@ export async function listSubchats(parentId: string): Promise<SubchatResumo[]> {
   )
 }
 
+/**
+ * Um filho DESTA conversa, pelo id. É a trava das tools que leem ou instruem
+ * um subchat: o id vem do modelo, então só vale se o `parentId` do filho for a
+ * conversa que chama — outro chat do usuário, worker de orquestra ou id
+ * inventado dão null.
+ */
+export async function findSubchat(parentId: string, subchatId: string): Promise<SessionInfo | null> {
+  const session = await readJson<SessionInfo>(StorageKeys.session(subchatId))
+  if (!session || session.parentId !== parentId || session.orchestration?.role === 'worker') return null
+  return session
+}
+
+export interface SubchatLeitura {
+  /** Posição (1-based) da primeira mensagem devolvida */
+  from: number
+  to: number
+  total: number
+  messages: { index: number; role: 'user' | 'assistant'; text: string; tools: string[]; error?: string }[]
+}
+
+/** Teto de texto por mensagem na leitura — tool output detalhado não cabe. */
+const MAX_LEITURA_MENSAGEM = 4000
+
+/**
+ * Últimas mensagens de um subchat, da mais antiga para a mais recente. A
+ * mensagem de abertura (o brief) conta como qualquer outra; chamadas de tool
+ * entram só pelo nome.
+ */
+export async function readSubchatMessages(subchatId: string, last: number, skip = 0): Promise<SubchatLeitura> {
+  const todas = (await readJson<ChatMessage[]>(StorageKeys.messages(subchatId))) ?? []
+  const end = Math.max(0, todas.length - skip)
+  const start = Math.max(0, end - last)
+  const messages = todas.slice(start, end).map((m, i) => {
+    const texto = textoDaMensagem(m)
+    return {
+      index: start + i + 1,
+      role: m.role as 'user' | 'assistant',
+      text: texto.length > MAX_LEITURA_MENSAGEM ? `${texto.slice(0, MAX_LEITURA_MENSAGEM)}… [truncated]` : texto,
+      tools: m.parts.filter((p) => p.type === 'tool').map((p) => (p as { tool: string }).tool),
+      error: m.error,
+    }
+  })
+  return { from: start + 1, to: end, total: todas.length, messages }
+}
+
 export interface NovoSubchat {
   parentId: string
   title: string
@@ -132,11 +177,11 @@ export function formatSubchatsBlock(resumos: SubchatResumo[]): string {
     const limite = resultado && resultado.length > MAX_RESULTADO
       ? `${resultado.slice(0, MAX_RESULTADO).replace(/\s+/g, ' ')}…`
       : resultado?.replace(/\s+/g, ' ')
-    return `- **${session.title}** (opened ${tempoRelativo(session.createdAt)})${limite ? `\n  Latest: ${limite}` : ''}`
+    return `- **${session.title}** (id: ${session.id}, opened ${tempoRelativo(session.createdAt)})${limite ? `\n  Latest: ${limite}` : ''}`
   })
   return [
     '## Subchats opened from this conversation',
-    'Separate conversations with their own context, attached to this one. You see each one\'s LATEST result here — never its history. Stay consistent with what they did and do not redo their work; when the user asks about one, answer from this line and point them to the chat.',
+    'Separate conversations with their own context, attached to this one. You see each one\'s LATEST result here, not its history: read_subchat reads more when you need it. Stay consistent with what they did and do not redo their work; when the user asks about one, answer from this line and point them to the chat. To give one a new instruction use send_to_subchat — the user is asked before it goes.',
     ...linhas,
   ].join('\n')
 }

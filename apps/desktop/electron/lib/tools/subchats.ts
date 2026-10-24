@@ -1,12 +1,13 @@
 import type { BrowserWindow } from 'electron'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import type { SendMessageInput } from '@shared/chat'
+import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import { dispatchAsk } from '../ask-dispatch'
 import { newRequestId } from '../ask-broker'
-import { runChat } from '../chat-engine'
+import { getRunningSessionIds, runChat } from '../chat-engine'
 import { broadcastSessionEvent } from '../companion-server'
-import { createSubchatRecord } from '../subchats'
+import { createSubchatRecord, findSubchat, readSubchatMessages } from '../subchats'
+import { outsideWorkspaceLocks } from '../session/workspace-lock'
 
 /**
  * Primeira mensagem do chat novo, na voz de quem autorizou a abertura: o filho
@@ -24,6 +25,36 @@ function idiomaDe(language?: string): Idioma {
   return (language ?? '').toLowerCase().startsWith('port') ? 'pt' : 'en'
 }
 
+/** Cabeçalho da instrução do pai: no chat do filho a mensagem não parece do usuário. */
+const FROM_PARENT = {
+  pt: 'Mensagem do chat principal: ',
+  en: 'Message from the main chat: ',
+}
+
+/**
+ * Dispara um turno no filho, em paralelo ao do pai e sem esperar por ele. O
+ * filho é OUTRA conversa na mesma pasta: entra na fila da pasta (e começa
+ * quando o pai terminar) em vez de herdar a trava do pai.
+ */
+function startChildTurn(input: SendMessageInput, win: BrowserWindow, child: SessionInfo, text: string): void {
+  void outsideWorkspaceLocks(() => runChat(win, {
+    sessionId: child.id,
+    text,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    mode: child.mode,
+    options: {
+      permissionMode: input.options.permissionMode,
+      followGlobalPermission: input.options.followGlobalPermission,
+      reasoning: input.options.reasoning,
+    },
+    directory: child.directory,
+    extraDirectories: child.extraDirectories,
+    visionModel: input.visionModel,
+    language: input.language,
+  })).catch((err) => console.error('[subchat] turno do filho falhou:', err))
+}
+
 /**
  * Cria o filho e dispara o turno dele, em paralelo ao turno do pai. Devolve o
  * texto que a tool entrega ao modelo.
@@ -37,24 +68,7 @@ async function abrirEIniciar(
   const child = await createSubchatRecord({ parentId: input.sessionId, title, body: brief })
   if (!child) return 'Error: the current conversation could not be found, so no subchat was opened.'
   broadcastSessionEvent({ type: 'session', sessionId: child.id, session: child })
-  if (win) {
-    void runChat(win, {
-      sessionId: child.id,
-      text: KICKOFF[idiomaDe(input.language)],
-      providerId: input.providerId,
-      modelId: input.modelId,
-      mode: child.mode,
-      options: {
-        permissionMode: input.options.permissionMode,
-        followGlobalPermission: input.options.followGlobalPermission,
-        reasoning: input.options.reasoning,
-      },
-      directory: child.directory,
-      extraDirectories: child.extraDirectories,
-      visionModel: input.visionModel,
-      language: input.language,
-    }).catch((err) => console.error('[subchat] turno inicial do filho falhou:', err))
-  }
+  if (win) startChildTurn(input, win, child, KICKOFF[idiomaDe(input.language)])
   return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel.`
 }
 
@@ -74,6 +88,9 @@ const BRIEF_INPUT = z
   )
 
 export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow): ToolSet {
+  // Instruções do mesmo passo ao mesmo filho: a segunda recusa (ver send_to_subchat).
+  const inFlight = new Set<string>()
+
   return {
     suggest_subchat: tool({
       description: [
@@ -116,6 +133,67 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
       ].join(' '),
       inputSchema: z.object({ title: TITLE_INPUT, brief: BRIEF_INPUT }),
       execute: async ({ title, brief }) => abrirEIniciar(input, win, title, brief),
+    }),
+
+    read_subchat: tool({
+      description: [
+        'Reads a subchat you opened from this conversation: its most recent messages, oldest first,',
+        'with tool calls shown by name. Use it when the "Latest" line in the subchats list is not enough',
+        '(what it found, where it stopped, whether it failed). Read-only.',
+      ].join(' '),
+      inputSchema: z.object({
+        subchatId: z.string().describe('The id from the subchats list'),
+        last: z.number().int().min(1).max(40).optional().describe('How many of the most recent messages. Default 10'),
+        skip: z.number().int().min(0).optional().describe('Skip this many of the most recent messages, to page back. Default 0'),
+      }),
+      execute: async ({ subchatId, last, skip }) => {
+        const child = await findSubchat(input.sessionId, subchatId)
+        if (!child) return `No subchat ${subchatId} attached to this conversation. Use an id from the subchats list.`
+        const reading = await readSubchatMessages(child.id, last ?? 10, skip ?? 0)
+        const status = getRunningSessionIds().includes(child.id) ? 'running a turn now' : 'idle'
+        if (reading.messages.length === 0) return `"${child.title}" (${status}) has ${reading.total} messages — nothing in that range.`
+        const rendered = reading.messages.map((m) =>
+          [
+            `### #${m.index} ${m.role === 'assistant' ? 'subchat' : 'user/main chat'}${m.error ? ` — ERROR: ${m.error}` : ''}`,
+            m.tools.length > 0 ? `[tools: ${m.tools.join(', ')}]` : '',
+            m.text,
+          ].filter(Boolean).join('\n'),
+        )
+        return `Subchat "${child.title}" (${status}) — messages ${reading.from}-${reading.to} of ${reading.total}\n\n${rendered.join('\n\n')}`
+      },
+    }),
+
+    send_to_subchat: tool({
+      description: [
+        'Sends a new instruction to a subchat you opened and lets it work on it in parallel, in its own',
+        'context — it remembers everything it did there. The user is asked to approve every instruction before it',
+        'goes. Prefer this over opening a new subchat when one already has the context (a fix, a follow-up, the next',
+        'step). It does not wait for the reply: the subchat\'s result shows up in the subchats list on your next turn,',
+        'or read it with read_subchat. A subchat that is still running a turn is refused — wait or read it first.',
+      ].join(' '),
+      inputSchema: z.object({
+        subchatId: z.string().describe('The id from the subchats list'),
+        message: z.string().min(5).describe(
+          "The instruction, in the user's language. The subchat already has its own context — say what changed or what to do next, not the whole story again.",
+        ),
+      }),
+      execute: async ({ subchatId, message }) => {
+        if (!win) return 'Error: sending to a subchat needs the app window.'
+        const child = await findSubchat(input.sessionId, subchatId)
+        if (!child) return `No subchat ${subchatId} attached to this conversation. Use an id from the subchats list.`
+        if (inFlight.has(child.id) || getRunningSessionIds().includes(child.id)) {
+          return `Subchat "${child.title}" is busy right now (running a turn). Do not send anything yet — read it with read_subchat or try again later.`
+        }
+        // Marca antes de disparar: duas chamadas paralelas no mesmo passo
+        // disputariam o chat do filho. Solta logo — o turno em si vive no engine.
+        inFlight.add(child.id)
+        try {
+          startChildTurn(input, win, child, FROM_PARENT[idiomaDe(input.language)] + message.trim())
+        } finally {
+          setTimeout(() => inFlight.delete(child.id), 1_000)
+        }
+        return `Instruction sent to "${child.title}" (#${child.id}). It is working on it in parallel — its result appears in the subchats list on your next turn, or read it with read_subchat.`
+      },
     }),
   }
 }
