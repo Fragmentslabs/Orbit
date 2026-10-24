@@ -5,6 +5,7 @@ import { isComputerAvailable } from './computer'
 import { loadPromptContext } from './memory/service'
 import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
+import { formatSubchatsBlock, listSubchats } from './subchats'
 import { loadSkills } from './skills'
 import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
@@ -153,6 +154,15 @@ WORKING WITH EXISTING PDFs. pdf_merge joins files; pdf_transform picks, REORDERS
 - Every one of these writes a NEW file that appears in the conversation with a download button. The source is never modified, and savePath only when the user explicitly asked.
 - pdf_metadata reads the document properties; pdf_transform writes them. pdf_extract_images pulls the FIGURES out of the file into the gallery — different from pdf_view_page, which photographs the page.
 - Before filling a form, call pdf_form_fields: fields are matched by their INTERNAL name, which is rarely the label printed next to the box. Flatten only when the form is being SENT.`
+
+const SUBCHAT_INSTRUCTION = `## Subchats
+When something shows up that does not belong in this conversation — a separate task, a side investigation, a problem the user mentioned in passing — do not decide it alone and do not announce that you are separating it: call suggest_subchat with the title and the brief you would use, and let the user choose. Write the brief as if it were the only thing the new chat knew: the goal, what is already done and verified, the files that matter (exact paths) and the next concrete step. If they pick the new chat, it opens attached to this one, in the same folder, and starts working from the brief right away; if they pick this chat, do the work here; if they decline, leave it aside.
+
+Only when the user explicitly asked for a new chat ("do this in a new chat", "open a chat for this") use open_subchat and create it without asking. Never open a subchat on your own initiative.
+
+Subchats that already exist are listed with their ids further down. To follow one, read it with read_subchat; to hand it a new instruction (a fix, a follow-up, the next step) use send_to_subchat — it asks the user first and does not wait for the reply. Prefer that over opening another subchat for the same work.
+
+When this conversation is getting long, a fresh context is better than another compaction — a summary of a summary keeps losing the beginning. Still: suggest it, never decide it.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
@@ -781,6 +791,15 @@ export async function buildSystemPrompt(
     parts.push(
       'The message contains @memoria: the user EXPLICITLY ORDERED you to check memory. Run memory_search on the message topic BEFORE answering and use whatever you find.',
     )
+  }
+
+  // Subchats: como abrir um, e o RESULTADO dos que já existem anexados a esta
+  // conversa (o pai vê o último resultado de cada filho, nunca o histórico
+  // inteiro — ver subchats.ts).
+  if (input.orchestrationRole !== 'worker') {
+    parts.push(SUBCHAT_INSTRUCTION)
+    const subchats = formatSubchatsBlock(await listSubchats(input.sessionId))
+    if (subchats) parts.push(subchats)
   }
 
   // Conversas passadas: injeta snippets de chats anteriores só quando o usuário
