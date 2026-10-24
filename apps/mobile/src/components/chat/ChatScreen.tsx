@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
-import { View, Text, Animated, Alert } from 'react-native'
+import { View, Text, Animated, Alert, Pressable } from 'react-native'
+import { ArrowDown, HelpCircle } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Stack, useRouter } from 'expo-router'
@@ -12,7 +13,7 @@ import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
 import { useSessionStore } from '~/stores/session-store'
-import { useChatStore } from '~/stores/chat-store'
+import { useChatStore, type PendingAsk } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
@@ -34,6 +35,9 @@ import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
 import { useShallow } from 'zustand/react/shallow'
 import { Storage } from '~/lib/storage'
+
+/** Lista vazia compartilhada: identidade estável para o memo do footer. */
+const EMPTY_ASKS: PendingAsk[] = []
 
 const AUTO_FOLDER_MAP_KEY = 'orbit_auto_folder_map'
 
@@ -92,8 +96,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const replyToAsk = useChatStore((s) => s.replyToAsk)
 
   const isStreaming = activeStatus === 'streaming' || activeStatus === 'submitted'
-  const activeAsks = sessionId ? pendingAsks[sessionId] ?? [] : []
+  // Referência estável quando não há pedido: o footer da lista é memoizado e
+  // um `[]` novo a cada render derrubava o memo do MessageList (a lista
+  // inteira reconciliava junto com qualquer estado da tela).
+  const activeAsks = sessionId ? pendingAsks[sessionId] ?? EMPTY_ASKS : EMPTY_ASKS
   const isEmpty = activeMessages.length === 0
+  // Fim da lista visível? Decide se o chip de pendência precisa existir.
+  const [listAtBottom, setListAtBottom] = useState(true)
 
   const messageListRef = useRef<MessageListHandle>(null)
   const chatSearchOpen = useChatSearchStore((s) => s.open)
@@ -387,26 +396,83 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   // Footer da lista memoizado: o MessageList é memo e precisa de props
   // estáveis para não re-renderizar quando o modo troca.
+  //
+  // É aqui que moram os cards da CONVERSA — pedido do agente, revert, plano e
+  // progresso. Antes eles ficavam empilhados acima do input: cada um que
+  // aparecia encurtava a conversa, e com dois ou três o histórico sumia da
+  // tela. Como item do fim da lista, eles rolam junto com as mensagens.
+  // Continuam na faixa de baixo só os que também existem SEM conversa
+  // (sugestões, pasta, aviso de visão) — esses não têm lista para entrar.
+  const revert = session?.revert
   const listFooter = useMemo<React.ReactElement | undefined>(() => {
-    if (planReview && planReview.status === 'proposed') {
-      return (
-        <View className="pb-2">
-          <PlanReviewCard sessionId={sessionId!} review={planReview} />
-        </View>
-      )
+    const cards: React.ReactElement[] = []
+    if (planReview && planReview.status === 'proposed' && sessionId) {
+      cards.push(<PlanReviewCard key="plan-review" sessionId={sessionId} review={planReview} />)
     }
     if (planReview && planReview.status === 'implementing') {
-      return (
-        <View className="pb-2">
-          <TaskProgress
-            tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
-            title={t('chatScreen.plan')}
-          />
-        </View>
+      cards.push(
+        <TaskProgress
+          key="plan-progress"
+          tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
+          title={t('chatScreen.plan')}
+        />,
       )
     }
-    return undefined
-  }, [planReview, isStreaming, t, sessionId])
+    if (sessionId && orchestration && orchestration.status === 'proposed') {
+      cards.push(<OrchestrationPlanCard key="orchestration" sessionId={sessionId} plan={orchestration} />)
+    }
+    if (
+      sessionId &&
+      orchestration &&
+      (orchestration.status === 'approved' || orchestration.status === 'running' || orchestration.status === 'done')
+    ) {
+      cards.push(
+        <TaskProgress
+          key="orchestration-progress"
+          tasks={orchestration.tasks.map((task: any) => ({ id: task.id, title: task.title, status: task.status, mode: task.mode }))}
+          title={t('chatScreen.orchestration')}
+          defaultExpanded={orchestration.status !== 'done'}
+        />,
+      )
+    }
+    if (session && revert) {
+      cards.push(
+        <RevertBar
+          key="revert"
+          session={session}
+          onUnrevert={handleUnrevert}
+          onDismiss={handleDismissRevert}
+          swipeToDismiss={false}
+        />,
+      )
+    }
+    for (const ask of activeAsks) {
+      cards.push(
+        <AskCard
+          key={ask.requestId}
+          ask={ask}
+          onReply={(value) => replyToAsk(ask.requestId, value)}
+          // A lista já tem paddingHorizontal e o footer já tem gap: a margem
+          // própria do card viraria recuo duplo e espaço dobrado.
+          style={{ marginHorizontal: 0, marginVertical: 0 }}
+        />,
+      )
+    }
+    if (cards.length === 0) return undefined
+    return <View style={{ gap: 8, paddingTop: 4, paddingBottom: 4 }}>{cards}</View>
+  }, [
+    planReview,
+    isStreaming,
+    t,
+    sessionId,
+    session,
+    revert,
+    orchestration,
+    activeAsks,
+    replyToAsk,
+    handleUnrevert,
+    handleDismissRevert,
+  ])
 
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
@@ -496,6 +562,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 onReply={handleReply}
                 onLoadOlder={handleLoadOlder}
                 ListFooterComponent={listFooter}
+                onAtBottomChange={setListAtBottom}
               />
             )}
           </Animated.View>
@@ -520,36 +587,37 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        {/* Orquestração — card de aprovação acima do input */}
-        {sessionId && orchestration && orchestration.status === 'proposed' && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <OrchestrationPlanCard sessionId={sessionId} plan={orchestration} />
-          </View>
-        )}
-        {/* Orquestração — progresso das tarefas em execução/concluído */}
-        {sessionId && orchestration && (orchestration.status === 'approved' || orchestration.status === 'running' || orchestration.status === 'done') && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <TaskProgress
-              tasks={orchestration.tasks.map((task: any) => ({ id: task.id, title: task.title, status: task.status, mode: task.mode }))}
-              title={t('chatScreen.orchestration')}
-              defaultExpanded={orchestration.status !== 'done'}
-            />
+        {/* Pendência fora de vista: o card do pedido está na conversa (footer
+            da lista), e este atalho leva até ele. Só existe quando a pessoa
+            subiu no histórico — com o card à vista ele seria ruído. */}
+        {activeAsks.length > 0 && !listAtBottom && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 8, alignItems: 'flex-start' }}>
+            <Pressable
+              onPress={() => messageListRef.current?.scrollToEnd()}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: tokens.primary,
+                backgroundColor: pressed ? tokens.muted : 'transparent',
+              })}
+            >
+              <HelpCircle size={14} color={tokens.primary} />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primary }}>
+                {t('chatScreen.pendingAsk', { count: activeAsks.length })}
+              </Text>
+              <ArrowDown size={14} color={tokens.primary} />
+            </Pressable>
           </View>
         )}
 
-        {/* Ask cards — acima do input */}
-        {activeAsks.map((ask) => (
-          <AskCard key={ask.requestId} ask={ask} onReply={(value) => replyToAsk(ask.requestId, value)} />
-        ))}
-
-        {/* Revert ativo: barra com resumo + desfazer */}
-        {session?.revert && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <RevertBar session={session} onUnrevert={handleUnrevert} onDismiss={handleDismissRevert} />
-          </View>
-        )}
-
-        {/* Aviso do modo Visão: imagem anexada + modelo sem visão + modo off */}
+        {/* Aviso do modo Visão: imagem anexada + modelo sem visão + modo off.
+            Fica na faixa porque também existe sem conversa (imagem pendente na
+            tela inicial, onde não há lista para entrar). */}
         {sessionId && <VisionHintCard sessionId={sessionId} />}
 
         <ChatInput

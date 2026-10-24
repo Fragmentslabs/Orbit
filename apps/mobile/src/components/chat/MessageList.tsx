@@ -15,10 +15,15 @@ interface MessageListProps {
   onReply?: (message: ChatMessage) => void
   ListFooterComponent?: React.ReactElement
   onLoadOlder?: () => void
+  /** Avisa quando a lista sai/volta ao fim — quem mostra o chip de pendência
+   *  usa isso para saber se o card do pedido está fora de vista. Só dispara
+   *  na MUDANÇA (o scroll é contínuo e não pode re-renderizar a tela). */
+  onAtBottomChange?: (atBottom: boolean) => void
 }
 
 export interface MessageListHandle {
   scrollToMessageId: (id: string) => void
+  scrollToEnd: () => void
 }
 
 // memo: a lista não pode re-renderizar quando o modo chat/código troca (o
@@ -27,7 +32,7 @@ export interface MessageListHandle {
 // o memo segura e a lista fica intocada.
 export const MessageList = memo(
   forwardRef<MessageListHandle, MessageListProps>(function MessageList(
-    { messages, isStreaming, onRevert, onReply, ListFooterComponent, onLoadOlder },
+    { messages, isStreaming, onRevert, onReply, ListFooterComponent, onLoadOlder, onAtBottomChange },
     ref,
   ) {
     const listRef = useRef<FlatList<ChatMessage>>(null)
@@ -35,6 +40,8 @@ export const MessageList = memo(
     const loadingOlderRef = useRef(false)
     // guia o autoscroll pelo crescimento real do conteúdo durante o streaming.
     const pinnedRef = useRef(true)
+    /** Último valor avisado ao pai — evita um setState por evento de scroll. */
+    const lastAtBottomRef = useRef(true)
     const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
     useEffect(() => {
@@ -49,7 +56,11 @@ export const MessageList = memo(
       setIsAtBottom(atBottom)
       // Subir acima do limite desancora; chegar no fundo re-ancora.
       pinnedRef.current = atBottom
-    }, [])
+      if (atBottom !== lastAtBottomRef.current) {
+        lastAtBottomRef.current = atBottom
+        onAtBottomChange?.(atBottom)
+      }
+    }, [onAtBottomChange])
 
     const handleLoadOlder = useCallback(() => {
       if (loadingOlderRef.current || !onLoadOlder) return
@@ -85,6 +96,13 @@ export const MessageList = memo(
         } catch {
           // ignora — item ainda não medido, o fallback abaixo cobre esse caso
         }
+      },
+      scrollToEnd: () => {
+        // Re-ancora antes de rolar: sem isso o primeiro evento de scroll
+        // durante a animação desancoraria de novo e o chip não sumiria.
+        pinnedRef.current = true
+        setIsAtBottom(true)
+        listRef.current?.scrollToEnd({ animated: true })
       },
     }), [messages])
 

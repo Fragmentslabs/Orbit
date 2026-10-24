@@ -12,9 +12,12 @@ interface RevertBarProps {
   session: SessionInfo
   onUnrevert: (sessionId: string) => void
   onDismiss: (sessionId: string) => void
+  /** Dentro da conversa o arrasto vertical (dy > 10) briga com a rolagem da
+   *  lista: lá a barra fecha só pelo X. Fora dela o gesto continua valendo. */
+  swipeToDismiss?: boolean
 }
 
-export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
+export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = true }: RevertBarProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [dismissed, setDismissed] = useState(false)
@@ -66,9 +69,6 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
       ? t('revertBar.filesRevertedNone')
       : t('revertBar.filesReverted', { count })
     : t('revertBar.conversationReverted')
-
-  return (
-    <Animated.View
   // Peças e galeria: o desktop desfaz nos dois modos e manda só as contagens.
   const media = revert.media
   const mediaParts = [
@@ -81,8 +81,11 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
       : mediaParts.length > 0
         ? t('revertBar.mediaReverted', { what: mediaParts.join(', ') })
         : ''
+
+  return (
+    <Animated.View
       style={{ transform: [{ translateY }] }}
-      {...panResponder.panHandlers}
+      {...(swipeToDismiss ? panResponder.panHandlers : {})}
     >
       <View
         style={{
@@ -111,10 +114,10 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
           numberOfLines={2}
         >
           {label}
+          {mediaLabel ? <Text style={{ color: tokens.mutedForeground }}>{mediaLabel}</Text> : null}
           <Text style={{ color: tokens.mutedForeground }}>
             {t('revertBar.continuesFromHere')}
           </Text>
-          {mediaLabel ? <Text style={{ color: tokens.mutedForeground }}>{mediaLabel}</Text> : null}
         </Text>
         <Pressable
           onPress={() => onUnrevert(session.id)}
