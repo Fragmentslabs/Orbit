@@ -220,6 +220,8 @@ interface SessionState {
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
   /** Desfaz o revert ativo, restaurando mensagens descartadas. */
   unrevert: (sessionId: string) => Promise<void>
+  /** Reverte também os arquivos de autor incerto do revert ativo. */
+  revertUncertain: (sessionId: string) => Promise<void>
   /** Aceita plano de implementação (modo plano). */
   acceptPlanReview: (sessionId: string, permissionMode: PermissionMode, orchestrate?: boolean) => Promise<void>
   /** Rejeita plano de implementação (modo plano). */
@@ -960,9 +962,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // silêncio no celular.
         const kept =
           (result?.files?.conflicts.length ?? 0) + (result?.media?.conflicts ?? 0)
-        if (kept > 0) {
+        if (result?.files?.error) {
+          Alert.alert(i18n.t('revertBar.undo'), i18n.t('revertBar.unrevertFilesError'))
+        } else if (kept > 0) {
           Alert.alert(i18n.t('revertBar.undo'), i18n.t('revertBar.unrevertKept', { count: kept }))
         }
+      }
+    } catch {
+      // Silently fail
+    }
+  },
+
+  revertUncertain: async (sessionId) => {
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({ type: 'sessions:revertUncertain', sessionId })
+      if (res.ok && res.data) {
+        const { revert } = res.data as { revert: SessionInfo['revert'] }
+        set((state) => ({
+          sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, revert } : s)),
+        }))
       }
     } catch {
       // Silently fail

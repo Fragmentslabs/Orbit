@@ -92,6 +92,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const deleteSession = useSessionStore((s) => s.deleteSession)
   const revertToMessage = useSessionStore((s) => s.revertToMessage)
   const unrevert = useSessionStore((s) => s.unrevert)
+  const revertUncertain = useSessionStore((s) => s.revertUncertain)
   const pendingAsks = useChatStore((s) => s.pendingAsks)
   const replyToAsk = useChatStore((s) => s.replyToAsk)
 
@@ -375,6 +376,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [unrevert],
   )
 
+  const handleRevertUncertain = useCallback(
+    (sid: string) => {
+      void revertUncertain(sid)
+    },
+    [revertUncertain],
+  )
+
   const handleDismissRevert = useCallback(
     (_sid: string) => {
       // Apenas esconde a barra localmente — o revert permanece consolidado
@@ -441,6 +449,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           key="revert"
           session={session}
           onUnrevert={handleUnrevert}
+          onRevertUncertain={handleRevertUncertain}
           onDismiss={handleDismissRevert}
           swipeToDismiss={false}
         />,
@@ -471,6 +480,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     activeAsks,
     replyToAsk,
     handleUnrevert,
+    handleRevertUncertain,
     handleDismissRevert,
   ])
 

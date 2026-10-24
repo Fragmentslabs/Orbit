@@ -54,7 +54,11 @@ import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
 import { listCredentialProviders } from './auth'
 import { replyOrResume } from './ask-resume'
-import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
+import {
+  revert as revertSession,
+  revertUncertain as revertUncertainSession,
+  unrevert as unrevertSession,
+} from './session/revert'
 import { getRunningSessionIds } from './chat-engine'
 import { abortSession, dispatchSend } from './send-dispatch'
 import { readAppLanguage } from './app-language'
@@ -890,6 +894,15 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         } else {
           sendResponse(ws, requestId, false, undefined, 'Não foi possível reverter')
         }
+        break
+      }
+
+      case 'sessions:revertUncertain': {
+        // A sessão atualizada (revert sem os incertos) também chega pelo
+        // evento 'session'; a resposta leva o estado para o app aplicar já.
+        const revertState = await revertUncertainSession(req.sessionId)
+        if (revertState) sendResponse(ws, requestId, true, { revert: revertState })
+        else sendResponse(ws, requestId, false, undefined, 'Nada para reverter')
         break
       }
 

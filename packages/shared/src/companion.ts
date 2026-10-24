@@ -498,6 +498,12 @@ export interface UnrevertSessionRequest {
   sessionId: string
 }
 
+/** Reverte também os arquivos de autor incerto do revert ativo. */
+export interface RevertUncertainSessionRequest {
+  type: 'sessions:revertUncertain'
+  sessionId: string
+}
+
 // ─── Rotinas ─────────────────────────────────────────────────────────────────
 
 export interface ListRotinasRequest {
@@ -741,6 +747,7 @@ export type CompanionRequest =
   | SaveEsteiraTemplateRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
+  | RevertUncertainSessionRequest
   | ReadPlanFileRequest
   | AcceptPlanReviewRequest
   | RejectPlanReviewRequest

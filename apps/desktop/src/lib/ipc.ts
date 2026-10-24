@@ -249,6 +249,8 @@ export const sessionApi = {
     window.ipcRenderer.invoke("session:revert", sessionId, messageId) as Promise<SessionRevert | null>,
   unrevert: (sessionId: string) =>
     window.ipcRenderer.invoke("session:unrevert", sessionId) as Promise<UnrevertResult>,
+  revertUncertain: (sessionId: string) =>
+    window.ipcRenderer.invoke("session:revertUncertain", sessionId) as Promise<SessionRevert | null>,
 }
 
 export const chatApi = {

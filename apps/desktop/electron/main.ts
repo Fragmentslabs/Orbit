@@ -70,7 +70,11 @@ import { discoverModels, type DiscoverOptions } from './lib/discover-models'
 import type { CustomProviderInput, CustomProviderPatch } from '@shared/chat'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
-import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
+import {
+  revert as revertSession,
+  revertUncertain as revertUncertainSession,
+  unrevert as unrevertSession,
+} from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { createRemoteRepo } from './lib/github-repo'
 import { discoverGitRepos } from './lib/git-repos'
@@ -1995,6 +1999,8 @@ app.whenReady().then(() => {
   ipcMain.handle('session:revert', (_event, sessionId: string, messageId: string) =>
     revertSession(sessionId, messageId))
   ipcMain.handle('session:unrevert', (_event, sessionId: string) => unrevertSession(sessionId))
+  // "Reverter também" os arquivos de autor incerto do revert ativo.
+  ipcMain.handle('session:revertUncertain', (_event, sessionId: string) => revertUncertainSession(sessionId))
 
   // /init — análise do projeto e geração de memórias por área
   ipcMain.handle('init:run', (_event, input: RunInitInput) => {

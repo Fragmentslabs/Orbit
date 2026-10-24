@@ -24,6 +24,8 @@ import { useSessionStore } from "@/src/stores/session-store"
 export function RevertBar({ session }: { session: SessionInfo }) {
   const { t } = useTranslation()
   const unrevert = useSessionStore((s) => s.unrevert)
+  const revertUncertain = useSessionStore((s) => s.revertUncertain)
+  const [revertingUncertain, setRevertingUncertain] = useState(false)
   const notice = useSessionStore((s) => (s.revertNotice?.sessionId === session.id ? s.revertNotice : null))
   const dismissNotice = useSessionStore((s) => s.dismissRevertNotice)
   const [showDiff, setShowDiff] = useState(false)
@@ -36,13 +38,18 @@ export function RevertBar({ session }: { session: SessionInfo }) {
     if (!notice) return null
     const kept = notice.files.length + (notice.media?.conflicts ?? 0)
     const detail = [...notice.files, ...(notice.media?.conflictLabels ?? [])].join("\n")
+    const noticeLabel = notice.filesError
+      ? t("revert.unrevertFilesError")
+      : kept === 1
+        ? t("revert.unrevertKeptOne")
+        : t("revert.unrevertKeptMany", { n: kept })
     return (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs">
         <div className="flex items-center gap-2 px-3 py-2">
           <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
           <span className="flex-1 truncate" title={detail || undefined}>
-            {kept === 1 ? t("revert.unrevertKeptOne") : t("revert.unrevertKeptMany", { n: kept })}
-            <span className="text-muted-foreground"> {t("revert.keptHint")}</span>
+            {noticeLabel}
+            {!notice.filesError && <span className="text-muted-foreground"> {t("revert.keptHint")}</span>}
           </span>
           <button
             type="button"
@@ -110,9 +117,23 @@ export function RevertBar({ session }: { session: SessionInfo }) {
       : null,
   ].filter(Boolean)
   const keptLabel = keptParts.length > 0 ? keptParts.join(", ") : null
+  // Mudou durante o turno, mas não pelas ferramentas de escrita do Orbit (bash,
+  // MCP, algo de fora): não foi revertido — a pessoa decide.
+  const uncertain = revert.uncertain ?? []
+  const uncertainLabel =
+    uncertain.length === 0
+      ? null
+      : uncertain.length === 1
+        ? t("revert.uncertainOne")
+        : t("revert.uncertainMany", { n: uncertain.length })
+  const uncertainDetail = uncertain.join("\n")
   const keptDetail = [...filesKept, ...(media?.conflictLabels ?? [])].join("\n")
   const warn = filesNotRestored || mediaFailed || Boolean(keptLabel)
-  const title = [mediaLabel, keptLabel && `${keptLabel}${keptDetail ? `\n${keptDetail}` : ""}`]
+  const title = [
+    mediaLabel,
+    keptLabel && `${keptLabel}${keptDetail ? `\n${keptDetail}` : ""}`,
+    uncertainLabel && `${uncertainLabel}\n${uncertainDetail}`,
+  ]
     .filter(Boolean)
     .join(" · ")
 
@@ -136,6 +157,11 @@ export function RevertBar({ session }: { session: SessionInfo }) {
               {" "}· {keptLabel}
             </span>
           )}
+          {uncertainLabel && (
+            <span className="text-muted-foreground" title={uncertainDetail}>
+              {" "}· {uncertainLabel}
+            </span>
+          )}
           <span className="text-muted-foreground"> — {t("revert.continueFromHere")}</span>
         </span>
         {revert.diff && (
@@ -147,6 +173,21 @@ export function RevertBar({ session }: { session: SessionInfo }) {
             {t("revert.diff")}
             <ChevronDown className={cn("size-3 transition-transform", showDiff && "rotate-180")} />
           </button>
+        )}
+        {uncertainLabel && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            disabled={revertingUncertain}
+            title={uncertainDetail}
+            onClick={() => {
+              setRevertingUncertain(true)
+              void revertUncertain(session.id).finally(() => setRevertingUncertain(false))
+            }}
+          >
+            {t("revert.revertUncertain")}
+          </Button>
         )}
         <Button
           variant="outline"

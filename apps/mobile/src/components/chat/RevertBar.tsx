@@ -11,13 +11,21 @@ const SWIPE_THRESHOLD = 60
 interface RevertBarProps {
   session: SessionInfo
   onUnrevert: (sessionId: string) => void
+  /** "Reverter também" os arquivos de autor incerto. */
+  onRevertUncertain?: (sessionId: string) => void
   onDismiss: (sessionId: string) => void
   /** Dentro da conversa o arrasto vertical (dy > 10) briga com a rolagem da
    *  lista: lá a barra fecha só pelo X. Fora dela o gesto continua valendo. */
   swipeToDismiss?: boolean
 }
 
-export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = true }: RevertBarProps) {
+export function RevertBar({
+  session,
+  onUnrevert,
+  onRevertUncertain,
+  onDismiss,
+  swipeToDismiss = true,
+}: RevertBarProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [dismissed, setDismissed] = useState(false)
@@ -106,6 +114,10 @@ export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = tru
       : null,
   ].filter(Boolean)
   const keptLabel = keptParts.length > 0 ? ` · ${keptParts.join(', ')}` : ''
+  // Mudou durante o turno por outra via (bash, MCP, algo de fora): não foi
+  // revertido — a pessoa decide.
+  const uncertainCount = revert.uncertain?.length ?? 0
+  const uncertainLabel = uncertainCount > 0 ? ` · ${t('revertBar.uncertain', { count: uncertainCount })}` : ''
 
   return (
     <Animated.View
@@ -141,10 +153,24 @@ export function RevertBar({ session, onUnrevert, onDismiss, swipeToDismiss = tru
           {label}
           {mediaLabel ? <Text style={{ color: tokens.mutedForeground }}>{mediaLabel}</Text> : null}
           {keptLabel ? <Text style={{ color: tokens.destructive }}>{keptLabel}</Text> : null}
+          {uncertainLabel ? <Text style={{ color: tokens.mutedForeground }}>{uncertainLabel}</Text> : null}
           <Text style={{ color: tokens.mutedForeground }}>
             {t('revertBar.continuesFromHere')}
           </Text>
         </Text>
+        {uncertainCount > 0 && onRevertUncertain ? (
+          <Pressable
+            onPress={() => onRevertUncertain(session.id)}
+            style={({ pressed }) => ({
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Text style={{ fontSize: 12, color: tokens.foreground }}>{t('revertBar.revertUncertain')}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => onUnrevert(session.id)}
           style={({ pressed }) => ({

@@ -82,6 +82,8 @@ export interface LiveContext {
 export interface RevertNotice {
   sessionId: string
   files: string[]
+  /** Os arquivos não puderam ser devolvidos de jeito nenhum. */
+  filesError?: 'no-after' | 'failed'
   media?: SessionMediaRevert
 }
 
@@ -149,6 +151,8 @@ interface SessionState {
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
   /** Desfaz um revert ativo */
   unrevert: (sessionId: string) => Promise<void>
+  /** Reverte também os arquivos de autor incerto do revert ativo */
+  revertUncertain: (sessionId: string) => Promise<void>
   /** Resultado do último unrevert (conflitos preservados); só memória. */
   revertNotice: RevertNotice | null
   dismissRevertNotice: () => void
@@ -1265,15 +1269,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // O que não pôde voltar (mudou entre o revert e agora) fica visível como
     // aviso transitório — não silencioso.
     const kept = (result.files?.conflicts.length ?? 0) + (result.media?.conflicts ?? 0)
-    if (kept > 0) {
+    if (kept > 0 || result.files?.error) {
       set({
         revertNotice: {
           sessionId,
           files: result.files?.conflicts ?? [],
+          filesError: result.files?.error,
           media: result.media,
         },
       })
     }
+  },
+
+  revertUncertain: async (sessionId) => {
+    const revert = await sessionApi.revertUncertain(sessionId)
+    if (revert) set((state) => updateSessionIn(state, sessionId, { revert }))
   },
 }))
 
