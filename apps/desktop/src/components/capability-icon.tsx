@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Mic,
+  Minimize2,
   Monitor,
   PenTool,
   Phone,
@@ -39,6 +40,8 @@ const ICONS: Record<CapabilityId, LucideIcon> = {
   vector: PenTool,
   photo: ImageIcon,
   video: Film,
+  // Comprimir é reduzir — o mesmo símbolo em qualquer tamanho de tela.
+  compress: Minimize2,
   record: Video,
   docx: FileSignature,
   audio: AudioLines,

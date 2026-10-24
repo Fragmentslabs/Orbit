@@ -44,6 +44,7 @@ import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from '../
 import { isComputerAvailable } from '../computer'
 import { createComputerTools } from './computer'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
+import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
 import { createChatDesignTools } from './design-chat'
@@ -168,6 +169,13 @@ export function buildToolSet(
       Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
       // No chat o áudio vem sempre de um anexo (não há pasta de trabalho).
       addAudioTools(null)
+      // Comprimir vídeo/áudio (caber num teto em bytes, converter, extrair o
+      // áudio). No chat a origem é sempre um anexo e o resultado entra na
+      // galeria — a imagem continua no image_edit, que se mede sozinho. Sem
+      // ffmpeg a tool nem existe (e o prompt não a anuncia).
+      if (resolveFfmpeg()) {
+        Object.assign(tools, createMediaTools({ sessionId: input.sessionId, canShow: true }, null))
+      }
       // Motion: sem pasta de trabalho, a composição mora no armazenamento do
       // Orbit (uma pasta por conversa) e é escrita/editada por nome — a mesma
       // aba Motion, ao vivo. O render só existe com o ffmpeg do app.
@@ -338,6 +346,13 @@ export function buildToolSet(
         canShow: input.orchestrationRole !== 'worker',
         readOnly: Boolean(input.options.plan),
       }),
+    )
+    // Compressão de mídia: usa o mesmo ffmpeg e o mesmo material do vídeo, mas
+    // é outra tarefa — cabe no plano, porque escreve um arquivo NOVO em media/
+    // e nunca toca na origem.
+    Object.assign(
+      tools,
+      createMediaTools({ sessionId: input.sessionId, canShow: input.orchestrationRole !== 'worker' }, ctx),
     )
   }
   // Design: só precisa de pasta (sem ffmpeg nenhum) — o agente escreve o

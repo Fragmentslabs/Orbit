@@ -886,13 +886,18 @@
         },
         "photo": {
           "label": "Edit a photo",
-          "desc": "Background, crop, text, format — the same photo, changed.",
+          "desc": "Background, crop, text, format and compression to a size limit.",
           "example": "Remove the background from this photo and save it as PNG"
         },
         "video": {
           "label": "Edit a video",
           "desc": "Cuts on the right beats, burned-in subtitles, vertical format.",
           "example": "Cut the best 15 seconds of this video and add subtitles"
+        },
+        "compress": {
+          "label": "Compress a video or audio",
+          "desc": "Fits the limit you ask for, at 720p or as an mp3 — the file is measured after it is encoded, not guessed.",
+          "example": "Compress this video to under 25 MB"
         },
         "record": {
           "label": "Record a video",

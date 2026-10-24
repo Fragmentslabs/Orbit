@@ -886,13 +886,18 @@
         },
         "photo": {
           "label": "Edite uma foto",
-          "desc": "Fundo, corte, texto, formato — sem trocar a foto.",
+          "desc": "Fundo, corte, texto, formato e compressão até um limite de tamanho.",
           "example": "Tire o fundo desta foto e salve em PNG"
         },
         "video": {
           "label": "Edite um vídeo",
           "desc": "Corte nos pontos certos, legenda queimada, formato vertical.",
           "example": "Corte os melhores 15 segundos deste vídeo e legende"
+        },
+        "compress": {
+          "label": "Comprima um vídeo ou áudio",
+          "desc": "Cabe no limite que você pedir, em 720p ou em mp3 — o arquivo é medido depois de pronto, não no chute.",
+          "example": "Comprima este vídeo para menos de 25 MB"
         },
         "record": {
           "label": "Grave um vídeo",

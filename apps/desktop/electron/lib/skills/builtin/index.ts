@@ -1,5 +1,6 @@
 import type { Skill } from '@shared/skills'
 import { parseSkill } from '../parser'
+import mediaCompress from './media-compress.md?raw'
 import webRecon from './web-recon.md?raw'
 
 /**
@@ -13,7 +14,10 @@ interface BuiltinSource {
   path: string
 }
 
-const SOURCES: BuiltinSource[] = [{ raw: webRecon, path: 'builtin://web_recon' }]
+const SOURCES: BuiltinSource[] = [
+  { raw: webRecon, path: 'builtin://web_recon' },
+  { raw: mediaCompress, path: 'builtin://media_compress' },
+]
 
 export const BUILTIN_SKILLS: Skill[] = SOURCES.flatMap(({ raw, path }) => {
   const skill = parseSkill(raw, 'builtin', path)

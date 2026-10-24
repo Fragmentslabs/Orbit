@@ -2037,8 +2037,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                     : null
               if (audioId && body) await persistAudioTranscript({ sessionId, audioId, body, history, win })
             }
-            // Áudio gerado: um player na resposta, como a imagem do show_image.
-            if (part.toolName === 'audio_generate') {
+            // Áudio gerado (ou comprimido/extraído): um player na resposta,
+            // como a imagem do show_image.
+            if (part.toolName === 'audio_generate' || part.toolName === 'media_compress') {
               const output = part.output as { audioUrl?: string; title?: string; durationMs?: number } | string
               if (typeof output === 'object' && output?.audioUrl) {
                 upsertPart({
@@ -2057,6 +2058,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             if (
               part.toolName === 'video_render' ||
               part.toolName === 'motion_render' ||
+              part.toolName === 'media_compress' ||
               part.toolName === 'browser_record' ||
               part.toolName === 'cu_record_stop' ||
               part.toolName === 'show_video'

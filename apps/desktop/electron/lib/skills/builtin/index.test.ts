@@ -18,6 +18,18 @@ describe('skills nativas', () => {
     expect(content).toContain('run_browser_script')
   })
 
+  it('traz a skill media_compress apontando para a tool, não para o ffmpeg solto', () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.slug === 'media_compress')
+    expect(skill?.source).toBe('builtin')
+    const content = skill?.content ?? ''
+    // O caminho determinístico é a tool; o ffmpeg manual é o plano B.
+    expect(content).toContain('media_compress')
+    expect(content.indexOf('media_compress')).toBeLessThan(content.indexOf('```bash'))
+    // As armadilhas que o texto precisa carregar para o agente não redescobrir.
+    expect(content).toContain('ffprobe')
+    expect(content).toContain('image_edit')
+  })
+
   it('nenhuma skill nativa fica sem slug', () => {
     for (const skill of BUILTIN_SKILLS) {
       expect(skill.slug).toMatch(/^[a-z0-9_]+$/)

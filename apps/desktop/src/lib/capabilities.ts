@@ -21,6 +21,7 @@ export type CapabilityId =
   | "vector"
   | "photo"
   | "video"
+  | "compress"
   | "record"
   | "docx"
   | "audio"
@@ -94,6 +95,9 @@ export const CAPABILITIES: readonly Capability[] = [
   // Mídia
   { id: "photo", group: "media", modes: ["chat", "code"], produces: "image", hasExample: true },
   { id: "video", group: "media", modes: ["chat", "code"], produces: "video", hasExample: true },
+  // Compressão entrega vídeo OU áudio, então não declara `produces`: o tipo
+  // depende do pedido, e mentir aqui faria a tela inicial contar errado.
+  { id: "compress", group: "media", modes: ["chat", "code"], hasExample: true },
   {
     id: "record",
     group: "media",
