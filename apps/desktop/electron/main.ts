@@ -40,6 +40,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
+import { registerYtdlpOnPath } from './lib/ytdlp/binary'
 import { chmodSync, existsSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
@@ -2141,6 +2142,9 @@ app.whenReady().then(() => {
   // Composições de motion do preview (orbit-motion://, ver video/motion-store):
   // serve a PASTA registrada e o script do runtime que o render também usa.
   registerMotionProtocol()
+  // yt-dlp baixado pelo próprio app (ytdlp_install) também entra no PATH dos
+  // shells do agente — é o `bash` que faz o que o EDL não cobre.
+  registerYtdlpOnPath()
 
   // Canvas de design (orbit-design://, ver lib/design/design-store): serve a
   // pasta registrada (canvas.json + artboards), sem runtime injetado — o

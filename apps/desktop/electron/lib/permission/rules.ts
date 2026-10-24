@@ -219,6 +219,15 @@ const NATIVE_TOOLS = new Set([
   // da conversa ligados, e a denylist vale também aqui (isForbidden). Agir
   // (cu_computer) passa pelo gate — ver assessComputer.
   'cu_apps',
+  // Mídia por link (yt-dlp): leitura de uma página pública e gravação no
+  // storage do Orbit (chat) ou em downloads/ da pasta de trabalho (código) —
+  // o mesmo threat model de media_compress e webfetch, que também não pedem
+  // permissão. O install só baixa o binário oficial, com checksum, para a
+  // pasta do app.
+  'ytdlp_info',
+  'ytdlp_download',
+  'ytdlp_transcript',
+  'ytdlp_install',
   'cu_observe',
   'cu_query',
   'cu_permissions',

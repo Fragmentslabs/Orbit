@@ -47,6 +47,7 @@ import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createYtdlpTools } from './ytdlp'
 import { createChatDesignTools } from './design-chat'
 import { createPanelTools } from './panel'
 import { createDesignTools } from './design'
@@ -182,6 +183,14 @@ export function buildToolSet(
       Object.assign(
         tools,
         createChatMotionTools({
+      // Mídia por link (yt-dlp): baixar vídeo/áudio, ler a transcrição e, com
+      // ela, resumir. No chat o arquivo mora no storage do Orbit e entra na
+      // galeria. Sem o binário instalado o conjunto não some: ytdlp_install é
+      // a porta, e as outras tools respondem o que instalar.
+      Object.assign(
+        tools,
+        createYtdlpTools({ sessionId: input.sessionId, canShow: true, language: input.language }, null),
+      )
           sessionId: input.sessionId,
           modelVision: ctx?.modelVision !== false,
           canRender: resolveFfmpeg() !== null,
@@ -364,6 +373,18 @@ export function buildToolSet(
     Object.assign(tools, createFontTools())
   }
 
+  // Mídia por link (yt-dlp): depende de pasta, não do ffmpeg — o áudio e a
+  // legenda funcionam sem ele, e o merge de vídeo usa o ffmpeg do app quando
+  // existe. Fica fora do bloco acima para não sumir num sistema sem ffmpeg.
+  if (ctx) {
+    Object.assign(
+      tools,
+      createYtdlpTools(
+        { sessionId: input.sessionId, canShow: input.orchestrationRole !== 'worker', language: input.language },
+        ctx,
+      ),
+    )
+  }
   // Browser do painel direito: teste de apps web + modo documentação.
   // Workers ficam de fora — o painel é um recurso único e visível. Com as
   // ferramentas de navegador desligadas nas Preferências, só quando o pedido

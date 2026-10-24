@@ -2039,7 +2039,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             // Áudio gerado (ou comprimido/extraído): um player na resposta,
             // como a imagem do show_image.
-            if (part.toolName === 'audio_generate' || part.toolName === 'media_compress') {
+            if (
+              part.toolName === 'audio_generate' ||
+              part.toolName === 'media_compress' ||
+              // Download por link: o áudio extraído de um vídeo toca aqui.
+              part.toolName === 'ytdlp_download'
+            ) {
               const output = part.output as { audioUrl?: string; title?: string; durationMs?: number } | string
               if (typeof output === 'object' && output?.audioUrl) {
                 upsertPart({
@@ -2061,6 +2066,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'media_compress' ||
               part.toolName === 'browser_record' ||
               part.toolName === 'cu_record_stop' ||
+              // Vídeo baixado de um link: player na resposta, como um render.
+              part.toolName === 'ytdlp_download' ||
               part.toolName === 'show_video'
             ) {
               const output = part.output as { videoUrl?: string; title?: string; durationMs?: number; path?: string } | string
@@ -2149,6 +2156,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'update_document' ||
               // Transcrição entregue ao usuário: é um documento do chat.
               part.toolName === 'audio_transcribe' ||
+              // Transcrição de um vídeo por link, com deliver "user".
+              part.toolName === 'ytdlp_transcript' ||
               part.toolName === 'docx_edit' ||
               part.toolName === 'pdf_merge' ||
               part.toolName === 'pdf_transform' ||
