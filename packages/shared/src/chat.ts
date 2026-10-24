@@ -54,10 +54,19 @@ export interface SessionRevert {
   filesRestored?: boolean
   /** Motivo de o filesystem não ter sido restaurado — presente quando
    * filesRestored === false em modo código. */
-  reason?: 'no-snapshot' | 'capture-failed'
+  reason?: 'no-snapshot' | 'capture-failed' | 'no-end-snapshot'
   /** O que o revert desfez FORA do repositório, nos dois modos: as peças
    * (motion, design, slides) e a galeria (artefatos, documentos, imagens,
    * áudios, vídeos). Ausente quando os turnos desfeitos não tocaram em mídia. */
+  media?: SessionMediaRevert
+}
+
+/** Resultado do unrevert — o que voltou e o que ficou intacto por conflito. */
+export interface UnrevertResult {
+  done: boolean
+  /** Modo código: arquivos devolvidos e os que foram preservados. */
+  files?: { restored: number; conflicts: string[] }
+  /** Peças/galeria devolvidas e preservadas. */
   media?: SessionMediaRevert
 }
 
@@ -69,6 +78,11 @@ export interface SessionMediaRevert {
   pieces: number
   /** Entradas da galeria devolvidas ao estado anterior (ou removidas). */
   items: number
+  /** Peças/itens que NÃO foram desfeitos porque mudaram depois do turno
+   *  (outra conversa, edição no painel). Ficam intactos. */
+  conflicts: number
+  /** Rótulos curtos dos itens preservados, para a barra de revert. */
+  conflictLabels?: string[]
   error?: string
 }
 

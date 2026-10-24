@@ -38,7 +38,8 @@ function turn(sessionId: string, messageId: string, fn: () => Promise<void>): Pr
     try {
       await fn()
     } finally {
-      closeMediaJournal()
+      // O estado FINAL (o que o revert compara) é gravado aqui.
+      await closeMediaJournal()
     }
   })
 }
@@ -109,7 +110,7 @@ describe('revert de mídia', () => {
 
   it('reverter o segundo turno volta o canvas e tira só o artefato dele', async () => {
     const summary = await revertMedia(sessionId, ['msg2'])
-    expect(summary).toEqual({ restored: true, pieces: 1, items: 1 })
+    expect(summary).toEqual({ restored: true, pieces: 1, items: 1, conflicts: 0 })
     expect(await fsp.readFile(boardFile, 'utf8')).toBe('<p>A</p>')
     expect(await media.getMediaEntry(createdArtifact)).toBeNull()
     await expect(fsp.stat(path.join(userData, 'orbit-data', 'artifacts', createdArtifact))).rejects.toThrow()
@@ -167,12 +168,76 @@ describe('revert de mídia — galeria', () => {
     expect(await media.getMediaEntry(id)).toBeNull()
 
     const summary = await revertMedia(sessionId, ['msg2'])
-    expect(summary).toEqual({ restored: true, pieces: 0, items: 1 })
+    expect(summary).toEqual({ restored: true, pieces: 0, items: 1, conflicts: 0 })
     expect(await media.getMediaEntry(id)).not.toBeNull()
     expect(await fsp.readFile(file, 'utf8')).toBe('fake-png')
   })
 
   it('turnos que não tocaram em mídia não produzem resumo', async () => {
     expect(await revertMedia(sessionId, ['msg-sem-midia'])).toBeUndefined()
+  })
+})
+
+describe('revert de mídia — conflitos', () => {
+  it('artefato criado no turno e editado por outra conversa depois: preservado', async () => {
+    const sessionId = 'sess-conflito-a'
+    let id = ''
+    await turn(sessionId, 'msg1', async () => {
+      id = (await media.saveArtifact('<p>v1</p>', { title: 'Compartilhado', sessionId })).id
+    })
+    // Outra conversa edita o MESMO artefato depois do turno.
+    await media.updateArtifact(id, '<p>outra conversa</p>')
+
+    const summary = await revertMedia(sessionId, ['msg1'])
+
+    expect(summary).toEqual({
+      restored: true,
+      pieces: 0,
+      items: 0,
+      conflicts: 1,
+      conflictLabels: ['Compartilhado'],
+    })
+    const entry = await media.getMediaEntry(id)
+    expect(entry?.revision).toBe(2)
+    expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>outra conversa</p>')
+  })
+
+  it('peça editada à mão no painel depois do turno: pasta e capa preservadas', async () => {
+    const sessionId = 'sess-conflito-b'
+    const tools = createDesignTools({ sessionId })
+    const folder = path.join(designPiecesDir(sessionId), 'manual')
+    await turn(sessionId, 'msg1', async () => {
+      await run(tools, 'design_write', { name: 'Manual', boards: [board('<p>do turno</p>')] })
+    })
+    const file = path.join(folder, 'Main.html')
+    // A pessoa edita no painel, fora de um turno — não entra no diário.
+    await fsp.writeFile(file, '<p>editado à mão</p>', 'utf8')
+
+    const summary = await revertMedia(sessionId, ['msg1'])
+
+    expect(summary).toMatchObject({ restored: true, pieces: 0, conflicts: 1 })
+    expect(await fsp.readFile(file, 'utf8')).toBe('<p>editado à mão</p>')
+  })
+
+  it('unrevert: o que mudou entre o revert e o desfazer é preservado', async () => {
+    const sessionId = 'sess-conflito-c'
+    const ref = await media.saveArtifact('<p>v1</p>', { title: 'Doc', sessionId })
+    await turn(sessionId, 'msg1', async () => {
+      await media.updateArtifact(ref.id, '<p>v2</p>')
+    })
+
+    const first = await revertMedia(sessionId, ['msg1'])
+    expect(first?.conflicts).toBe(0)
+    expect((await media.getMediaEntry(ref.id))?.revision ?? 1).toBe(1)
+
+    // Outra conversa mexe DEPOIS do revert, antes do unrevert.
+    await media.updateArtifact(ref.id, '<p>v3</p>')
+    const undone = await unrevertMedia(sessionId)
+
+    expect(undone?.conflicts).toBe(1)
+    const entry = await media.getMediaEntry(ref.id)
+    // O revert devolveu a revisão para 1; a edição externa seguinte vira 2.
+    expect(entry?.revision).toBe(2)
+    expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>v3</p>')
   })
 })

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import crypto from 'node:crypto'
 import { app } from 'electron'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -41,6 +42,71 @@ export interface PieceRef {
   sessionId?: string
 }
 
+/**
+ * Estado de um caminho (arquivo, pasta ou symlink) num instante.
+ *
+ * O diário guarda o estado ANTES (`backup`/`before`) e o DEPOIS (`after`).
+ * No revert, o atual é comparado com o depois: só desfaz o que ainda está
+ * como o turno deixou. Se outra conversa (ou a pessoa, no painel) mexeu
+ * depois, o caminho é preservado e vira conflito.
+ */
+export interface PathState {
+  exists: boolean
+  /** sha256 do conteúdo (arquivo), da árvore (pasta) ou do alvo (symlink). */
+  hash: string | null
+  kind?: 'file' | 'dir' | 'symlink'
+}
+
+export function samePathState(a: PathState, b: PathState): boolean {
+  return a.exists === b.exists && a.hash === b.hash && (a.kind ?? null) === (b.kind ?? null)
+}
+
+const ABSENT: PathState = { exists: false, hash: null }
+
+function sha256(content: Buffer | string): string {
+  return crypto.createHash('sha256').update(content).digest('hex')
+}
+
+async function hashFile(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256')
+    const stream = fs.createReadStream(file)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('error', reject)
+    stream.on('end', () => resolve(hash.digest('hex')))
+  })
+}
+
+/**
+ * Hash determinístico de um caminho — conteúdo, nomes e tipos, em ordem.
+ * Pastas entram recursivamente; symlinks entram pelo TEXTO do alvo (sem
+ * seguir, senão um link quebrado derrubaria a comparação).
+ */
+export async function hashPath(target: string): Promise<PathState> {
+  const st = await fsp.lstat(target).catch(() => null)
+  if (!st) return ABSENT
+  if (st.isSymbolicLink()) {
+    const link = await fsp.readlink(target).catch(() => null)
+    return link === null
+      ? { exists: true, hash: null, kind: 'symlink' }
+      : { exists: true, hash: sha256(`link\0${link}`), kind: 'symlink' }
+  }
+  if (st.isFile()) {
+    return { exists: true, hash: await hashFile(target), kind: 'file' }
+  }
+  if (st.isDirectory()) {
+    const hash = crypto.createHash('sha256')
+    for (const name of (await fsp.readdir(target)).sort()) {
+      hash.update(`entry\0${name}\0`)
+      const child = await hashPath(path.join(target, name))
+      hash.update(child.exists ? `${child.kind ?? 'other'}:${child.hash ?? ''}` : 'absent')
+      hash.update('\0')
+    }
+    return { exists: true, hash: hash.digest('hex'), kind: 'dir' }
+  }
+  return { exists: true, hash: sha256('other'), kind: 'file' }
+}
+
 export type JournalRecord =
   | {
       type: 'path'
@@ -48,13 +114,30 @@ export type JournalRecord =
       /** Nome da cópia dentro de `files/` — null quando o caminho não existia. */
       backup: string | null
       piece?: PieceRef
+      /** Entrada da galeria dona deste arquivo (artefato/documento). */
+      owner?: string
+      /** Estado do caminho DEPOIS do turno; ausente em diários antigos/crash. */
+      after?: PathState
     }
-  | { type: 'media'; id: string; before: MediaEntry | null }
+  | {
+      type: 'media'
+      id: string
+      before: MediaEntry | null
+      /** A entrada DEPOIS do turno (o que o turno gravou). */
+      after?: MediaEntry | null
+    }
 
 /** Registro pronto para aplicar: a cópia já resolvida para o caminho absoluto. */
 export type RestoreRecord =
-  | { type: 'path'; path: string; backupFile: string | null; piece?: PieceRef }
-  | { type: 'media'; id: string; before: MediaEntry | null }
+  | {
+      type: 'path'
+      path: string
+      backupFile: string | null
+      piece?: PieceRef
+      owner?: string
+      after?: PathState
+    }
+  | { type: 'media'; id: string; before: MediaEntry | null; after?: MediaEntry | null }
 
 interface Scope {
   sessionId: string
@@ -103,12 +186,37 @@ export function bindMediaJournal(messageId: string): void {
 }
 
 /**
- * Fecha o escopo: o que ainda rodar herdando-o (a capa da galeria tirada em
- * segundo plano) já não é do turno e não entra no diário.
+ * Fecha o escopo e grava o estado FINAL de cada caminho registrado.
+ *
+ * `closed` é marcado ANTES do trabalho assíncrono: o que ainda rodar herdando
+ * o escopo (a capa da galeria tirada em segundo plano) já não é do turno e não
+ * entra no diário. O `after` é o que permite o revert comparar "o worktree
+ * ainda está como o turno deixou?" — sem ele, um turno antigo/crashado vira
+ * conflito, nunca uma restauração às cegas.
+ *
+ * Nunca lança: o fim do turno não pode depender do diário.
  */
-export function closeMediaJournal(): void {
+export async function closeMediaJournal(): Promise<void> {
   const scope = storage.getStore()
-  if (scope) scope.closed = true
+  if (!scope) return
+  scope.closed = true
+  if (!scope.messageId) return
+  const s = scope as Scope & { messageId: string }
+  try {
+    await s.chain
+    for (const record of s.records) {
+      if (record.type !== 'path' || record.after) continue
+      try {
+        record.after = await hashPath(record.path)
+      } catch (err) {
+        // Sem estado final, o revert trata o caminho como conflito.
+        console.error('[media-journal] hash final falhou:', record.path, err)
+      }
+    }
+    await persistScope(s)
+  } catch (err) {
+    console.error('[media-journal] fechar o diário falhou:', err)
+  }
 }
 
 function activeScope(): (Scope & { messageId: string }) | null {
@@ -162,7 +270,7 @@ export async function cloneInto(source: string, target: string): Promise<void> {
 
 async function persistScope(scope: Scope & { messageId: string }): Promise<void> {
   const dir = messageJournalDir(scope.sessionId, scope.messageId)
-  await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 1, records: scope.records }))
+  await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 2, records: scope.records }))
 }
 
 /** Enfileira no escopo — e uma falha do diário nunca derruba a tool que escrevia. */
@@ -179,7 +287,7 @@ function enqueue(scope: Scope & { messageId: string }, op: () => Promise<void>):
  * neste turno. Chame logo antes de escrever, apagar ou substituir — dentro do
  * mesmo lock da escrita, para ninguém mudar o caminho entre a cópia e ela.
  */
-export async function journalPath(target: string, piece?: PieceRef): Promise<void> {
+export async function journalPath(target: string, piece?: PieceRef, owner?: string): Promise<void> {
   const scope = activeScope()
   if (!scope) return
   const resolved = path.resolve(target)
@@ -198,7 +306,7 @@ export async function journalPath(target: string, piece?: PieceRef): Promise<voi
       backup = `b${scope.records.length}`
       await cloneInto(resolved, path.join(messageJournalDir(scope.sessionId, scope.messageId), 'files', backup))
     }
-    scope.records.push({ type: 'path', path: resolved, backup, piece })
+    scope.records.push({ type: 'path', path: resolved, backup, piece, owner })
     await persistScope(scope)
   })
 }
@@ -226,21 +334,32 @@ export async function journalMediaIndex(previous: MediaEntry[], next: MediaEntry
   if (!scope) return
   const before = new Map(previous.map((e) => [e.id, e]))
   const after = new Map(next.map((e) => [e.id, e]))
-  const changed: Array<{ id: string; before: MediaEntry | null }> = []
+  const changed: Array<{ id: string; before: MediaEntry | null; after: MediaEntry | null }> = []
   for (const id of new Set([...before.keys(), ...after.keys()])) {
-    if (!sameEntry(before.get(id), after.get(id))) changed.push({ id, before: before.get(id) ?? null })
+    if (!sameEntry(before.get(id), after.get(id))) {
+      changed.push({ id, before: before.get(id) ?? null, after: after.get(id) ?? null })
+    }
   }
   if (changed.length === 0) return
   await enqueue(scope, async () => {
-    let added = false
+    let dirty = false
     for (const item of changed) {
-      const key = `media:${item.id}`
-      if (scope.keys.has(key)) continue
-      scope.keys.add(key)
-      scope.records.push({ type: 'media', id: item.id, before: item.before })
-      added = true
+      const existing = scope.records.find(
+        (record): record is Extract<JournalRecord, { type: 'media' }> =>
+          record.type === 'media' && record.id === item.id,
+      )
+      if (existing) {
+        // O turno mexeu na mesma entrada de novo: o `before` continua sendo o
+        // da PRIMEIRA mudança, e o `after` passa a ser o estado final do turno.
+        existing.after = item.after
+        dirty = true
+        continue
+      }
+      scope.keys.add(`media:${item.id}`)
+      scope.records.push({ type: 'media', id: item.id, before: item.before, after: item.after })
+      dirty = true
     }
-    if (added) await persistScope(scope)
+    if (dirty) await persistScope(scope)
   })
 }
 
@@ -277,28 +396,44 @@ export async function readRedoJournal(sessionId: string): Promise<LoadedJournal 
  */
 export function mergeJournals(journals: LoadedJournal[]): RestoreRecord[] {
   const out: RestoreRecord[] = []
-  const seen = new Set<string>()
+  const byKey = new Map<string, RestoreRecord>()
   const folders: string[] = []
   for (const journal of journals) {
     for (const record of journal.records) {
       if (record.type === 'media') {
         const key = `media:${record.id}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push(record)
+        const existing = byKey.get(key)
+        if (existing && existing.type === 'media') {
+          // O `before` é o do PRIMEIRO turno; o `after` é o do ÚLTIMO que mexeu
+          // — é esse estado que o worktree tem agora e que o revert vai
+          // comparar.
+          existing.after = record.after
+          continue
+        }
+        const next = { ...record }
+        byKey.set(key, next)
+        out.push(next)
         continue
       }
       const resolved = path.resolve(record.path)
       const key = `path:${resolved}`
-      if (seen.has(key) || folders.some((folder) => isInside(folder, resolved))) continue
-      seen.add(key)
-      folders.push(resolved)
-      out.push({
+      const existing = byKey.get(key)
+      if (existing && existing.type === 'path') {
+        existing.after = record.after
+        continue
+      }
+      if (folders.some((folder) => isInside(folder, resolved))) continue
+      const next: RestoreRecord = {
         type: 'path',
         path: resolved,
         backupFile: record.backup ? path.join(journal.dir, 'files', record.backup) : null,
         piece: record.piece,
-      })
+        owner: record.owner,
+        after: record.after,
+      }
+      byKey.set(key, next)
+      out.push(next)
+      folders.push(resolved)
     }
   }
   return out
@@ -326,9 +461,36 @@ export async function captureJournal(
       backup = `b${out.length}`
       await cloneInto(record.path, path.join(dir, 'files', backup))
     }
-    out.push({ type: 'path', path: record.path, backup, piece: record.piece })
+    out.push({ type: 'path', path: record.path, backup, piece: record.piece, owner: record.owner })
   }
-  await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 1, records: out }))
+  await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 2, records: out }))
+}
+
+/**
+ * Preenche o `after` de um diário já gravado — usado no redo do revert, depois
+ * de aplicar: o estado final é o que o unrevert vai exigir encontrar para
+ * poder desfazer sem apagar mudanças mais novas.
+ */
+export async function finalizeJournal(
+  dir: string,
+  currentEntry: (id: string) => Promise<MediaEntry | null>,
+): Promise<void> {
+  const loaded = await readManifest(dir)
+  if (!loaded) return
+  const records: JournalRecord[] = []
+  for (const record of loaded.records) {
+    if (record.type === 'media') {
+      records.push({ ...record, after: await currentEntry(record.id) })
+      continue
+    }
+    try {
+      records.push({ ...record, after: await hashPath(record.path) })
+    } catch (err) {
+      console.error('[media-journal] hash final do redo falhou:', record.path, err)
+      records.push(record)
+    }
+  }
+  await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 2, records }))
 }
 
 /**

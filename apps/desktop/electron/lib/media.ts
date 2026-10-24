@@ -473,7 +473,10 @@ export async function entryOwnedFiles(entry: MediaEntry): Promise<string[]> {
 /** Antes de reescrever ou apagar os arquivos de uma entrada (no turno do agente). */
 async function journalEntryFiles(entry: MediaEntry): Promise<void> {
   if (!mediaJournalActive()) return
-  for (const file of await entryOwnedFiles(entry)) await journalPath(file)
+  // O `owner` liga cada arquivo à entrada: no revert, quem decide se ele pode
+  // voltar é a comparação da ENTRADA (revisão/estado), não o hash solto do
+  // arquivo — a capa pode ser regerada em segundo plano sem ser edição.
+  for (const file of await entryOwnedFiles(entry)) await journalPath(file, undefined, entry.id)
 }
 
 /**
