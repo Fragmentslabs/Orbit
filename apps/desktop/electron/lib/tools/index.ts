@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron'
 import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
@@ -15,6 +16,7 @@ import { createBrowserRecordTools } from './browser-record'
 import { createEsteiraTools } from './esteira'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
+import { createSubchatTools } from './subchats'
 import { createUsageTools } from './usage'
 import type { ToolContext } from './context'
 import {
@@ -76,6 +78,9 @@ export function buildToolSet(
   imageHooks?: ImageToolHooks,
   /** Visão do modelo do turno — no chat não há ctx para carregá-la */
   modelVision?: boolean,
+  /** Janela do turno: o subchat precisa dela para disparar o próprio turno.
+   *  Ausente nos workers efêmeros — lá a tool não é registrada. */
+  win?: BrowserWindow,
 ): ToolSet {
   const tools: ToolSet = {}
   // Controle do computador: duas chaves (Preferências + modo da conversa),
@@ -225,6 +230,10 @@ export function buildToolSet(
       // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
       // quem decide o que sai da sidebar é a sessão principal.
       Object.assign(tools, createSessionTools())
+      // Subchats: conversa nova, anexada a esta, para o que não pertence a este
+      // contexto (ou quando um contexto novo vale mais que outra compactação).
+      // Fora dos workers — quem decide abrir conversa é quem fala com a pessoa.
+      if (win) Object.assign(tools, createSubchatTools(input, win))
       // Relatório de horas/custo: a mesma conta da tela de uso, para o agente
       // responder "quantas horas no projeto X" sem chutar. Fora dos workers
       // porque quem escreve o relatório é a sessão que fala com o usuário.
@@ -444,6 +453,9 @@ export function buildToolSet(
     // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
     // quem decide o que sai da sidebar é a sessão principal.
     Object.assign(tools, createSessionTools())
+    // Subchats: conversa nova, anexada a esta, para o que não pertence a este
+    // contexto (ou quando um contexto novo vale mais que outra compactação).
+    if (win) Object.assign(tools, createSubchatTools(input, win))
     Object.assign(tools, createUsageTools())
     // Worktrees: trocar a pasta do chat é decisão da sessão principal — um
     // worker mudando a pasta de quem o chamou desorientaria a conversa.

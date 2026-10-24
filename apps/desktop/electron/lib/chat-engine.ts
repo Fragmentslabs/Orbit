@@ -1885,7 +1885,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 ],
                 interleavedReasoningField(provider, primary.modelId),
               ),
-        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks, modelVision) : undefined,
+        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks, modelVision, win) : undefined,
         toolApproval,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
