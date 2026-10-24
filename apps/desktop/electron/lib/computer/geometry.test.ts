@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitWithin, frameCenter, globalToShot, shotToGlobal, visibleIn, type ShotGeometry } from './geometry'
+import { fitWithin, frameCenter, globalToShot, physicalToDip, shotToGlobal, visibleIn, windowSpace, type ShotGeometry } from './geometry'
 
 /**
  * O modelo vê o screenshot reduzido; o evento sai em pontos globais. Errar a
@@ -57,5 +57,36 @@ describe('globalToShot / frameCenter / visibleIn', () => {
     expect(visibleIn(g.frame, [300, 150, 10, 10])).toBe(true)
     expect(visibleIn(g.frame, [300, 900, 10, 10])).toBe(false)
     expect(visibleIn(g.frame, [300, 150, 0, 0])).toBe(false)
+  })
+})
+
+describe('Windows: pixel físico, escala 1 e DIP a 150%', () => {
+  // Principal a 150% (2560×1440 físicos = 1706,67×960 DIP) e um segundo
+  // monitor a 100% à direita: físico começa em 2560, DIP em 1706,67.
+  const displays = [
+    { bounds: { x: 0, y: 0, width: 2560 / 1.5, height: 960 }, scaleFactor: 1.5, physicalOrigin: { x: 0, y: 0 } },
+    { bounds: { x: 2560 / 1.5, y: 0, width: 1920, height: 1080 }, scaleFactor: 1, physicalOrigin: { x: 2560, y: 0 } },
+  ]
+
+  it('com escala 1, o screenshot tem o tamanho do frame físico e x/y voltam ao pixel físico', () => {
+    const g = windowSpace([300, 150, 1500, 900], 1, 2000)
+    expect(g).toEqual({ frame: [300, 150, 1500, 900], width: 1500, height: 900 })
+    expect(shotToGlobal(g, 750, 450)).toEqual([1050, 600])
+    // Reduzido ao lado máximo: a razão continua exata.
+    const small = windowSpace([300, 150, 1500, 900], 1, 1000)
+    expect(small).toMatchObject({ width: 1000, height: 600 })
+    expect(shotToGlobal(small, 500, 300)).toEqual([1050, 600])
+  })
+
+  it('pixel físico → DIP no monitor a 150%', () => {
+    expect(physicalToDip([300, 150, 1500, 900], displays)).toEqual([200, 100, 1000, 600])
+  })
+
+  it('pixel físico → DIP no segundo monitor (100%), relativo ao canto dele', () => {
+    expect(physicalToDip([2660, 100, 800, 600], displays)).toEqual([1806.67, 100, 800, 600])
+  })
+
+  it('sem canto físico, vale o canto DIP', () => {
+    expect(physicalToDip([150, 150, 300, 300], [{ bounds: { x: 0, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 }])).toEqual([100, 100, 200, 200])
   })
 })

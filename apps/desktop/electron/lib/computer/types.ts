@@ -4,7 +4,11 @@
  * tudo com um driver falso, sem tocar no sistema.
  */
 
-/** [x, y, largura, altura] em pontos globais (origem no topo do monitor principal). */
+/**
+ * [x, y, largura, altura] em coordenadas globais: pontos no macOS (origem no
+ * topo do monitor principal), pixels físicos do desktop virtual no Windows (o
+ * host é per-monitor DPI aware).
+ */
 export type Frame = [number, number, number, number]
 
 export interface AppInfo {
@@ -13,10 +17,17 @@ export interface AppInfo {
   name: string
   active: boolean
   hidden: boolean
+  /**
+   * Windows: o app roda com integridade maior que a do Orbit (administrador).
+   * O UIPI descarta mensagens e SendInput vindos de um processo comum.
+   */
+  elevated?: boolean
+  /** Windows: nome do executável ("chrome.exe"); o `bundleId` é o AUMID quando o app é empacotado */
+  exe?: string
 }
 
 export interface WindowInfo {
-  /** CGWindowID */
+  /** CGWindowID no macOS; HWND no Windows */
   id: number
   pid: number
   /** null sem a permissão de Gravação de Tela */
@@ -37,6 +48,12 @@ export interface AxNode {
   depth: number
   /** Índices de AXChildren a partir da janela: é o que re-encontra o elemento */
   path: number[]
+  /**
+   * Identidade estável do elemento dentro da observação (Windows: RuntimeId
+   * da UIA). Quando existe, a ação vai por ela e o `path` fica de fallback; o
+   * macOS não manda.
+   */
+  ref?: string
   role: string
   subrole: string | null
   title: string | null
@@ -66,9 +83,16 @@ export interface TreeSnapshot {
   ms: number
 }
 
+/** A janela-alvo. `id` (HWND) é o que o Windows usa; o macOS acha pelo frame e título. */
+export interface WindowRef {
+  id?: number
+  frame: Frame
+  title: string | null
+}
+
 export interface TreeRequest {
   pid: number
-  window: { frame: Frame; title: string | null }
+  window: WindowRef
   maxNodes: number
   maxDepth?: number
   textLimit?: number
@@ -99,8 +123,10 @@ export type BridgeAction =
   | {
       op: 'element'
       pid: number
-      window: { frame: Frame; title: string | null }
+      window: WindowRef
       path: number[]
+      /** Identidade da observação (Windows); sem ela, o host vai pelo `path` */
+      ref?: string
       expect?: { role: string; title?: string | null }
       kind: 'info' | 'press' | 'focus' | 'setValue' | 'select'
       actions?: string[]
@@ -126,7 +152,8 @@ export interface ElementResult {
 export interface ComputerDriver {
   readonly platform: NodeJS.Platform
   capabilities(): Capabilities
-  perms(signal?: AbortSignal): Promise<{ accessibility: boolean }>
+  /** `notes`: o que mais limita o controle nesta máquina (Windows: CLM, integridade) */
+  perms(signal?: AbortSignal): Promise<{ accessibility: boolean; notes?: string[] }>
   apps(signal?: AbortSignal): Promise<AppsSnapshot>
   tree(request: TreeRequest, signal?: AbortSignal): Promise<TreeSnapshot>
   /** PNG da janela (CGWindowID) */
@@ -143,6 +170,12 @@ export interface Capabilities {
   /** Arrastar exige o ponteiro global */
   dragNeedsGlobal: boolean
   accessibilityTree: boolean
+  /**
+   * Mouse e roda por mensagem de janela chegam ao app sem mover o cursor
+   * (Windows). No macOS é false: a Fase 0 mostrou que o AppKit ignora mouse
+   * por pid, e o modo dirigido vai todo pela acessibilidade.
+   */
+  messageMouse: boolean
 }
 
 export type ComputerErrorCode =
@@ -154,6 +187,12 @@ export type ComputerErrorCode =
   | 'windowNotFound'
   | 'appNotFound'
   | 'staleIndex'
+  /** O elemento do `ref` não existe mais (Windows) */
+  | 'staleRef'
+  /** App como administrador: o UIPI bloqueia a entrada (Windows) */
+  | 'elevated'
+  /** UAC, tela de bloqueio ou Ctrl+Alt+Del na frente (Windows) */
+  | 'secureDesktop'
   | 'secureField'
   | 'blocked'
   | 'unavailable'

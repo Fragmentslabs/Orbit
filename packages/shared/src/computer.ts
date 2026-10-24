@@ -39,7 +39,7 @@ export interface ComputerStatus {
   /** Motivo quando indisponível: "mas", "platform" */
   reason: "mas" | "platform" | null
   platform: string
-  /** Acessibilidade concedida ao Orbit */
+  /** Acessibilidade concedida ao Orbit (Windows: o host de UI Automation sobe) */
   accessibility: boolean
   /** Gravação de Tela: "granted" | "denied" | "not-determined" | "restricted" | "unknown" */
   screen: string
@@ -51,6 +51,8 @@ export interface ComputerStatus {
    * o próprio app.
    */
   responsible: string | null
+  /** O que mais limita o controle nesta máquina (Windows: PowerShell restrito, integridade) */
+  notes?: string[]
 }
 
 /** Resultado do botão "Testar" (uma chamada real à bridge). */

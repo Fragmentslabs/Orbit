@@ -21,7 +21,8 @@ import { isEnhanced, noteActivity, noteEnhanced, noteShotChanged } from '../comp
 import { rememberShot, rememberTarget } from '../computer/shots'
 
 /**
- * Tools do Computer Use (só macOS na v1). O laço é observar → agir por índice
+ * Tools do Computer Use (macOS; Windows experimental até o Stage 0 — ver
+ * docs/computer-use-windows.md). O laço é observar → agir por índice
  * → reobservar: cu_observe devolve screenshot + árvore numerada, cu_computer
  * age por índice (ou x/y do screenshot) e, por padrão, já devolve a observação
  * seguinte. A imagem entra no contexto pelo toModelOutput (como no
@@ -48,8 +49,13 @@ const SETTLE_MS = 350
  */
 const ENHANCE_WAIT_MS = 450
 
-/** Escala do monitor onde a janela está (2 no Retina): é ela que define o espaço x/y da janela. */
+/**
+ * Escala do monitor onde a janela está (2 no Retina): é ela que define o espaço
+ * x/y da janela. No Windows é 1: o host é DPI aware, frames e captura já vêm em
+ * pixel físico — e o `screen` do Electron fala DIP, que aqui só atrapalharia.
+ */
 function scaleFor(frame: [number, number, number, number]): number {
+  if (process.platform === 'win32') return 1
   try {
     return screen.getDisplayMatching({ x: frame[0], y: frame[1], width: frame[2], height: frame[3] }).scaleFactor || 1
   } catch {
@@ -60,6 +66,9 @@ function scaleFor(frame: [number, number, number, number]): number {
 const stash = new Map<string, { base64: string; mediaType: string } | { text: string }>()
 
 const ERROR_HINTS: Record<string, string> = {
+  staleRef: 'Call cu_observe again and act on the new indices.',
+  elevated: 'Do not try to work around this: tell the user this app runs as administrator and ask them to do the step themselves.',
+  secureDesktop: 'A Windows security screen (UAC, lock screen or Ctrl+Alt+Del) is in front. Stop and ask the user to handle it.',
   axDenied:
     'Orbit does not have the Accessibility permission. Call cu_permissions to see WHICH app macOS checks (when Orbit was launched from a terminal, it is that terminal app, not Orbit), then tell the user to enable it in System Settings → Privacy & Security → Accessibility and try again.',
   screenDenied:
@@ -68,9 +77,15 @@ const ERROR_HINTS: Record<string, string> = {
   secureField: 'Do not try to work around this refusal.',
 }
 
+/** No Windows não existe permissão de sistema: o axDenied lá é o host que não subiu (CLM, política). */
+const WINDOWS_HINTS: Record<string, string> = {
+  axDenied:
+    'Windows has no permission to grant here: the UI Automation host could not start (e.g. PowerShell in Constrained Language Mode or blocked by policy). Call cu_permissions and tell the user what it says.',
+}
+
 function errorText(err: unknown): string {
   if (err instanceof ComputerError) {
-    const hint = ERROR_HINTS[err.code]
+    const hint = (process.platform === 'win32' ? WINDOWS_HINTS[err.code] : undefined) ?? ERROR_HINTS[err.code]
     return `Error (${err.code}): ${err.message}${hint ? `\n${hint}` : ''}`
   }
   return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -418,12 +433,21 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
 
     cu_permissions: tool({
       description:
-        'Shows whether Orbit has the macOS permissions computer use needs (Accessibility for the tree and input; Screen Recording for screenshots). With request: true, asks for Accessibility and opens the Screen Recording pane for the user.',
+        process.platform === 'win32'
+          ? 'Shows whether computer use can run on this Windows machine (Windows has no permission prompt; this reports what limits it, e.g. PowerShell policy or apps running as administrator).'
+          : 'Shows whether Orbit has the macOS permissions computer use needs (Accessibility for the tree and input; Screen Recording for screenshots). With request: true, asks for Accessibility and opens the Screen Recording pane for the user.',
       inputSchema: z.object({
         request: z.boolean().optional().describe('Ask for the missing permissions (opens the system dialogs/panes)'),
       }),
       execute: async ({ request }) => {
         const status = await computerStatus()
+        if (process.platform === 'win32') {
+          return [
+            `UI Automation host: ${status.accessibility ? 'ready' : 'NOT available'}`,
+            ...(status.notes ?? []),
+            'Windows asks for no permission. Apps running as administrator, the UAC prompt and the lock screen cannot be controlled from Orbit.',
+          ].join('\n')
+        }
         const opened: string[] = []
         if (request) {
           if (!status.accessibility) {

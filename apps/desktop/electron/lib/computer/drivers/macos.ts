@@ -66,7 +66,7 @@ function screenGranted(): boolean {
 export function createMacosDriver(): ComputerDriver {
   return {
     platform: 'darwin',
-    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true }),
+    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: false }),
     perms: (signal) => run('perms', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
     apps: (signal) => run<AppsSnapshot>('apps', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
     tree: (request: TreeRequest, signal) => run<TreeSnapshot>('tree', request, { timeoutMs: READ_TIMEOUT_MS, signal }),

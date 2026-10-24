@@ -31,3 +31,23 @@ describe('parseKeys', () => {
     expect(() => parseKeys('  ')).toThrow(/Empty/)
   })
 })
+
+describe('parseKeys no Windows', () => {
+  it('VK e flags do host; cmd vira Ctrl', () => {
+    expect(parseKeys('ctrl+s', 'win32')).toEqual([{ code: 0x53, flags: 2 }])
+    expect(parseKeys('cmd+shift+t', 'win32')).toEqual([{ code: 0x54, flags: 2 | 1 }])
+    expect(parseKeys('alt+f4', 'win32')).toEqual([{ code: 0x73, flags: 4 }])
+    expect(parseKeys('win+d', 'win32')).toEqual([{ code: 0x44, flags: 8 }])
+  })
+
+  it('teclas nomeadas, dígitos e símbolos', () => {
+    expect(parseKeys('return tab ArrowDown pagedown', 'win32').map((c) => c.code)).toEqual([0x0d, 0x09, 0x28, 0x22])
+    expect(parseKeys('ctrl+0', 'win32')).toEqual([{ code: 0x30, flags: 2 }])
+    expect(parseKeys('ctrl+.', 'win32')).toEqual([{ code: 0xbe, flags: 2 }])
+    expect(parseKeys('delete', 'win32')).toEqual([{ code: 0x2e, flags: 0 }])
+  })
+
+  it('o macOS continua com os códigos dele', () => {
+    expect(parseKeys('cmd+s', 'darwin')).toEqual([{ code: 1, flags: 0x100000 }])
+  })
+})

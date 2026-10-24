@@ -37,3 +37,28 @@ describe('approvalKey', () => {
     expect(hostOf('about:blank')).toBeNull()
   })
 })
+
+describe('Windows', () => {
+  const win = (over: Partial<AppInfo>): AppInfo => app({ bundleId: 'notepad.exe', exe: 'notepad.exe', name: 'Bloco de Notas', ...over })
+
+  it('denylist por exe, família de pacote e nome', () => {
+    expect(isDeniedApp(win({ bundleId: 'Consent.exe', exe: 'Consent.exe', name: 'consent' }))).toBe(true)
+    expect(isDeniedApp(win({ bundleId: 'KeePassXC.exe', exe: 'KeePassXC.exe', name: 'KeePassXC' }))).toBe(true)
+    expect(isDeniedApp(win({ bundleId: 'windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel', exe: 'SystemSettings.exe', name: 'Configurações' }))).toBe(true)
+    expect(isDeniedApp(win({ bundleId: 'Microsoft.SecHealthUI_8wekyb3d8bbwe!SecHealthUI', exe: 'SecHealthUI.exe', name: 'Segurança do Windows' }))).toBe(true)
+    expect(isDeniedApp(win({}))).toBe(false)
+    expect(isDeniedQuery('systemsettings')).toBe(true)
+    expect(isDeniedQuery('Windows Security')).toBe(true)
+    expect(isDeniedQuery('notepad')).toBe(false)
+  })
+
+  it('app elevado é recusado com o motivo', () => {
+    expect(() => assertTargetAllowed(win({ elevated: true }), 1)).toThrow(/administrator/)
+  })
+
+  it('navegador pelo exe aprova por site, com qualquer caixa', () => {
+    expect(approvalKey('chrome.exe', 'https://banco.com.br/x')).toBe('cu:app:chrome.exe@banco.com.br')
+    expect(approvalKey('MSEDGE.EXE', 'https://a.com')).toBe('cu:app:MSEDGE.EXE@a.com')
+    expect(approvalKey('notepad.exe', 'https://a.com')).toBe('cu:app:notepad.exe')
+  })
+})

@@ -4,9 +4,9 @@ import { ComputerError, type AppInfo, type Frame, type WindowInfo } from './type
 
 /**
  * Observações numeradas por sessão. Cada índice mostrado ao modelo vira um
- * handle serializável (caminho + identidade) — a bridge não guarda elementos
- * entre processos, então a ação re-encontra o elemento pelo caminho e confere
- * que ainda é o mesmo. Uma observação nova do mesmo app invalida a anterior.
+ * handle serializável (caminho + identidade) — a bridge do macOS não guarda
+ * elementos entre processos, então a ação re-encontra o elemento pelo caminho
+ * e confere que ainda é o mesmo; o host do Windows guarda, e o `ref` é a chave. Uma observação nova do mesmo app invalida a anterior.
  */
 
 /** Depois disso a observação vence: a tela provavelmente mudou. */
@@ -15,7 +15,12 @@ export const OBSERVATION_TTL_MS = 120_000
 export interface ElementHandle {
   index: number
   path: number[]
+  /** Identidade do host (Windows); a ação vai por ela e usa o `path` de fallback */
+  ref?: string
+  /** Papel no vocabulário do AX (o que o modelo vê) */
   role: string
+  /** Papel como o host mandou (UIA no Windows) — é com ele que o host confere a identidade */
+  nativeRole?: string
   title: string | null
   /** Pontos globais */
   frame: Frame | null
@@ -38,6 +43,16 @@ export interface ObservationRecord {
   digest: string | null
 }
 
+/** O último app observado com um pid — o que o gate de permissões lê. */
+export interface RecentTarget {
+  bundleId: string | null
+  name: string
+  pid: number
+  url: string | null
+  /** Windows: o exe ("chrome.exe") — é ele que diz se o app é navegador */
+  exe?: string
+}
+
 export function newObservationId(): string {
   return `obs_${randomBytes(4).toString('hex')}`
 }
@@ -46,7 +61,7 @@ export function createRegistry(now: () => number = Date.now) {
   /** sessão → pid → observação mais recente */
   const bySession = new Map<string, Map<number, ObservationRecord>>()
   /** pid → o app e a URL da última observação, de qualquer sessão (para o gate) */
-  const recent = new Map<number, { bundleId: string | null; name: string; pid: number; url: string | null }>()
+  const recent = new Map<number, RecentTarget>()
 
   function fresh(record: ObservationRecord): ObservationRecord {
     if (now() - record.createdAt > OBSERVATION_TTL_MS) {
@@ -64,7 +79,13 @@ export function createRegistry(now: () => number = Date.now) {
       apps.set(record.app.pid, record)
       bySession.set(record.sessionId, apps)
       recent.delete(record.app.pid)
-      recent.set(record.app.pid, { bundleId: record.app.bundleId, name: record.app.name, pid: record.app.pid, url: record.url })
+      recent.set(record.app.pid, {
+        bundleId: record.app.bundleId,
+        name: record.app.name,
+        pid: record.app.pid,
+        url: record.url,
+        ...(record.app.exe ? { exe: record.app.exe } : {}),
+      })
     },
 
     /** A observação mais recente de um app nesta sessão, se houver (sem checar validade). */
@@ -104,11 +125,12 @@ export function createRegistry(now: () => number = Date.now) {
      * id, nome ou pid) — o gate de permissões não resolve apps, só lê isto
      * para pedir aprovação pelo bundle e pelo site certos.
      */
-    lastTargetFor(query: string): { bundleId: string | null; name: string; pid: number; url: string | null } | null {
+    lastTargetFor(query: string): RecentTarget | null {
       const q = query.trim().toLowerCase()
       const list = [...recent.values()].reverse()
+      const exe = (t: RecentTarget) => t.exe?.toLowerCase()
       return (
-        list.find((t) => String(t.pid) === q || t.bundleId?.toLowerCase() === q || t.name.toLowerCase() === q) ??
+        list.find((t) => String(t.pid) === q || t.bundleId?.toLowerCase() === q || t.name.toLowerCase() === q || exe(t) === q || exe(t) === `${q}.exe`) ??
         list.find((t) => t.name.toLowerCase().includes(q)) ??
         null
       )

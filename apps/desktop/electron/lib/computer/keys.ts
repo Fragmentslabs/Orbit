@@ -1,10 +1,11 @@
 import { ComputerError } from './types'
 
 /**
- * Teclas → códigos virtuais do macOS (layout físico ANSI) e flags de
- * modificador. Letras e símbolos seguem a posição física: num layout não-US,
- * "cmd+z" ainda é a tecla onde fica o Z no teclado americano — para TEXTO use
- * `type`, que manda Unicode e independe do layout.
+ * Teclas → códigos virtuais do SO e flags de modificador. No macOS, códigos do
+ * layout físico ANSI: num layout não-US, "cmd+z" ainda é a tecla onde fica o Z
+ * no teclado americano. No Windows, Virtual-Key codes (VK_*), que para letras e
+ * dígitos já são o próprio caractere. Para TEXTO use `type`, que manda Unicode
+ * e independe do layout.
  */
 
 const KEY_CODES: Record<string, number> = {
@@ -26,6 +27,34 @@ const MODIFIERS: Record<string, number> = {
   fn: 0x800000,
 }
 
+/**
+ * Virtual-Key codes do Windows. Símbolos usam os VK_OEM_* do layout americano
+ * (o mesmo critério de posição física do macOS).
+ */
+const WIN_KEY_CODES: Record<string, number> = {
+  ...Object.fromEntries('abcdefghijklmnopqrstuvwxyz'.split('').map((c) => [c, c.toUpperCase().charCodeAt(0)])),
+  ...Object.fromEntries('0123456789'.split('').map((c) => [c, c.charCodeAt(0)])),
+  ';': 0xba, '=': 0xbb, ',': 0xbc, '-': 0xbd, '.': 0xbe, '/': 0xbf, '`': 0xc0, '[': 0xdb, '\\': 0xdc, ']': 0xdd, "'": 0xde,
+  return: 0x0d, enter: 0x0d, tab: 0x09, space: 0x20, backspace: 0x08, delete: 0x2e, forwarddelete: 0x2e, escape: 0x1b, esc: 0x1b,
+  home: 0x24, end: 0x23, pageup: 0x21, pagedown: 0x22, insert: 0x2d,
+  left: 0x25, up: 0x26, right: 0x27, down: 0x28,
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`f${i + 1}`, 0x70 + i])),
+}
+
+/**
+ * Flags do host Windows. "cmd" vira Ctrl: o modelo manda "cmd+s" por hábito do
+ * Mac, e o atalho equivalente no Windows é Ctrl+S. A tecla Windows tem nome
+ * próprio (win/super/meta).
+ */
+export const WIN_FLAGS = { shift: 1, ctrl: 2, alt: 4, win: 8 } as const
+
+const WIN_MODIFIERS: Record<string, number> = {
+  cmd: WIN_FLAGS.ctrl, command: WIN_FLAGS.ctrl, ctrl: WIN_FLAGS.ctrl, control: WIN_FLAGS.ctrl,
+  shift: WIN_FLAGS.shift,
+  alt: WIN_FLAGS.alt, option: WIN_FLAGS.alt, opt: WIN_FLAGS.alt,
+  win: WIN_FLAGS.win, windows: WIN_FLAGS.win, super: WIN_FLAGS.win, meta: WIN_FLAGS.win,
+}
+
 /** Sinônimos que os modelos costumam mandar (formato xdotool / Anthropic). */
 const ALIASES: Record<string, string> = {
   arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down',
@@ -38,7 +67,9 @@ export interface KeyCombo {
 }
 
 /** "cmd+shift+t", "return", "ctrl+a ctrl+c" (espaço separa uma sequência). */
-export function parseKeys(input: string): KeyCombo[] {
+export function parseKeys(input: string, platform: NodeJS.Platform = process.platform): KeyCombo[] {
+  const codes = platform === 'win32' ? WIN_KEY_CODES : KEY_CODES
+  const modifiers = platform === 'win32' ? WIN_MODIFIERS : MODIFIERS
   const chords = input.trim().split(/\s+/).filter(Boolean)
   if (!chords.length) throw new ComputerError('badRequest', 'Empty key.')
   return chords.map((chord) => {
@@ -48,15 +79,15 @@ export function parseKeys(input: string): KeyCombo[] {
     let code: number | null = null
     for (const raw of parts) {
       const part = ALIASES[raw] ?? raw
-      if (part in MODIFIERS) {
-        flags |= MODIFIERS[part]
+      if (part in modifiers) {
+        flags |= modifiers[part]
         continue
       }
       if (code !== null) throw new ComputerError('badRequest', `"${chord}" has more than one non-modifier key.`)
-      if (!(part in KEY_CODES)) {
+      if (!(part in codes)) {
         throw new ComputerError('badRequest', `Unknown key "${raw}". Use names like return, tab, escape, backspace, up, f5, or a single letter/digit; for text use action "type".`)
       }
-      code = KEY_CODES[part]
+      code = codes[part]
     }
     if (code === null) throw new ComputerError('badRequest', `"${chord}" has only modifiers.`)
     return { code, flags }

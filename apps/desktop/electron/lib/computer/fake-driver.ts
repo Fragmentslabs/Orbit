@@ -63,10 +63,16 @@ export interface FakeDriver extends ComputerDriver {
   restored: number[][]
 }
 
-export function createFakeDriver(png: Buffer): FakeDriver {
+export interface FakeDriverOptions {
+  /** 'win32' liga o clique por mensagem de janela (capabilities.messageMouse) */
+  platform?: NodeJS.Platform
+}
+
+export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): FakeDriver {
   let acted = 0
+  const platform = options.platform ?? 'darwin'
   const driver: FakeDriver = {
-    platform: 'darwin',
+    platform,
     actions: [],
     restored: [],
     elementResult: { done: 'press', action: 'AXPress' },
@@ -74,7 +80,7 @@ export function createFakeDriver(png: Buffer): FakeDriver {
     scrollResult: { done: 'scroll' },
     selection: { location: 0, length: 49, text: 'Rascunho — esta linha será selecionada e trocada.' },
     changeAfterAction: true,
-    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true }),
+    capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: platform === 'win32' }),
     perms: async () => ({ accessibility: true }),
     apps: async (): Promise<AppsSnapshot> => ({
       apps: [
@@ -85,6 +91,8 @@ export function createFakeDriver(png: Buffer): FakeDriver {
     }),
     tree: async () => {
       const tree = fakeTree()
+      // No Windows o host manda a identidade da observação em cada nó.
+      if (platform === 'win32') for (const n of tree.nodes) n.ref = `r:1:${n.id}`
       if (driver.changeAfterAction && acted > 0) tree.nodes[2].value = `Olá ${acted}`
       return tree
     },

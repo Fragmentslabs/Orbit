@@ -6,8 +6,13 @@ import { ComputerError, type Frame } from './types'
  *    topo esquerdo do monitor principal; monitores à esquerda/acima ficam
  *    negativos);
  *  - pixels do screenshot: o que o modelo vê, já reduzido ao lado máximo.
- * Entre os dois só existe a razão de escala da janela — a conversão DIP↔px do
- * Windows não entra aqui.
+ * Entre os dois só existe a razão de escala da janela.
+ *
+ * No Windows o host é per-monitor DPI aware: UIA, DWM, PrintWindow e SendInput
+ * falam pixel físico do desktop virtual, e o "global" do contrato é esse
+ * pixel. O screenshot já sai do tamanho do frame (escala 1). DIP só existe do
+ * lado do Electron — `physicalToDip` é a ponte, se algo do Orbit precisar se
+ * alinhar à janela-alvo.
  */
 
 export interface ShotGeometry {
@@ -71,4 +76,37 @@ export function visibleIn(window: Frame, frame: Frame): boolean {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+/**
+ * Um monitor: limites em DIP (como o Electron descreve), o fator de escala e o
+ * canto em pixel físico (`screen.dipToScreenRect(null, bounds)`). Sem o canto
+ * físico, vale o canto DIP — certo para monitores ao lado de um principal a 100%.
+ */
+export interface DisplayScale {
+  bounds: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  physicalOrigin?: { x: number; y: number }
+}
+
+/**
+ * Retângulo em pixel físico (Windows) → DIP do Electron. Cada monitor tem a
+ * sua escala, então a conversão é relativa ao canto do monitor que contém o
+ * centro do retângulo (o mesmo que `screen.screenToDipRect`, testável sem
+ * Electron).
+ */
+export function physicalToDip(frame: Frame, displays: DisplayScale[]): Frame {
+  const cx = frame[0] + frame[2] / 2
+  const cy = frame[1] + frame[3] / 2
+  const origin = (d: DisplayScale) => d.physicalOrigin ?? { x: d.bounds.x, y: d.bounds.y }
+  const display =
+    displays.find((d) => {
+      const o = origin(d)
+      return cx >= o.x && cx < o.x + d.bounds.width * d.scaleFactor && cy >= o.y && cy < o.y + d.bounds.height * d.scaleFactor
+    }) ?? displays[0]
+  if (!display) return frame
+  const s = display.scaleFactor || 1
+  const o = origin(display)
+  const { x, y } = display.bounds
+  return [round2(x + (frame[0] - o.x) / s), round2(y + (frame[1] - o.y) / s), round2(frame[2] / s), round2(frame[3] / s)]
 }

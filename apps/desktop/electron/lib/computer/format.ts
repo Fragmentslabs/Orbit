@@ -16,6 +16,73 @@ const QUIET_ACTIONS = new Set(['AXScrollToVisible', 'AXShowDefaultUI', 'AXShowAl
 /** Subpapéis que não dizem nada além do papel. */
 const PLAIN_SUBROLES = new Set(['AXStandardWindow', 'AXUnknown', 'AXContentList', 'AXTextAttachment'])
 
+/**
+ * ControlType da UIA (Windows) → papel do AX. O host manda o nome cru da UIA e
+ * a tradução mora aqui: o resto do módulo, o prompt e o modelo falam um
+ * vocabulário só. Papéis do macOS começam com "AX" e passam direto.
+ */
+const UIA_ROLES: Record<string, string> = {
+  AppBar: 'AXToolbar',
+  Button: 'AXButton',
+  Calendar: 'AXGroup',
+  CheckBox: 'AXCheckBox',
+  ComboBox: 'AXComboBox',
+  Custom: 'AXUnknown',
+  DataGrid: 'AXTable',
+  DataItem: 'AXRow',
+  Document: 'AXWebArea',
+  Edit: 'AXTextField',
+  Group: 'AXGroup',
+  Header: 'AXGroup',
+  HeaderItem: 'AXColumnHeader',
+  Hyperlink: 'AXLink',
+  Image: 'AXImage',
+  List: 'AXList',
+  ListItem: 'AXListItem',
+  Menu: 'AXMenu',
+  MenuBar: 'AXMenuBar',
+  MenuItem: 'AXMenuItem',
+  Pane: 'AXGroup',
+  ProgressBar: 'AXProgressIndicator',
+  RadioButton: 'AXRadioButton',
+  ScrollBar: 'AXScrollBar',
+  SemanticZoom: 'AXGroup',
+  Separator: 'AXSplitter',
+  Slider: 'AXSlider',
+  Spinner: 'AXIncrementor',
+  SplitButton: 'AXMenuButton',
+  StatusBar: 'AXStatusBar',
+  Tab: 'AXTabGroup',
+  TabItem: 'AXTab',
+  Table: 'AXTable',
+  Text: 'AXStaticText',
+  Thumb: 'AXValueIndicator',
+  TitleBar: 'AXGroup',
+  ToolBar: 'AXToolbar',
+  ToolTip: 'AXHelpTag',
+  Tree: 'AXOutline',
+  TreeItem: 'AXTreeItem',
+  Window: 'AXWindow',
+}
+
+/**
+ * Papel no vocabulário do AX. `Document` é a página no Chromium/Edge e também
+ * a área de texto do Bloco de Notas do Windows 11: o host marca o editável com
+ * subrole "editable", que vira área de texto — "web area" no Bloco de Notas
+ * confundiria o modelo.
+ */
+export function normalizeRole(node: Pick<AxNode, 'role' | 'subrole' | 'url'>): string {
+  if (node.role.startsWith('AX')) return node.role
+  if (node.role === 'Document' && node.subrole === 'editable' && !node.url) return 'AXTextArea'
+  return UIA_ROLES[node.role] ?? 'AXUnknown'
+}
+
+/** O nó no vocabulário do AX (papel traduzido, sem o subrole da UIA). */
+export function normalizeNode(node: AxNode): AxNode {
+  if (node.role.startsWith('AX')) return node
+  return { ...node, role: normalizeRole(node), subrole: null }
+}
+
 export const SCREEN_CONTENT_OPEN = '<screen_content untrusted="true">'
 export const SCREEN_CONTENT_CLOSE = '</screen_content>'
 
@@ -55,7 +122,10 @@ export interface FormattedTree {
 
 export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): FormattedTree {
   const children = new Map<number, AxNode[]>()
-  for (const node of tree.nodes) {
+  // O papel cru fica para a ação conferir a identidade no vocabulário do host.
+  const native = new Map(tree.nodes.map((n) => [n.id, n.role]))
+  const nodes = tree.nodes.map(normalizeNode)
+  for (const node of nodes) {
     if (node.parent < 0) continue
     const list = children.get(node.parent) ?? []
     list.push(node)
@@ -78,7 +148,9 @@ export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): Formatte
       handles.set(index, {
         index,
         path: node.path,
+        ...(node.ref ? { ref: node.ref } : {}),
         role: node.role,
+        nativeRole: native.get(node.id) ?? node.role,
         title: node.title,
         frame: node.frame,
         actions: node.actions,
@@ -90,7 +162,7 @@ export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): Formatte
     }
     for (const child of children.get(node.id) ?? []) visit(child, childDepth)
   }
-  const root = tree.nodes.find((n) => n.parent < 0)
+  const root = nodes.find((n) => n.parent < 0)
   if (root) visit(root, 0)
   return { lines, handles, focusedIndex, url }
 }

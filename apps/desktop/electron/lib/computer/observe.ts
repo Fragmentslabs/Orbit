@@ -39,7 +39,7 @@ export interface ObservationResult {
   tree: TreeSnapshot | null
 }
 
-/** Acha o app pelo que o modelo mandou: bundle id, nome (sem caixa) ou pid. */
+/** Acha o app pelo que o modelo mandou: bundle id, exe (Windows), nome (sem caixa) ou pid. */
 export function resolveApp(snapshot: AppsSnapshot, query: string): AppInfo {
   const q = query.trim()
   const lower = q.toLowerCase()
@@ -48,6 +48,8 @@ export function resolveApp(snapshot: AppsSnapshot, query: string): AppInfo {
     byPid ??
     snapshot.apps.find((a) => a.bundleId === q) ??
     snapshot.apps.find((a) => a.bundleId?.toLowerCase() === lower) ??
+    // Windows: pelo exe, com ou sem ".exe" ("notepad" acha o Notepad.exe).
+    snapshot.apps.find((a) => a.exe && [lower, `${lower}.exe`].includes(a.exe.toLowerCase())) ??
     snapshot.apps.find((a) => a.name.toLowerCase() === lower) ??
     snapshot.apps.find((a) => a.name.toLowerCase().includes(lower))
   if (!app) {
@@ -106,7 +108,7 @@ export async function observe(
       ? driver.tree(
           {
             pid: app.pid,
-            window: { frame: win.frame, title: win.title },
+            window: { id: win.id, frame: win.frame, title: win.title },
             maxNodes: options.maxNodes,
             enhance: options.enhance,
             enhanceFull: options.enhance && Boolean(app.bundleId && CHROMIUM_BROWSERS.has(app.bundleId)),
@@ -143,7 +145,7 @@ export async function observe(
   const lines: string[] = []
   lines.push(`App: ${app.name} (${app.bundleId ?? 'no bundle id'}, pid ${app.pid})${app.active ? '' : ' — in the background'}`)
   lines.push(
-    `Window ${win.id}: ${title ? `"${title}"` : '(untitled)'} — ${Math.round(win.frame[2])}×${Math.round(win.frame[3])} pt at (${Math.round(win.frame[0])}, ${Math.round(win.frame[1])})`,
+    `Window ${win.id}: ${title ? `"${title}"` : '(untitled)'} — ${Math.round(win.frame[2])}×${Math.round(win.frame[3])} ${driver.platform === 'win32' ? 'px' : 'pt'} at (${Math.round(win.frame[0])}, ${Math.round(win.frame[1])})`,
   )
   lines.push(
     image
@@ -201,7 +203,7 @@ export async function query(driver: ComputerDriver, registry: Registry, options:
   const tree = await driver.tree(
     {
       pid: app.pid,
-      window: { frame: win.frame, title: win.title },
+      window: { id: win.id, frame: win.frame, title: win.title },
       maxNodes: options.maxNodes,
       deadlineMs: 8000,
       enhance: options.enhance,

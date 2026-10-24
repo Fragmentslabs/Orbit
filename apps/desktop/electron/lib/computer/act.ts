@@ -114,7 +114,11 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
   assertTargetAllowed(app)
   const record = registry.forAction(req.sessionId, app.pid, req.observationId)
   const mode: DeliveryMode = req.pointer === 'global' ? 'global' : 'pid'
-  const windowRef = { frame: record.window.frame, title: record.window.title }
+  const windowRef = { id: record.window.id, frame: record.window.frame, title: record.window.title }
+  // Windows: mouse e roda por mensagem de janela chegam ao app sem mover o
+  // cursor. No macOS não (Fase 0) — lá o modo dirigido é só acessibilidade.
+  const messageMouse = mode === 'pid' && driver.capabilities().messageMouse
+  const keys = (input: string) => parseKeys(input, driver.platform)
 
   const handle = req.element !== undefined ? registry.element(record, req.element) : null
   const pointAt = (h: ElementHandle | null, x?: number, y?: number): [number, number] => {
@@ -127,13 +131,17 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     if (x === undefined || y === undefined) throw new ComputerError('badRequest', `Action "${req.action}" needs element or x/y.`)
     return shotToGlobal(record.geometry, x, y)
   }
-  const expect = (h: ElementHandle) => ({ role: h.role, title: h.title })
+  // A identidade vai no vocabulário do host (UIA no Windows): é ele que confere.
+  const expect = (h: ElementHandle) => ({ role: h.nativeRole ?? h.role, title: h.title })
   const element = (
     h: ElementHandle,
     kind: 'press' | 'focus' | 'setValue' | 'select',
     extra: { actions?: string[]; value?: string; find?: string; occurrence?: number } = {},
   ) =>
-    driver.act({ op: 'element', pid: app.pid, window: windowRef, path: h.path, expect: expect(h), kind, ...extra }, req.signal)
+    driver.act(
+      { op: 'element', pid: app.pid, window: windowRef, path: h.path, ...(h.ref ? { ref: h.ref } : {}), expect: expect(h), kind, ...extra },
+      req.signal,
+    )
   const mouse = (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') =>
     driver.act({ op: 'mouse', pid: app.pid, windowId: record.window.id, x: point[0], y: point[1], button, clicks, kind, mode }, req.signal)
   // Alvo para o marcador da miniatura: o elemento, ou o ponto x/y pedido.
@@ -166,6 +174,12 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     }
     return ` Selection now: ${sel.length} character(s)${sel.text ? ` ${JSON.stringify(sel.text)}` : ''}.`
   }
+  // Clique por mensagem de janela (Windows, modo dirigido): o app não confirma
+  // nada — o retorno pede para conferir a próxima observação.
+  const messageClick = async (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') => {
+    await mouse(point, button, clicks, kind)
+    return ' via a window message (the app does not confirm it — check the next observation)'
+  }
   const needsGlobal = (what: string) =>
     new ComputerError(
       'unavailable',
@@ -183,6 +197,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
         const r = await hit(point, PRESS_ACTIONS, true)
         if (r.done === 'press') return done(pressed(r, `Pressed ${r.node ? roleOf(r.node) : 'the element'} at ${where(point)}`))
         if (r.done === 'focus') return done(`Focused ${r.node ? roleOf(r.node) : 'the text field'} at ${where(point)} — use "type" to write in it.`)
+        if (messageMouse) return done(`Clicked ${where(point)}${await messageClick(point, 'left')}.`)
         throw new ComputerError(
           'unavailable',
           `Nothing clickable through accessibility at ${where(point)}${r.node ? ` (found ${roleOf(r.node)} without a press action)` : ''}. In directed mode a click must land on a button/link/control or a text field. Try another element from the tree, the keyboard, or ask the user to enable "Global pointer" in Settings → Computer.`,
@@ -200,14 +215,16 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       if (mode === 'pid') {
         const r = await hit(point, ['AXShowMenu'], false)
         if (r.done) return done(`Opened the context menu at ${where(point)}.`)
+        if (messageMouse) return done(`Right-clicked ${where(point)}${await messageClick(point, 'right')}.`)
         throw needsGlobal('A right-click where no element offers a context menu')
       }
       await mouse(point, 'right')
       return done(`Right-clicked ${where(point)} with the global pointer.`)
     }
     case 'middle_click': {
-      if (mode === 'pid') throw needsGlobal('Middle-click')
       const point = pointAt(handle, req.x, req.y)
+      if (messageMouse) return done(`Middle-clicked ${where(point)}${await messageClick(point, 'middle')}.`)
+      if (mode === 'pid') throw needsGlobal('Middle-click')
       await mouse(point, 'middle')
       return done(`Middle-clicked ${where(point)} with the global pointer.`)
     }
@@ -215,14 +232,19 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     case 'triple_click': {
       // Selecionar palavra (duplo) ou linha (triplo) não tem ação AX equivalente.
       const triple = req.action === 'triple_click'
-      if (mode === 'pid') throw needsGlobal(triple ? 'Triple-click' : 'Double-click')
       const point = pointAt(handle, req.x, req.y)
+      if (messageMouse) {
+        const how = await messageClick(point, 'left', triple ? 3 : 2)
+        return done(`${triple ? 'Triple' : 'Double'}-clicked ${where(point)}${how}.${await selectionNote()}`)
+      }
+      if (mode === 'pid') throw needsGlobal(triple ? 'Triple-click' : 'Double-click')
       await mouse(point, 'left', triple ? 3 : 2)
       return done(`${triple ? 'Triple' : 'Double'}-clicked ${where(point)} with the global pointer.${await selectionNote()}`)
     }
     case 'move': {
-      if (mode === 'pid') throw needsGlobal('Hovering (moving the pointer)')
       const point = pointAt(handle, req.x, req.y)
+      if (messageMouse) return done(`Hovered ${where(point)}${await messageClick(point, 'left', 1, 'move')}.`)
+      if (mode === 'pid') throw needsGlobal('Hovering (moving the pointer)')
       await mouse(point, 'left', 1, 'move')
       return done(`Moved the pointer to ${where(point)}.`)
     }
@@ -250,10 +272,14 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
         // sem barra exposta, cai para Page Up/Down (teclado por pid funciona).
         const r = await driver.act({ op: 'scrollAx', pid: app.pid, x: point[0], y: point[1], dx, dy }, req.signal)
         if (r.done) return done(`Scrolled ${direction} ~${pixels}px at ${point.join(', ')} (accessibility scroll bar).`)
+        if (messageMouse) {
+          await driver.act({ op: 'scroll', pid: app.pid, x: point[0], y: point[1], dx, dy, mode }, req.signal)
+          return done(`Scrolled ${direction} ${ticks} step(s) at ${point.join(', ')} via a window message (check the next observation).`)
+        }
         if (dy !== 0) {
           const key = direction === 'up' ? 'pageup' : 'pagedown'
           const pages = Math.max(1, Math.round(ticks / 3))
-          await driver.act({ op: 'keys', pid: app.pid, combos: parseKeys(Array(pages).fill(key).join(' ')), mode }, req.signal)
+          await driver.act({ op: 'keys', pid: app.pid, combos: keys(Array(pages).fill(key).join(' ')), mode }, req.signal)
           return done(`Scrolled ${direction} with ${pages}× ${key} (no accessible scroll bar there; the keys go to the focused element).`)
         }
         throw needsGlobal('Horizontal scrolling here')
@@ -275,7 +301,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     }
     case 'key': {
       if (!req.key) throw new ComputerError('badRequest', 'Action "key" needs "key" (e.g. "cmd+s", "return", "ctrl+a ctrl+c").')
-      const combos = parseKeys(req.key)
+      const combos = keys(req.key)
       await driver.act({ op: 'keys', pid: app.pid, combos, mode }, req.signal)
       return done(`Pressed ${req.key}.`)
     }
