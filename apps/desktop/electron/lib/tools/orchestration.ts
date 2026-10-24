@@ -6,7 +6,8 @@ import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
 import { getProvider } from '../catalog'
 import { resolveModel } from '../providers'
-import { buildProviderOptions, reasoningPrepareStep } from '../reasoning'
+import { buildProviderOptions } from '../reasoning'
+import { agentPrepareStep } from '../agent-step'
 import type { ToolContext } from './context'
 import { buildToolSet } from './index'
 import { modoGlobal } from '../permission/modo-global'
@@ -98,8 +99,8 @@ export function createSubagentTool(
           : null
 
       const model = await resolveModel(worker.providerId, worker.modelId)
-      // provider do worker p/ reaplicar o interleave de reasoning (DeepSeek)
-      // a cada passo do tool loop — o mesmo prepareStep do agente principal.
+      // provider do worker p/ o preparo de cada passo do tool loop (corte de
+      // contexto, reasoning, cache) — o mesmo do agente principal.
       const workerProvider = await getProvider(worker.providerId)
       const tools = buildToolSet(workerInput, workerCtx)
       const modoWorker = workerInput.options.permissionMode ?? 'ask'
@@ -122,7 +123,7 @@ export function createSubagentTool(
         stopWhen: stepCountIs(maxSteps),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),
-        prepareStep: reasoningPrepareStep(workerProvider, worker.modelId),
+        prepareStep: agentPrepareStep(workerProvider, worker.modelId, { directory: ctx?.directory }),
       })
       const notice = codeUnavailable ? `${SUBAGENT_NO_FOLDER_NOTICE}\n\n` : ''
       return notice + (result.text || SUBAGENT_EMPTY_OUTPUT)

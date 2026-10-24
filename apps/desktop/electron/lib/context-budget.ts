@@ -1,5 +1,7 @@
+import path from 'node:path'
 import type { ModelMessage } from 'ai'
 import type { CatalogModel } from '@shared/chat'
+import { parseFileView, parseInspection } from './bash-inspect'
 
 /**
  * Orçamento de contexto DENTRO do turno.
@@ -74,6 +76,27 @@ const MAX_KEPT_INPUT_STRING = 400
  */
 const IDEMPOTENT_TOOLS = new Set(['read', 'ls', 'glob', 'grep', 'code_search', 'code_outline', 'code_refs'])
 
+/**
+ * Teto de TRABALHO do turno, abaixo do teto de segurança (`contextBudget`).
+ * O teto de segurança só impede o request que o provedor recusa; nos dados
+ * reais os turnos longos rodavam 200–470k tokens por passo, e cada passo
+ * reenvia tudo — os 10% de turnos mais pesados eram 66% da entrada. Passando
+ * disto, o que é antigo sai em lote (ver BATCH_TARGET).
+ */
+const WORKING_CONTEXT_CAP = 100_000
+
+/**
+ * Até onde o corte em lote desce, como fração do teto de trabalho. Descartar
+ * só o necessário para caber mudaria o meio do contexto a cada passo — e cada
+ * mudança invalida o cache de prefixo do provedor dali em diante. Descendo bem
+ * abaixo do teto, o contexto volta a crescer intacto por muitos passos antes
+ * do próximo corte.
+ */
+const BATCH_TARGET = 0.6
+
+/** O `read` sem `limit` mostra até isto (MAX_READ_LINES em tools/files.ts). */
+const READ_DEFAULT_LINES = 2000
+
 /** Prefixo do texto que substitui um resultado descartado — serve de sentinela
  *  para não reprocessar, step após step, o que já foi cortado. */
 const DROPPED_MARK = '[SYSTEM: tool output dropped'
@@ -103,6 +126,11 @@ export function contextBudget(model: CatalogModel | undefined): number {
   const context = Math.min(model?.limit?.context || ABSOLUTE_CONTEXT_CAP, ABSOLUTE_CONTEXT_CAP)
   const output = Math.min(model?.limit?.output || OUTPUT_RESERVE_CAP, OUTPUT_RESERVE_CAP)
   return Math.max(context - output - PROMPT_RESERVE, MIN_BUDGET)
+}
+
+/** Teto a partir do qual o corte em lote entra — nunca acima do de segurança. */
+export function workingBudget(model: CatalogModel | undefined): number {
+  return Math.min(contextBudget(model), WORKING_CONTEXT_CAP)
 }
 
 function safeChars(value: unknown): number {
@@ -179,6 +207,13 @@ interface ResultSlot {
   toolCallId: string
   toolName: string
   chars: number
+  /** Começo do texto do resultado — o `read` e o `write` dizem ali o caminho
+   *  absoluto que resolveram, que o input relativo não diz. */
+  head: string
+  /** Erro da ferramenta ou bash com exit code diferente de zero */
+  failed: boolean
+  /** Saída de bash com o meio cortado (tools/shell.ts) — não cobre faixa nenhuma */
+  partial: boolean
 }
 
 function collectCalls(messages: ModelMessage[]): Map<string, unknown> {
@@ -202,27 +237,90 @@ function collectResults(messages: ModelMessage[]): ResultSlot[] {
       if (partType(part) !== 'tool-result') return
       const result = part as unknown as Record<string, unknown>
       if (isDropped(result)) return
+      const output = isRecord(result.output) ? result.output : {}
+      const text = typeof output.value === 'string' ? output.value : ''
       slots.push({
         at: `${mi}:${pi}`,
         toolCallId: typeof result.toolCallId === 'string' ? result.toolCallId : '',
         toolName: typeof result.toolName === 'string' ? result.toolName : '',
         chars: outputChars(result.output),
+        head: text.slice(0, 600),
+        failed:
+          (typeof output.type === 'string' && output.type.startsWith('error')) ||
+          /\(exit code: [^)]*\)\s*$/.test(text.slice(-40)),
+        partial: text.includes(OMITTED_MIDDLE_MARK),
       })
     })
   })
   return slots
 }
 
-/** Chave de identidade de uma chamada — null quando a ferramenta não é
- *  idempotente ou os argumentos não são serializáveis. */
-function signature(slot: ResultSlot, calls: Map<string, unknown>): string | null {
-  if (!IDEMPOTENT_TOOLS.has(slot.toolName) || !slot.toolCallId) return null
-  if (!calls.has(slot.toolCallId)) return null
-  const input = safeStringify(calls.get(slot.toolCallId))
-  return input == null ? null : `${slot.toolName}${KEY_SEPARATOR}${input}`
+/**
+ * O que um resultado representa, para saber quando um posterior o torna
+ * redundante:
+ * - `query`: leitura idempotente; a mesma chave repetida substitui a anterior.
+ * - `file`: um trecho de arquivo (`read`, `cat`, `sed -n`, `head`); um trecho
+ *   posterior do MESMO arquivo que o cubra o substitui.
+ * - `overwrite`: um `write` do arquivo inteiro; nada antes dele sobre esse
+ *   arquivo continua verdade.
+ */
+type ResultView =
+  | { kind: 'query'; key: string }
+  | { kind: 'file'; path: string; from: number; to: number }
+  | { kind: 'overwrite'; path: string }
+
+/** O que tools/shell.ts escreve no lugar do meio de uma saída longa */
+const OMITTED_MIDDLE_MARK = 'characters omitted from the middle of the output'
+
+const READ_HEADER = /^<file path="([^"]+)">/
+const WRITE_HEADER = /^File written: (.+) \(\d+ characters\)/
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
-type DropReason = 'superseded' | 'age' | 'oversized'
+function viewOf(slot: ResultSlot, calls: Map<string, unknown>, directory?: string): ResultView | null {
+  if (!slot.toolCallId || !calls.has(slot.toolCallId)) return null
+  const input = calls.get(slot.toolCallId)
+  if (slot.toolName === 'write') {
+    const match = WRITE_HEADER.exec(slot.head)
+    return match && !slot.failed ? { kind: 'overwrite', path: match[1] } : null
+  }
+  if (slot.toolName === 'read') {
+    // Só arquivo de texto: documento (PDF/DOCX) pagina por página, não por linha.
+    const match = READ_HEADER.exec(slot.head)
+    if (match && isRecord(input)) {
+      const from = Math.max(1, numberOr(input.offset, 1))
+      const lines = Math.min(numberOr(input.limit, READ_DEFAULT_LINES), READ_DEFAULT_LINES)
+      return { kind: 'file', path: match[1], from, to: from + Math.max(1, lines) - 1 }
+    }
+  }
+  if (slot.toolName === 'bash') {
+    if (!directory || !isRecord(input) || typeof input.command !== 'string') return null
+    const inspection = parseInspection(input.command, directory)
+    if (!inspection) return null
+    const file = parseFileView(inspection)
+    if (file) return slot.failed || slot.partial ? null : { kind: 'file', ...file }
+    return { kind: 'query', key: `bash${KEY_SEPARATOR}${inspection.cwd}${KEY_SEPARATOR}${inspection.command}` }
+  }
+  if (!IDEMPOTENT_TOOLS.has(slot.toolName)) return null
+  const serialized = safeStringify(input)
+  return serialized == null ? null : { kind: 'query', key: `${slot.toolName}${KEY_SEPARATOR}${serialized}` }
+}
+
+/** Por que um resultado posterior torna este redundante — null quando não torna. */
+function supersededBy(older: ResultView, newer: ResultView, newerFailed: boolean): DropReason | null {
+  if (older.kind === 'query') {
+    return newer.kind === 'query' && newer.key === older.key ? 'superseded' : null
+  }
+  if (older.kind !== 'file' || newer.kind === 'query' || path.normalize(newer.path) !== path.normalize(older.path)) {
+    return null
+  }
+  if (newer.kind === 'overwrite') return 'overwritten'
+  return !newerFailed && newer.from <= older.from && newer.to >= older.to ? 'covered' : null
+}
+
+type DropReason = 'superseded' | 'covered' | 'overwritten' | 'age' | 'oversized'
 
 function droppedText(toolName: string, chars: number, reason: DropReason): string {
   const tool = toolName || 'tool'
@@ -231,6 +329,12 @@ function droppedText(toolName: string, chars: number, reason: DropReason): strin
   }
   if (reason === 'superseded') {
     return `${DROPPED_MARK} — this \`${tool}\` call was repeated later in the turn with identical arguments; only the newest result is kept. Look further down for it.]`
+  }
+  if (reason === 'covered') {
+    return `${DROPPED_MARK} — these lines of the file were read again later in the turn; only the newest read is kept. Look further down for it.]`
+  }
+  if (reason === 'overwritten') {
+    return `${DROPPED_MARK} — this file was rewritten later in the turn with \`write\`, so this earlier content is stale.]`
   }
   return `${DROPPED_MARK} — the \`${tool}\` result (${chars} chars) was removed to free up context in this turn. Call the tool again if you still need it.]`
 }
@@ -289,18 +393,49 @@ function rewrite(
  * referência quando nada muda, para o `prepareStep` poder responder `{}` e o
  * SDK pular a reescrita das mensagens.
  *
- * Dois critérios, nesta ordem:
- * 1. Chamadas repetidas com os mesmos argumentos (`read` do mesmo arquivo três
- *    vezes num turno é de longe o caso mais comum): só a mais recente sobrevive.
- * 2. Idade, quando ainda não couber: descarta do mais antigo para o mais novo,
- *    preservando sempre os últimos resultados.
+ * Critérios, nesta ordem:
+ * 1. Resultados que um posterior torna redundante: a mesma leitura repetida
+ *    (`read` do mesmo arquivo três vezes num turno é de longe o caso mais
+ *    comum), um trecho relido que cobre o anterior — pelo `read` ou por
+ *    `cat`/`sed -n` no bash — e o arquivo reescrito por `write`.
+ * 2. Teto de trabalho (`softBudget`), quando passa dele: o antigo sai em lote
+ *    até BATCH_TARGET do teto, preservando os últimos resultados.
+ * 3. Teto de segurança (`budgetTokens`), quando ainda não couber: descarta do
+ *    mais antigo para o mais novo, e no limite até os recentes.
  *
  * O que é descartado vira uma linha dizendo o que havia ali e que a ferramenta
  * pode ser chamada de novo — nunca some em silêncio, senão o modelo conclui que
  * nunca leu o arquivo. As tool CALLS ficam: o par call/result é exigido pelos
  * provedores, e quebrá-lo derruba o turno com 400.
  */
-export function trimTurnContext(messages: ModelMessage[], budgetTokens: number): ModelMessage[] {
+export interface TrimOptions {
+  /** Teto de trabalho do corte em lote (ver workingBudget) */
+  softBudget?: number
+  /**
+   * Memória do turno. O SDK entrega ao `prepareStep` as mensagens ORIGINAIS a
+   * cada passo, então sem isto o corte seria refeito do zero e o lote
+   * escorregaria um pouco a cada passo — exatamente a mudança no meio do
+   * contexto que o lote existe para evitar. Com ela, o que saiu continua fora,
+   * com o mesmo texto, e o prefixo fica estável entre os cortes.
+   */
+  state?: TrimState
+  /** Pasta onde o bash roda, para resolver os caminhos de `cat`/`sed -n` */
+  directory?: string
+}
+
+export interface TrimState {
+  dropped: Map<string, DropReason>
+}
+
+export function createTrimState(): TrimState {
+  return { dropped: new Map() }
+}
+
+export function trimTurnContext(
+  messages: ModelMessage[],
+  budgetTokens: number,
+  options: TrimOptions = {},
+): ModelMessage[] {
   const results = collectResults(messages)
   if (results.length === 0) return messages
 
@@ -308,6 +443,7 @@ export function trimTurnContext(messages: ModelMessage[], budgetTokens: number):
   const dropped = new Map<string, string>()
   const droppedCallIds = new Set<string>()
   let used = estimateTokens(messages)
+  const memoryKey = (slot: ResultSlot) => slot.toolCallId || slot.at
 
   // O aviso substituto é montado aqui, e não na reescrita, para que o
   // abatimento seja o tamanho REAL do que sobrou. Estimá-lo por uma constante
@@ -315,31 +451,47 @@ export function trimTurnContext(messages: ModelMessage[], budgetTokens: number):
   // descartes num turno, a conta fechava dentro do orçamento e o request saía
   // fora dele, que é exatamente o erro que este módulo existe para evitar.
   const drop = (slot: ResultSlot, reason: DropReason) => {
+    if (dropped.has(slot.at)) return
     const stub = droppedText(slot.toolName, slot.chars, reason)
     dropped.set(slot.at, stub)
+    options.state?.dropped.set(memoryKey(slot), reason)
     if (slot.toolCallId) droppedCallIds.add(slot.toolCallId)
     used -= Math.max(0, Math.round((slot.chars - stub.length) / CHARS_PER_TOKEN))
   }
 
-  if (used > budgetTokens * SUPERSEDE_THRESHOLD) {
-    const newest = new Map<string, string>()
+  // O que já saiu num passo anterior continua fora, com o mesmo aviso.
+  if (options.state) {
     for (const slot of results) {
-      const key = signature(slot, calls)
-      if (key) newest.set(key, slot.at)
-    }
-    for (const slot of results) {
-      const key = signature(slot, calls)
-      if (key && newest.get(key) !== slot.at) drop(slot, 'superseded')
+      const reason = options.state.dropped.get(memoryKey(slot))
+      if (reason) drop(slot, reason)
     }
   }
 
-  const evict = (keep: number) => {
+  const softBudget = options.softBudget ? Math.min(options.softBudget, budgetTokens) : budgetTokens
+  if (used > softBudget * SUPERSEDE_THRESHOLD) {
+    const views = results.map((slot) => viewOf(slot, calls, options.directory))
+    results.forEach((slot, i) => {
+      const older = views[i]
+      if (!older || dropped.has(slot.at)) return
+      for (let j = results.length - 1; j > i; j--) {
+        const newer = views[j]
+        const reason = newer && supersededBy(older, newer, results[j].failed)
+        if (reason) {
+          drop(slot, reason)
+          return
+        }
+      }
+    })
+  }
+
+  const evict = (keep: number, target = budgetTokens) => {
     for (const slot of results.slice(0, Math.max(0, results.length - keep))) {
-      if (used <= budgetTokens) break
+      if (used <= target) break
       if (dropped.has(slot.at)) continue
       drop(slot, 'age')
     }
   }
+  if (options.softBudget && used > softBudget) evict(KEEP_RECENT_RESULTS, softBudget * BATCH_TARGET)
   evict(KEEP_RECENT_RESULTS)
   // Ainda não coube: avança sobre a mesa de trabalho até o piso. Não é o caso
   // comum — acontece quando poucas saídas gigantes sozinhas já passam do

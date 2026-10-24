@@ -2,7 +2,7 @@ import { stepCountIs, streamText, tool, type LanguageModel, type ToolSet } from 
 import { z } from 'zod'
 import { getProvider } from '../catalog'
 import { errorToText } from '../errors'
-import { reasoningPrepareStep } from '../reasoning'
+import { agentPrepareStep } from '../agent-step'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from '../tools/files'
 import type { ToolContext } from '../tools/context'
 import {
@@ -181,7 +181,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         tools: readOnlyTools(input.directory, controller.signal),
         stopWhen: stepCountIs(EXPLORER_MAX_STEPS),
         abortSignal: controller.signal,
-        prepareStep: reasoningPrepareStep(provider, input.workerModelId),
+        prepareStep: agentPrepareStep(provider, input.workerModelId, { directory: input.directory }),
       })
       for await (const part of result.fullStream) {
         if (part.type === 'text-delta') {
@@ -364,7 +364,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
     tools,
     stopWhen: [() => finished, stepCountIs(COORDINATOR_MAX_STEPS)],
     abortSignal: signal,
-    prepareStep: reasoningPrepareStep(provider, input.modelId),
+    prepareStep: agentPrepareStep(provider, input.modelId, { directory: input.directory }),
   })
   for await (const part of result.fullStream) {
     if (part.type === 'text-delta') hooks.onMainDelta?.(part.text)

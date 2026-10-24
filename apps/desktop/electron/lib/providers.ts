@@ -12,7 +12,7 @@ import { resolveApiKey } from './auth'
 import { findCatalogModel } from '@shared/chat'
 import { getProvider } from './catalog'
 import { ProviderResolutionError } from './provider-errors'
-import { providerRuntimeNpm } from './provider-npm'
+import { modelRuntime } from './provider-npm'
 import {
   SESSION_HEADER,
   SESSION_HEADER_PROVIDERS,
@@ -162,11 +162,13 @@ export async function resolveModel(
   }
   // Id renomeado no models.dev: pede ao provedor o sucessor, não o nome velho
   // (que o gateway às vezes ainda aceita, mas com outro comportamento).
-  modelId = findCatalogModel({ [provider.id]: provider }, provider.id, modelId)?.modelId ?? modelId
+  const found = findCatalogModel({ [provider.id]: provider }, provider.id, modelId)
+  modelId = found?.modelId ?? modelId
 
-  // Provedor personalizado não tem `npm` no catálogo: quem decide o SDK é o
-  // `protocol` do cadastro (ver provider-npm.ts).
-  const npm = providerRuntimeNpm(provider)
+  // O SDK e o endpoint são do MODELO quando o catálogo os declara (ver
+  // modelRuntime); senão os do provedor. Provedor personalizado não tem `npm`
+  // no catálogo: quem decide o SDK é o `protocol` do cadastro.
+  const { npm, api } = modelRuntime(provider, found?.model)
 
   // SDKs que usam auth própria do ambiente (gcloud ADC, AWS credentials, etc.)
   if (npm === '@ai-sdk/google-vertex' || npm === '@ai-sdk/amazon-bedrock') {
@@ -219,14 +221,14 @@ export async function resolveModel(
   if (factory && npm !== '@ai-sdk/openai-compatible') {
     const sdk = (factory as SdkFactory)({
       apiKey,
-      ...(provider.api ? { baseURL: provider.api } : {}),
+      ...(api ? { baseURL: api } : {}),
       ...(headers ? { headers } : {}),
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
     })
     return sdk(modelId)
   }
 
-  if (!provider.api) {
+  if (!api) {
     throw new ProviderResolutionError(
       `Provider ${provider.name} requires the SDK ${npm}, which Orbit does not bundle yet.`,
       'missing-sdk',
@@ -236,7 +238,7 @@ export async function resolveModel(
   const sdk = createOpenAICompatible({
     name: provider.id,
     apiKey,
-    baseURL: provider.api,
+    baseURL: api,
     includeUsage: true,
     ...(headers ? { headers } : {}),
     ...(fetchImpl ? { fetch: fetchImpl } : {}),

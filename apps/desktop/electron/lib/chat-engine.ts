@@ -26,7 +26,8 @@ import {
 import { getProvider, modelSupportsVision } from './catalog'
 import { resolveTitle, titleFromUserText } from './chat-title'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
-import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
+import { estimateTokens, maxStepsFor } from './context-budget'
+import { createStepPreparer } from './agent-step'
 import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
 import { t as mainT } from './i18n'
@@ -1482,10 +1483,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const modelVision = modelSupportsVision(provider, primary.modelId)
         const catalogModel = provider?.models[primary.modelId]
         const supportsTools = catalogModel?.tool_call !== false
-        // Teto de passos e orçamento de contexto DESTE modelo: a rotação pode
-        // cair num modelo de janela menor, e o corte tem que acompanhar.
+        // Teto de passos e preparo de cada passo (corte de contexto, reasoning,
+        // cache — ver agent-step.ts) DESTE modelo: a rotação pode cair num
+        // modelo de janela menor, e o corte tem que acompanhar. Um preparador
+        // por tentativa: a memória do corte vale para o turno inteiro, inclusive
+        // as continuações abaixo, que reenviam as mesmas tool calls.
         const maxSteps = maxStepsFor(catalogModel)
-        const turnBudget = contextBudget(catalogModel)
+        const stepPreparer = createStepPreparer(provider, primary.modelId, { directory: input.directory })
 
     // Compactação automática: os tokens reais da última resposta indicam que o
     // contexto está perto do limite → resume o trecho antigo uma única vez.
@@ -1782,38 +1786,31 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // que estoura são as tool calls + resultados que o SDK reenvia a
           // cada step. Sem isto um turno longo pede milhões de tokens e o
           // provedor recusa a requisição inteira.
-          const trimmed = trimTurnContext(messages, turnBudget)
-          if (trimmed !== messages) {
+          const droppedBefore = stepPreparer.dropped
+          const prepared = stepPreparer.prepare(messages)
+          if (stepPreparer.dropped > droppedBefore) {
             console.warn(
-              `[context] step ${stepNumber}: contexto do turno cortado para caber em ${turnBudget} tokens`,
+              `[context] step ${stepNumber}: ${stepPreparer.dropped - droppedBefore} resultado(s) de tool descartado(s) (teto de trabalho ${stepPreparer.workingBudget}, segurança ${stepPreparer.budget} tokens)`,
             )
           }
           // Medidor ao vivo: o que está prestes a sair, quando cresceu além
           // do último valor real. É o aviso que faltava num turno longo — o
           // número só se mexia no fim da resposta (ou nunca, se ela falhasse).
-          const outgoing = estimateTokens(trimmed)
+          const outgoing = estimateTokens(prepared)
           if (outgoing > lastContextInput) {
             lastContextInput = outgoing
             emitContext(outgoing, 0, true)
           }
-          // Reaplica a normalização de reasoning a cada passo do tool loop: o
-          // SDK reconstrói as mensagens entre steps e pode descartar o
-          // reasoning_content vazio retornado numa chamada de tool (DeepSeek
-          // exige o campo de volta em todas as mensagens de assistente).
-          const normalized = normalizeMessages(
-            trimmed,
-            interleavedReasoningField(provider, primary.modelId),
-          )
           // Último passo EXECUTADO é maxSteps - 1: o SDK chama o prepareStep com
           // stepNumber = passos já concluídos e o do-while para quando
           // steps.length === maxSteps (isStepCount usa igualdade). Com
           // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
           // terminar numa tool call sem texto.
-          if (stepNumber < maxSteps - 1) return normalized === messages ? {} : { messages: normalized }
+          if (stepNumber < maxSteps - 1) return prepared === messages ? {} : { messages: prepared }
           return {
             activeTools: [],
             toolChoice: 'none' as const,
-            messages: [...normalized, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
+            messages: [...prepared, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
           }
         },
         onError: () => {

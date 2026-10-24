@@ -1,4 +1,4 @@
-import type { CatalogProvider } from '@shared/chat'
+import type { CatalogModel, CatalogProvider } from '@shared/chat'
 
 /**
  * Pacote que o runtime usa para falar com um provedor. No catálogo quem manda
@@ -23,5 +23,22 @@ export function providerRuntimeNpm(
       return '@ai-sdk/openai'
     default:
       return '@ai-sdk/openai-compatible'
+  }
+}
+
+/**
+ * Pacote e endpoint de um MODELO. O models.dev pode trocar os dois por modelo
+ * (`model.provider`): no OpenCode Go o provedor declara openai-compatible, mas
+ * o Claude Haiku só existe em /go/anthropic/v1 pelo protocolo Anthropic — pelo
+ * endpoint OpenAI o gateway responde "Model does not support this protocol.".
+ * Sem modelo, ou sem o override, vale o do provedor.
+ */
+export function modelRuntime(
+  provider: Pick<CatalogProvider, 'npm' | 'protocol' | 'api'> | undefined,
+  model?: Pick<CatalogModel, 'provider'>,
+): { npm: string; api?: string } {
+  return {
+    npm: model?.provider?.npm ?? providerRuntimeNpm(provider),
+    api: model?.provider?.api ?? provider?.api,
   }
 }

@@ -5,10 +5,17 @@ import { z } from 'zod'
 import type { ToolContext } from './context'
 import { userShellEnv } from '../shell-env'
 import { registerProcess, type ProcessInfo } from '../process-manager'
+import { parseFileView, parseInspection, symbolSearchPattern } from '../bash-inspect'
 
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
-const MAX_OUTPUT = 30_000
+/**
+ * Saída guardada: o começo E o fim. Guardar só o começo, como antes, perdia
+ * justamente o que importa num build ou teste que falha — o erro e o resumo
+ * vêm no fim — e o agente rodava de novo para ver. O meio é o que sai.
+ */
+const OUTPUT_HEAD = 6_000
+const OUTPUT_TAIL = 10_000
 const SIGKILL_GRACE = 200
 // Janela de tolerância após o kill do abort: se o processo não emitiu 'close'
 // nesse tempo, o kill falhou (ex.: taskkill sem permissão no Windows) — o
@@ -48,6 +55,27 @@ function makeLabel(command: string): string {
   return `auto: ${flat.slice(0, 60)}${flat.length > 60 ? '…' : ''}`
 }
 
+/** Acumula a saída de um processo guardando só o começo e o fim. */
+export function createOutputCollector(headChars = OUTPUT_HEAD, tailChars = OUTPUT_TAIL) {
+  let head = ''
+  let tail = ''
+  let total = 0
+  return {
+    append(text: string) {
+      total += text.length
+      const room = Math.max(0, headChars - head.length)
+      head += text.slice(0, room)
+      const rest = text.slice(room)
+      if (rest) tail = (tail + rest).slice(-tailChars)
+    },
+    text(): string {
+      const omitted = total - head.length - tail.length
+      if (omitted <= 0) return head + tail
+      return `${head}\n… (${omitted} characters omitted from the middle of the output) …\n${tail}`
+    },
+  }
+}
+
 function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal, sessionId?: string) {
   return new Promise<{ output: string; exitCode: number | null; background?: ProcessInfo }>(
     (resolve, reject) => {
@@ -68,10 +96,8 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
             stdio: ['ignore', 'pipe', 'pipe'],
           })
 
-      let output = ''
-      const append = (chunk: Buffer) => {
-        if (output.length < MAX_OUTPUT) output += chunk.toString('utf8')
-      }
+      const collected = createOutputCollector()
+      const append = (chunk: Buffer) => collected.append(chunk.toString('utf8'))
       child.stdout.on('data', append)
       child.stderr.on('data', append)
 
@@ -95,9 +121,9 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
           child.removeAllListeners('close')
           child.removeAllListeners('error')
           abort.removeEventListener('abort', onAbort)
-          const truncated = output.length >= MAX_OUTPUT ? '\n… (output truncated)' : ''
+          const output = collected.text()
           if (pid == null) {
-            resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode: null })
+            resolve({ output, exitCode: null })
             return
           }
           const background = registerProcess(child, {
@@ -105,14 +131,14 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
             command,
             cwd,
             pid,
-            initialOutput: output.slice(0, MAX_OUTPUT),
+            initialOutput: output,
             sessionId,
           })
           console.warn(
             `[shell] kill não confirmado após ${SETTLE_GRACE_MS / 1000}s — PID ${pid} ainda vivo; ` +
               'registrado como background (acompanhe/encerre pelo painel de processos)',
           )
-          resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode: null, background })
+          resolve({ output, exitCode: null, background })
         }, SETTLE_GRACE_MS)
       }
 
@@ -121,6 +147,7 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
       // a saída parcial + ponteiro (bash_list/bash_output/bash_kill).
       const timer = setTimeout(() => {
         clearTimeout(timer)
+        const output = collected.text()
         if (pid == null) return resolve({ output, exitCode: null })
         child.stdout.removeListener('data', append)
         child.stderr.removeListener('data', append)
@@ -159,11 +186,35 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         clearTimeout(timer)
         if (settleTimer) clearTimeout(settleTimer)
         abort.removeEventListener('abort', onAbort)
-        const truncated = output.length >= MAX_OUTPUT ? '\n… (output truncated)' : ''
-        resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode })
+        resolve({ output: collected.text(), exitCode })
       })
     },
   )
+}
+
+/** Dicas já dadas neste turno: uma de cada tipo basta, repetir só custa tokens. */
+const hintsGiven = new WeakMap<ToolContext, Set<'search' | 'read'>>()
+
+/**
+ * Bash usado para ler ou buscar código: aponta a ferramenta certa, uma vez por
+ * turno. Depois do code-index o agente passou a fazer MAIS isso (62% das
+ * chamadas de bash), por fora do índice e do `read`.
+ */
+export function inspectionHint(ctx: ToolContext, command: string): string {
+  const inspection = parseInspection(command, ctx.directory)
+  if (!inspection) return ''
+  const given = hintsGiven.get(ctx) ?? new Set()
+  hintsGiven.set(ctx, given)
+  const symbol = symbolSearchPattern(inspection)
+  if (symbol && !given.has('search')) {
+    given.add('search')
+    return `\n\n[hint: to find where \`${symbol}\` is defined or used, code_search / code_refs answer from the symbol index in one call, with the source and its callers — prefer them over grep through bash.]`
+  }
+  if (parseFileView(inspection) && !given.has('read')) {
+    given.add('read')
+    return '\n\n[hint: read files with `read` (line-numbered, what edit expects) or code_outline for the signatures only — not cat/sed/head through bash.]'
+  }
+  return ''
 }
 
 export function createBashTool(ctx: ToolContext) {
@@ -195,7 +246,7 @@ export function createBashTool(ctx: ToolContext) {
         )
       }
       const status = exitCode === 0 ? '' : `\n(exit code: ${exitCode})`
-      return `${output || '(no output)'}${status}`
+      return `${output || '(no output)'}${inspectionHint(ctx, command)}${status}`
     },
   })
 }

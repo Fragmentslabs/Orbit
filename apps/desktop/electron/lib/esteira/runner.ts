@@ -23,6 +23,7 @@ import { createBrowserScriptTools } from '../tools/browser-script'
 import { createChatMemoryTools } from '../tools/memory'
 import { createVerifyChangesTool } from '../tools/verify-changes'
 import { toTokenUsage } from '../usage'
+import { agentPrepareStep } from '../agent-step'
 import type { SendMessageInput } from '@shared/chat'
 
 /**
@@ -459,6 +460,7 @@ async function executarFaseInterna(ctx: ContextoFase): Promise<ResultadoFase> {
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: ctx.abort,
       providerOptions: await buildProviderOptions(input),
+      prepareStep: agentPrepareStep(provider, ctx.fase.modelId, { directory: toolCtx.directory }),
       onError: () => {
         /* tratado abaixo, pelo texto/erro acumulado */
       },

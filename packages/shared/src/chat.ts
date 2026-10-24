@@ -1195,6 +1195,10 @@ export interface CatalogModel {
   /** Família no models.dev (ex: "deepseek-flash"). Quando um id é renomeado,
    *  o id antigo costuma virar a família dos sucessores — ver findCatalogModel. */
   family?: string
+  /** Pacote e endpoint próprios do modelo, quando diferem dos do provedor
+   *  (models.dev). Um gateway como o OpenCode serve o Claude pelo protocolo
+   *  Anthropic e o GPT pelo /responses, sob o mesmo provedor. */
+  provider?: { npm?: string; api?: string }
   /** Controles de reasoning que o models.dev declara para o modelo. `effort`
    *  lista os níveis que o provedor aceita; `toggle` é liga/desliga;
    *  `budget_tokens` é um orçamento em tokens, com limites opcionais. */

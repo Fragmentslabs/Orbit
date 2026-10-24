@@ -3,7 +3,7 @@ import type { CatalogProvider, SendMessageInput } from '@shared/chat'
 import { closestVariant, findCatalogModel } from '@shared/chat'
 import { getProvider } from '../catalog'
 import { isServedByOpenAiCompatible } from '../providers'
-import { providerRuntimeNpm } from '../provider-npm'
+import { modelRuntime } from '../provider-npm'
 import { mergeOptions } from './merge'
 import { buildBaseOptions } from './options'
 import { generateVariants, toModelInput } from './variants'
@@ -52,7 +52,8 @@ export async function buildProviderOptions(
   const model = found.model
   if (!model.reasoning) return undefined
 
-  const modelInput = toModelInput(input.providerId, providerRuntimeNpm(provider), model, provider.api)
+  const runtime = modelRuntime(provider, model)
+  const modelInput = toModelInput(input.providerId, runtime.npm, model, runtime.api)
   const variants = generateVariants(modelInput)
 
   // Nível salvo que o modelo não tem vira o vizinho mais próximo; sem nível
@@ -87,7 +88,8 @@ export function interleavedReasoningField(
   const format = provider?.compat?.thinkingFormat
   if (format === 'none') return undefined
 
-  const servedByOpenAiCompatible = isServedByOpenAiCompatible(providerRuntimeNpm(provider))
+  const model = provider && findCatalogModel({ [provider.id]: provider }, provider.id, modelId)?.model
+  const servedByOpenAiCompatible = isServedByOpenAiCompatible(modelRuntime(provider, model).npm)
   // `reasoning_content` é campo do dialeto openai-compatible (e o
   // normalizeMessages reescreve providerOptions.openaiCompatible): num
   // protocolo Anthropic/Responses o campo não existe.
@@ -203,28 +205,4 @@ export function normalizeMessages(msgs: ModelMessage[], field?: string): ModelMe
     }
   })
   return changed ? result : msgs
-}
-
-/**
- * prepareStep para fluxos com tool loop (subagentes, exploração do /init,
- * orquestrador) que reaplica a normalização de reasoning a cada passo: o SDK
- * reconstrói as mensagens entre steps e pode descartar o reasoning_content
- * vazio retornado numa chamada de tool (DeepSeek exige o campo de volta em
- * TODAS as mensagens de assistente, senão responde 400 invalid_request_error).
- *
- * Retorna um prepareStep a ser passado em streamText/generateText — sempre
- * presente: sem o campo interleaved ele ainda sanitiza mensagens de tool
- * (sanitizeToolContent), evitando o crash do conversor openai-compatible em
- * parts malformadas. Espelha a lógica do chat-engine para que subagentes e o
- * agente principal compartilhem o mesmo suporte.
- */
-export function reasoningPrepareStep(
-  provider: CatalogProvider | undefined,
-  modelId: string,
-): ({ messages }: { messages: ModelMessage[] }) => { messages?: ModelMessage[] } | Record<string, never> {
-  const field = interleavedReasoningField(provider, modelId)
-  return ({ messages }) => {
-    const normalized = normalizeMessages(messages, field)
-    return normalized === messages ? {} : { messages: normalized }
-  }
 }

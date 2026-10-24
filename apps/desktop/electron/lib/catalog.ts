@@ -5,7 +5,7 @@ import { modelSupportsVision } from '@shared/chat'
 import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
 import { listCustomProviders, seedCustomProviders } from './custom-providers'
-import { providerRuntimeNpm } from './provider-npm'
+import { modelRuntime } from './provider-npm'
 
 /**
  * Catálogo de provedores/modelos vindo do models.dev — a mesma fonte usada
@@ -52,7 +52,8 @@ function enrichProvider(providerId: string, provider: CatalogProvider): CatalogP
     // O npm efetivo (não só o do catálogo) mantém a UI alinhada ao SDK que o
     // resolveModel vai usar de fato — inclusive nos provedores personalizados,
     // cujo protocolo escolhe o SDK.
-    const input = toModelInput(providerId, providerRuntimeNpm(provider), model, provider.api)
+    const runtime = modelRuntime(provider, model)
+    const input = toModelInput(providerId, runtime.npm, model, runtime.api)
     model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
     model.variants = Object.keys(generateVariants(input)).map((id) => ({
       id,

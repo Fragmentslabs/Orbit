@@ -21,7 +21,8 @@ import { conductorInput } from './orchestrator-conductor'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
-import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
+import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
+import { agentPrepareStep } from './agent-step'
 import { readJson, writeJson } from './storage'
 import { SUBAGENT_MAX_STEPS, createRemoveTaskTool, createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
@@ -533,7 +534,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       // Cada passada tem o PRÓPRIO orçamento de leitura: a cutucada reusa as
       // mesmas tools, mas não herda o que a primeira já gastou.
       planReadCalls = 0
-      const reasoningStep = reasoningPrepareStep(provider, primary.modelId)
+      const reasoningStep = agentPrepareStep(provider, primary.modelId, { directory: input.directory })
       let lastStepNumber = 0
       let sawFinish = false
       // Guard do último passo. O SDK chama o prepareStep com stepNumber = passos
@@ -1027,7 +1028,7 @@ async function approvePlanTurn(
                 {
                   model: revisorModel,
                   providerOptions: revisorOptions,
-                  prepareStep: reasoningPrepareStep(revisorProvider, revisor.modelId),
+                  prepareStep: agentPrepareStep(revisorProvider, revisor.modelId, { directory: input.directory }),
                   pedidoOriginal: input.text,
                   plan,
                   config,

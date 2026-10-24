@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { ModelMessage } from 'ai'
 
 import type { CatalogModel } from '@shared/chat'
-import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
+import {
+  contextBudget,
+  createTrimState,
+  estimateTokens,
+  maxStepsFor,
+  trimTurnContext,
+  workingBudget,
+} from './context-budget'
 
 /**
  * Este corte é a única coisa entre o tool loop e um request que o provedor
@@ -231,5 +238,120 @@ describe('trimTurnContext', () => {
     // referência de volta. Sem isso o prepareStep reescreveria as mensagens em
     // todo step do turno.
     expect(trimTurnContext(first, 20_000)).toBe(first)
+  })
+})
+
+describe('trimTurnContext — redundância entre leituras', () => {
+  const readOut = (file: string, body: string) => `<file path="${file}">\n${body}\n</file>`
+
+  it('descarta o read cujas linhas um read posterior do mesmo arquivo cobre', () => {
+    const messages = [
+      ...toolPair('1', 'read', { filePath: 'src/a.ts', offset: 40, limit: 20 }, readOut('/repo/src/a.ts', filler(40_000))),
+      ...toolPair('2', 'read', { filePath: '/repo/src/a.ts' }, readOut('/repo/src/a.ts', filler(40_000))),
+    ]
+    const outputs = outputsOf(trimTurnContext(messages, 30_000))
+    expect(outputs[0]).toContain('read again later')
+    expect(outputs[1]).toContain(filler(100))
+  })
+
+  it('mantém o read quando o posterior mostra outra faixa', () => {
+    const messages = [
+      ...toolPair('1', 'read', { filePath: 'a.ts', offset: 1, limit: 50 }, readOut('/repo/a.ts', filler(40_000))),
+      ...toolPair('2', 'read', { filePath: 'a.ts', offset: 30, limit: 50 }, readOut('/repo/a.ts', filler(40_000))),
+    ]
+    expect(trimTurnContext(messages, 30_000)).toBe(messages)
+  })
+
+  it('trata cat e sed -n no bash como leitura do mesmo arquivo', () => {
+    const messages = [
+      ...toolPair('1', 'bash', { command: "sed -n '10,30p' src/a.ts" }, filler(40_000)),
+      ...toolPair('2', 'read', { filePath: 'src/a.ts' }, readOut('/repo/src/a.ts', filler(40_000))),
+      ...toolPair('3', 'bash', { command: 'cd src && cat a.ts' }, filler(40_000)),
+    ]
+    const outputs = outputsOf(trimTurnContext(messages, 60_000, { directory: '/repo' }))
+    expect(outputs[0]).toContain('read again later')
+    expect(outputs[1]).toContain('read again later')
+    expect(outputs[2]).toBe(filler(40_000))
+  })
+
+  it('descarta a busca repetida no bash, mas não um comando com efeito colateral', () => {
+    const messages = [
+      ...toolPair('1', 'bash', { command: 'grep -rn foo src' }, filler(40_000)),
+      ...toolPair('2', 'bash', { command: 'npm test' }, filler(40_000)),
+      ...toolPair('3', 'bash', { command: 'npm test' }, filler(40_000)),
+      ...toolPair('4', 'bash', { command: 'grep -rn foo src' }, filler(40_000)),
+    ]
+    const outputs = outputsOf(trimTurnContext(messages, 60_000, { directory: '/repo' }))
+    expect(outputs[0]).toContain('identical arguments')
+    expect(outputs[1]).toBe(filler(40_000))
+    expect(outputs[3]).toBe(filler(40_000))
+  })
+
+  it('um cat com o meio cortado não cobre a leitura anterior', () => {
+    const messages = [
+      ...toolPair('1', 'read', { filePath: 'a.ts', offset: 900, limit: 50 }, readOut('/repo/a.ts', filler(40_000))),
+      ...toolPair('2', 'bash', { command: 'cat a.ts' }, `${filler(6_000)}\n… (90000 characters omitted from the middle of the output) …\n${filler(10_000)}`),
+    ]
+    expect(trimTurnContext(messages, 20_000, { directory: '/repo' })).toBe(messages)
+  })
+
+  it('uma leitura que falhou não substitui a anterior', () => {
+    const messages = [
+      ...toolPair('1', 'bash', { command: 'cat a.ts' }, filler(40_000)),
+      ...toolPair('2', 'bash', { command: 'cat a.ts' }, 'cat: a.ts: No such file or directory\n(exit code: 1)'),
+    ]
+    expect(trimTurnContext(messages, 60_000, { directory: '/repo' })).toBe(messages)
+  })
+
+  it('o write do arquivo inteiro torna as leituras anteriores obsoletas', () => {
+    const messages = [
+      ...toolPair('1', 'read', { filePath: 'a.ts' }, readOut('/repo/a.ts', filler(40_000))),
+      ...toolPair('2', 'write', { filePath: 'a.ts', content: 'x' }, 'File written: /repo/a.ts (1 characters)'),
+    ]
+    const outputs = outputsOf(trimTurnContext(messages, 15_000))
+    expect(outputs[0]).toContain('rewritten later')
+  })
+})
+
+describe('trimTurnContext — teto de trabalho em lote', () => {
+  it('o teto de trabalho fica abaixo do de segurança', () => {
+    expect(workingBudget(model(1_048_576, 128_000))).toBe(100_000)
+    expect(workingBudget(model(64_000, 8_000))).toBe(contextBudget(model(64_000, 8_000)))
+  })
+
+  it('passando do teto, desce bem abaixo dele de uma vez, preservando os recentes', () => {
+    const messages = Array.from({ length: 30 }, (_, i) =>
+      toolPair(String(i), 'bash', { command: `npm run t${i}` }, filler(16_000)),
+    ).flat()
+    const soft = 100_000
+    const trimmed = trimTurnContext(messages, 238_000, { softBudget: soft })
+    expect(estimateTokens(trimmed)).toBeLessThanOrEqual(soft * 0.6)
+    expect(outputsOf(trimmed).slice(-10).every((o) => o === filler(16_000))).toBe(true)
+  })
+
+  it('com a memória do turno, o corte não escorrega a cada passo', () => {
+    // O SDK entrega as mensagens ORIGINAIS a cada passo. Sem memória, cada
+    // passo novo descartaria mais um resultado antigo — e o prefixo enviado ao
+    // provedor mudaria em todo passo, invalidando o cache.
+    const state = createTrimState()
+    const step = (n: number) =>
+      Array.from({ length: n }, (_, i) => toolPair(String(i), 'bash', { command: `npm run t${i}` }, filler(16_000))).flat()
+    const opts = { softBudget: 100_000, state }
+
+    const first = outputsOf(trimTurnContext(step(30), 238_000, opts))
+    const droppedAfterFirst = state.dropped.size
+    const next = outputsOf(trimTurnContext(step(32), 238_000, opts))
+
+    // Dois passos depois, nenhum descarte novo: o lote abriu folga.
+    expect(state.dropped.size).toBe(droppedAfterFirst)
+    // E o que já foi enviado é idêntico — o prefixo do cache vale.
+    expect(next.slice(0, first.length)).toEqual(first)
+  })
+
+  it('sem teto de trabalho, mantém o comportamento de antes', () => {
+    const messages = Array.from({ length: 30 }, (_, i) =>
+      toolPair(String(i), 'bash', { command: `npm run t${i}` }, filler(16_000)),
+    ).flat()
+    expect(trimTurnContext(messages, 238_000)).toBe(messages)
   })
 })
