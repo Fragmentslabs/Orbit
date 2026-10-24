@@ -185,6 +185,11 @@ export function buildToolSet(
       Object.assign(
         tools,
         createChatMotionTools({
+          sessionId: input.sessionId,
+          modelVision: ctx?.modelVision !== false,
+          canRender: resolveFfmpeg() !== null,
+        }),
+      )
       // Mídia por link (yt-dlp): baixar vídeo/áudio, ler a transcrição e, com
       // ela, resumir. No chat o arquivo mora no storage do Orbit e entra na
       // galeria. Sem o binário instalado o conjunto não some: ytdlp_install é
@@ -192,11 +197,6 @@ export function buildToolSet(
       Object.assign(
         tools,
         createYtdlpTools({ sessionId: input.sessionId, canShow: true, language: input.language }, null),
-      )
-          sessionId: input.sessionId,
-          modelVision: ctx?.modelVision !== false,
-          canRender: resolveFfmpeg() !== null,
-        }),
       )
       // Design: mesmo molde do motion acima — sem pasta de trabalho, o canvas
       // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
