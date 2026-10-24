@@ -44,6 +44,16 @@ export function findLastSummaryIndex(history: ChatMessage[]): number {
   return -1
 }
 
+/**
+ * Quantas compactações a conversa já teve. `compactHistory` INSERE a mensagem
+ * de resumo e nunca remove as anteriores (elas ficam no storage e são
+ * ignoradas pelo corte do toModelMessages), então cada compactação deixa
+ * exatamente um resumo no array — a contagem é o contador de compactações.
+ */
+export function countSummaries(history: ChatMessage[]): number {
+  return history.reduce((total, m) => (m.summary ? total + 1 : total), 0)
+}
+
 /** Contexto estimado pelos tokens reais da última resposta — sem tokenizer.
  * Usa `lastTokens.lastStep` (usage da última chamada ao modelo) quando
  * disponível: é o tamanho real do contexto acumulado, ao contrário de
@@ -179,4 +189,52 @@ export async function compactHistory(
   }
   history.splice(split.cutIndex, 0, summaryMessage)
   return summaryMessage
+}
+
+/**
+ * Brief de continuidade: o que um chat NOVO precisa saber para seguir o
+ * trabalho sem herdar o contexto inteiro. Diferente do COMPACT_PROMPT, que
+ * comprime o passado, este texto é a abertura de outra conversa — precisa
+ * fazer sentido sozinho.
+ */
+export const CONTINUATION_PROMPT = `You write the opening note of a NEW chat that continues an older conversation. This note is the only thing the new chat knows about the work so far, so it must stand alone.
+
+Produce dense Markdown with:
+1. The goal — what the user is trying to accomplish, in their own words where possible.
+2. State — what is done and what is left. "Done" MUST be grounded in the "[Verified record: ...]" lines, which the engine measures from filesystem snapshots, not in the assistant's own prose; where they disagree, the verified record wins. Give the exact file counts and never quote the "[Verified record: ...]" line itself.
+3. Decisions made and why, plus constraints and preferences the user stated.
+4. Files, functions, commands and values that matter (exact paths).
+5. Open items — errors pending, what to do next.
+
+Never greet, never address the user, never mention that this is a summary or that a chat is being continued. Reply with ONLY the note.`
+
+/**
+ * Texto enviado ao prompt do brief: do último resumo (inclusive, inteiro) até
+ * o fim do histórico. Reaproveita buildCompactionTranscript para o resumo
+ * anterior nunca ser cortado pelo teto — o brief perde sentido sem ele.
+ */
+export function buildContinuationTranscript(history: ChatMessage[]): string {
+  const start = Math.max(0, findLastSummaryIndex(history))
+  return buildCompactionTranscript(history.slice(start))
+}
+
+/**
+ * Gera o brief de continuidade. Retorna o texto puro (sem cabeçalho) ou null
+ * quando não há o que transferir. Falha é silenciosa para quem chama — a
+ * sugestão de continuar num chat novo simplesmente não aparece.
+ */
+export async function generateContinuationBrief(
+  history: ChatMessage[],
+  model: LanguageModel,
+  providerOptions?: Record<string, Record<string, JSONValue>>,
+): Promise<string | null> {
+  const transcript = buildContinuationTranscript(history)
+  if (!transcript.trim()) return null
+  const { text } = await generateText({
+    model,
+    system: CONTINUATION_PROMPT,
+    prompt: transcript,
+    providerOptions,
+  })
+  return text.trim() || null
 }

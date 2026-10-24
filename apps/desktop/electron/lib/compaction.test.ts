@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
-import { buildCompactionTranscript, findLastSummaryIndex, shouldCompact, splitForCompaction } from './compaction'
+import {
+  buildCompactionTranscript,
+  buildContinuationTranscript,
+  countSummaries,
+  findLastSummaryIndex,
+  shouldCompact,
+  splitForCompaction,
+} from './compaction'
 
 /**
  * Decisões que só falham em conversa longa, onde o defeito é caro e difícil de
@@ -159,5 +166,50 @@ describe('buildCompactionTranscript', () => {
   it('trecho pequeno passa inteiro', () => {
     const old = [said('assistant', 'resumo', { summary: true }), said('user', 'oi'), said('assistant', 'olá')]
     expect(buildCompactionTranscript(old)).toBe('Assistant: resumo\n\nUser: oi\n\nAssistant: olá')
+  })
+})
+
+/**
+ * O contador é o que decide quando a conversa passa a oferecer um chat novo:
+ * `compactHistory` INSERE o resumo e nunca remove os antigos, então cada
+ * compactação deixa exatamente uma mensagem summary no histórico.
+ */
+describe('countSummaries', () => {
+  it('conta uma por compactação, inclusive as já ignoradas pelo corte', () => {
+    const history = [
+      msg('assistant', { summary: true }),
+      msg('user'),
+      msg('assistant'),
+      msg('assistant', { summary: true }),
+      msg('user'),
+    ]
+    expect(countSummaries(history)).toBe(2)
+  })
+
+  it('sem compactação é zero', () => {
+    expect(countSummaries(conversation(3))).toBe(0)
+  })
+})
+
+/**
+ * O brief começa no último resumo: é ele que carrega as decisões antigas, e
+ * cortá-lo pelo teto (como o texto de compactação fazia antes) entregaria ao
+ * chat novo uma conversa sem começo.
+ */
+describe('buildContinuationTranscript', () => {
+  it('mantém o último resumo inteiro e só corta a cauda nova', () => {
+    const history = [
+      msg('assistant', { summary: true, parts: [{ id: '1', type: 'text', text: 'RESUMO-ANTIGO: usar SQLite', state: 'done' }] }),
+      ...Array.from({ length: 30 }, (_, i) => msg(i % 2 ? 'assistant' : 'user', { parts: [{ id: `p${i}`, type: 'text', text: `turno ${i} ` + 'x'.repeat(5_000), state: 'done' }] })),
+    ]
+    const transcript = buildContinuationTranscript(history)
+    expect(transcript.startsWith('Assistant: RESUMO-ANTIGO')).toBe(true)
+    expect(transcript).toContain('turno 29')
+    expect(transcript.length).toBeLessThanOrEqual(100_000)
+  })
+
+  it('sem resumo, usa a conversa inteira (limitada pelo teto)', () => {
+    const history = [msg('user', { parts: [{ id: 'u', type: 'text', text: 'oi', state: 'done' }] })]
+    expect(buildContinuationTranscript(history)).toBe('User: oi')
   })
 })
