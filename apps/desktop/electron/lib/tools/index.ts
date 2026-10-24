@@ -28,6 +28,7 @@ import {
 import { createCodeTools } from './code'
 import { createSkillTool } from './create-skill'
 import { createSkillReadTool } from './skill-read'
+import { createUserNameTool } from './user-name'
 import { createMcpTools } from './mcp'
 import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
 import { createSubagentTool } from './orchestration'
@@ -95,6 +96,11 @@ export function buildToolSet(
   // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
   // em todo turno. Não expõe capacidade nova — só lê o que o agente já vê.
   tools.skill_read = createSkillReadTool(ctx?.directory)
+  // Identidade: o nome que a pessoa disse, no MESMO campo das Preferências. A
+  // detecção automática cobre "meu nome é X"; esta tool cobre o resto —
+  // "sou o Rafael", uma correção, e o pedido para esquecer o nome. Workers
+  // ficam de fora: quem conversa com a pessoa é a sessão principal.
+  if (input.orchestrationRole !== 'worker') tools.set_user_name = createUserNameTool()
   // Áudio: sem interruptor próprio — cada metade segue a da voz nas
   // Preferências (Fala em texto → transcrever; Texto em fala → gerar).
   // Desligada, a tool nem existe e o prompt explica ao agente como ativar.

@@ -807,7 +807,8 @@
       "code_refs": "Tracing uses",
       "bash": "Running",
       "websearch": "Searching",
-      "webfetch": "Reading page"
+      "webfetch": "Reading page",
+      "set_user_name": "Saving your name"
     },
     "code": {
       "working": "Working…",

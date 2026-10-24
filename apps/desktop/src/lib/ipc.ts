@@ -13,7 +13,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
-import type { AppSettings } from "@shared/app-settings"
+import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
@@ -130,6 +130,16 @@ export const storage = {
 
 export const appSettingsApi = {
   sync: (settings: AppSettings) => window.ipcRenderer?.send("settings:sync", settings),
+  /**
+   * Mudança feita NO MAIN — hoje só a tool `set_user_name` do agente, que grava
+   * o nome no mesmo campo da Preferência. O renderer é a fonte da verdade,
+   * então sem isto o nome novo seria apagado no próximo `sync`.
+   */
+  onChange: (listener: (settings: AppSettings) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("settings:changed", (raw) => listener(normalizeAppSettings(raw)))
+    return () => window.ipcRenderer.off("settings:changed", wrapper)
+  },
   /** Apaga cookies, logins e cache do navegador integrado */
   clearBrowserData: () => window.ipcRenderer.invoke("browser:clear-data") as Promise<void>,
   /** Link clicado no app que deve abrir no navegador integrado */

@@ -39,6 +39,7 @@ function useActionLabels(): Record<string, string> {
     bash: t("chat.actions.bash"),
     websearch: t("chat.actions.websearch"),
     webfetch: t("chat.actions.webfetch"),
+    set_user_name: t("chat.actions.set_user_name"),
   }
 }
 

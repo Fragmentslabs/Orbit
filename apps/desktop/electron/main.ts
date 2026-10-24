@@ -2757,6 +2757,13 @@ app.whenReady().then(() => {
   onAppSettingsChange((next, prev) => {
     if (next.closeToTray !== prev.closeToTray) void syncTray()
     if (next.launchAtLogin !== prev.launchAtLogin) void applyLaunchAtLogin(next.launchAtLogin)
+    // Mudança feita NO MAIN — hoje a tool `set_user_name` do agente — precisa
+    // voltar ao renderer, que é a fonte da verdade: sem isto a Preferência
+    // mostraria o nome antigo e o próximo `settings:sync` apagaria o que o
+    // agente gravou. O renderer descarta o eco do que ele mesmo mandou.
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('settings:changed', next)
+    }
   })
 
   // Tema do app → aparência NATIVA (menus de bandeja, diálogos do sistema). O

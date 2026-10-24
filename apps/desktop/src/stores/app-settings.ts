@@ -46,4 +46,15 @@ export function useSetting<K extends keyof AppSettings>(key: K): AppSettings[K] 
 // Na abertura o main pode estar com a cópia de uma versão anterior — ou nenhuma.
 if (typeof window !== "undefined" && window.ipcRenderer) {
   appSettingsApi.sync(useAppSettings.getState().settings)
+
+  // O main também escreve: a tool `set_user_name` do agente grava o nome no
+  // mesmo campo da Preferência. Aplicamos no store e no localStorage SEM
+  // reenviar ao main — o eco do que o renderer mandou chega idêntico e é
+  // ignorado pela comparação.
+  appSettingsApi.onChange((settings) => {
+    const current = useAppSettings.getState().settings
+    if (JSON.stringify(current) === JSON.stringify(settings)) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    useAppSettings.setState({ settings })
+  })
 }

@@ -732,6 +732,15 @@ export async function buildSystemPrompt(
       `The user's name is ${userName}. Use it sparingly — occasionally, when it reads naturally, never in every message.`,
     )
   }
+  // Como o nome entra no sistema: a detecção automática do renderer só pega
+  // "meu nome é X"/"me chama de X". O resto ("sou o Rafael", uma correção,
+  // esquecer o nome) é a tool — que grava no MESMO campo das Preferências.
+  // Fora dos workers: são eles que conversam com a pessoa.
+  if (input.orchestrationRole !== 'worker') {
+    parts.push(
+      'When the user tells you their name, asks to be called something, or corrects it, call set_user_name so it is saved to their settings — the greeting screen and your context use it. Never infer a name from an e-mail, a username or a folder.',
+    )
+  }
 
   // Artefatos HTML — a tool existe nos dois modos, mas nunca nos workers
   // (quem responde ao usuário é a sessão principal).

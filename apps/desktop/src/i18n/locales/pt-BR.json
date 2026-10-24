@@ -807,7 +807,8 @@
       "code_refs": "Rastreando usos",
       "bash": "Executando",
       "websearch": "Pesquisando",
-      "webfetch": "Lendo página"
+      "webfetch": "Lendo página",
+      "set_user_name": "Salvando seu nome"
     },
     "code": {
       "working": "Trabalhando…",
