@@ -70,6 +70,26 @@ export function titleFromUserText(userText: string): string {
 }
 
 /**
+ * Título de reserva quando a mensagem não tem texto (só anexo): o nome do
+ * arquivo é a única pista do assunto, e sem isso um chat aberto com um PDF
+ * ficava para sempre no título padrão.
+ *
+ * "Contrato de aluguel.pdf" → "Contrato de aluguel". A extensão sai (ruído num
+ * título), mas só quando é extensão de verdade: em "v1.2" o ".2" fica.
+ */
+export function titleFromAttachmentNames(
+  files: { filename?: string; chip?: boolean }[] | undefined,
+): string {
+  const name = (files ?? []).find((f) => !f.chip && f.filename?.trim())?.filename?.trim()
+  if (!name) return ''
+  const extension = /\.[a-z0-9]{1,8}$/i.exec(name)
+  const base = extension && /[a-z]/i.test(extension[0].slice(1))
+    ? name.slice(0, extension.index)
+    : name
+  return truncateTitle(base.replace(/[_-]+/g, ' ').trim())
+}
+
+/**
  * Converte a resposta do modelo de título em título final. Se ela vier com
  * markup de chamada de ferramenta (ou ficar vazia depois da limpeza), cai para
  * `fallback` — o título derivado da mensagem do usuário.

@@ -24,7 +24,7 @@ import {
   type QuotePayload,
 } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
-import { resolveTitle, titleFromUserText } from './chat-title'
+import { resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { estimateTokens, maxStepsFor } from './context-budget'
 import { createStepPreparer } from './agent-step'
@@ -1102,48 +1102,138 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
   return result
 }
 
-async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
-  try {
-    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
-    // Só nomeia sessões que ainda estão com o título padrão: não sobrescreve
-    // renomeações do usuário nem sessões de rotina (que nascem com
-    // "<rotina> — <horário>").
-    if (!session || session.routineId) return
-    const isDefaultTitle =
-      session.title === 'Nova conversa' || session.title === 'Nova sessão de código'
-    if (!isDefaultTitle) return
+const NAMING_SYSTEM =
+  "Write a short, descriptive title for the conversation, in plain text, in the language of the user's message. " +
+  'Rules: no bold, no asterisks, no quotes, no emojis and no formatting of any kind; at most 50 characters. ' +
+  'Reply with ONLY the final title, nothing else.'
 
-    const aux = await resolveAuxModel({ providerId: input.providerId, modelId: input.modelId }, { sessionId: input.sessionId })
-    const isCommand = input.text.trim().startsWith('/')
-    const projectName = input.directory ? basename(input.directory) : null
+/** Títulos com que toda sessão nasce — o sinal de que ninguém a nomeou ainda. */
+function isDefaultTitle(title: string): boolean {
+  return title === 'Nova conversa' || title === 'Nova sessão de código'
+}
+
+/**
+ * Título que aparece ANTES de qualquer modelo responder: a própria mensagem já
+ * diz do que se trata, e um comando (`/init`) não serve de título — aí a pista
+ * é o nome do projeto. Sem texto, sobra o nome do anexo.
+ */
+function provisionalTitle(input: SendMessageInput): string {
+  if (input.text.trim().startsWith('/')) {
+    return input.directory ? truncateTitle(basename(input.directory)) : ''
+  }
+  return titleFromUserText(input.text) || titleFromAttachmentNames(input.files)
+}
+
+/**
+ * O que vai ao modelo de título. Só a mensagem do usuário entra aqui — a
+ * resposta nunca entrou, e é justamente por isso que o título pode ser gerado
+ * em paralelo com o turno em vez de esperar ele terminar.
+ */
+function namingPrompt(input: SendMessageInput, projectName: string | null): string {
+  const text = input.text.trim()
+  if (text.startsWith('/')) {
+    return (
+      `The code session started with a command (${text.slice(0, 100)}) — do not use the command as the title. ` +
+      `Write a short generic title in ${input.language ?? 'Portuguese'}${projectName ? ` for the project "${projectName}"` : ''}, ` +
+      'such as "Project analysis". Reply with the title only.'
+    )
+  }
+  const names = (input.files ?? [])
+    .filter((file) => !file.chip && file.filename)
+    .map((file) => file.filename as string)
+    .slice(0, 5)
+  const attached = names.length > 0 ? `\n\nAttached files: ${names.join(', ')}` : ''
+  // Só anexo: com o prompt vazio o chat ficava para sempre no título padrão.
+  if (!text) {
+    return names.length > 0
+      ? `The user sent files with no message yet. Name the conversation after what the files are about.${attached}`
+      : ''
+  }
+  return text.slice(0, 2000) + attached
+}
+
+/** Grava o título e propaga. A escrita vem ANTES do evento: os `session`
+ *  seguintes releem do disco e, sem ela, o título reverte na troca seguinte. */
+async function applySessionTitle(win: BrowserWindow, sessionId: string, title: string) {
+  // Relê antes de gravar: o título leva segundos e a sessão pode ter mudado
+  // nesse meio-tempo (ex.: o agente trocou o chat de worktree) — gravar a
+  // cópia lida antes desfaria a mudança.
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  if (!session) return
+  await writeJson(StorageKeys.session(sessionId), { ...session, title })
+  await bumpSessionActivity(win, sessionId)
+  emit(win, { type: 'title', sessionId, title })
+}
+
+/**
+ * Nomeia a conversa no INÍCIO do primeiro turno, em duas camadas:
+ *
+ * 1. o título provisório sai da própria mensagem, sem modelo, em milissegundos
+ *    — a sidebar para de dizer "Nova conversa" antes de o agente começar;
+ * 2. o modelo auxiliar refina em segundo plano, junto com o turno.
+ *
+ * Antes isto rodava no FIM do turno (`void generateTitle(...)` depois do
+ * `status: idle`): num turno de vários minutos o chat ficava o tempo todo sem
+ * nome, embora o prompt nunca tenha usado a resposta.
+ */
+export async function startSessionNaming(
+  win: BrowserWindow,
+  input: SendMessageInput,
+  knownSession?: SessionInfo | null,
+): Promise<void> {
+  try {
+    const session =
+      knownSession ?? (await readJson<SessionInfo>(StorageKeys.session(input.sessionId)))
+    if (!session) return
+    // Rotina nasce com "<rotina> — <horário>" e worker com o título da tarefa:
+    // nenhum dos dois é uma conversa que a pessoa está nomeando.
+    if (session.routineId || session.orchestration?.role === 'worker') return
+    // Título já decidido (modelo ou renomeação manual): não é mais a primeira.
+    if (!isDefaultTitle(session.title)) return
+
+    const provisional = provisionalTitle(input)
+    if (provisional) await applySessionTitle(win, input.sessionId, provisional)
+    void refineSessionTitle(win, input, provisional)
+  } catch {
+    // título é cosmético; falha silenciosa
+  }
+}
+
+/** Camada 2: o modelo auxiliar, em paralelo com o turno. */
+async function refineSessionTitle(
+  win: BrowserWindow,
+  input: SendMessageInput,
+  provisional: string,
+): Promise<void> {
+  try {
+    const prompt = namingPrompt(input, input.directory ? basename(input.directory) : null)
+    if (!prompt) return
+    const aux = await resolveAuxModel(
+      { providerId: input.providerId, modelId: input.modelId },
+      { sessionId: input.sessionId },
+    )
     const { text } = await generateText({
       model: aux.model,
       providerOptions: aux.providerOptions,
-      system:
-        "Write a short, descriptive title for the conversation, in plain text, in the language of the user's message. " +
-        'Rules: no bold, no asterisks, no quotes, no emojis and no formatting of any kind; at most 50 characters. ' +
-        'Reply with ONLY the final title, nothing else.',
-      prompt: isCommand
-        ? `The code session started with a command (${input.text.trim().slice(0, 100)}) — do not use the command as the title. ` +
-          `Write a short generic title in ${input.language ?? 'Portuguese'}${projectName ? ` for the project "${projectName}"` : ''}, ` +
-          'such as "Project analysis". Reply with the title only.'
-        : input.text.slice(0, 2000),
+      system: NAMING_SYSTEM,
+      prompt,
     })
+    const projectName = input.directory ? basename(input.directory) : null
+    const isCommand = input.text.trim().startsWith('/')
     // Comando (`/init` etc.) não serve de título; aí a reserva é o projeto.
-    const fallback = isCommand ? (projectName ?? '') : titleFromUserText(input.text)
+    const fallback = isCommand
+      ? (projectName ?? '')
+      : titleFromUserText(input.text) || titleFromAttachmentNames(input.files) || provisional
     const title = resolveTitle(text, fallback)
     if (!title) return
 
-    // Persiste no disco ANTES de propagar: os eventos "session" seguintes
-    // (bumpSessionActivity) leem a sessão do disco — sem esta escrita o título
-    // gerado reverte para o padrão na troca seguinte.
-    // Relê antes de gravar: o título leva segundos e a sessão pode ter mudado
-    // nesse meio-tempo (ex.: o agente trocou o chat de worktree) — gravar a
-    // cópia lida no início desfaria a mudança.
-    const atual = (await readJson<SessionInfo>(StorageKeys.session(input.sessionId))) ?? session
-    await writeJson(StorageKeys.session(input.sessionId), { ...atual, title })
-    await bumpSessionActivity(win, input.sessionId)
-    emit(win, { type: 'title', sessionId: input.sessionId, title })
+    // Comparação antes de gravar: enquanto o modelo pensava, a pessoa pode ter
+    // renomeado o chat. Se o título em disco já não é o provisório que
+    // escrevemos (nem o padrão), a decisão é dela — não sobrescreve.
+    const atual = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
+    if (!atual || atual.title === title) return
+    if (atual.title !== provisional && !isDefaultTitle(atual.title)) return
+    await applySessionTitle(win, input.sessionId, title)
   } catch {
     // título é cosmético; falha silenciosa
   }
@@ -1240,7 +1330,6 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 
   const history = await loadMessages(sessionId)
-  const isFirstExchange = history.length === 0
 
   // Rotação de modelos: sequência resolvida no momento da chamada (ver
   // model-rotation.ts) — rotação escolhida no seletor para este chat; senão
@@ -2442,8 +2531,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Notificação nativa (janela fora de foco + prefs habilitada)
     void notifyNewMessage(sessionId, assistantMessage)
 
-    // Workers já nascem com título (task.title) — não sobrescrever
-    if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
+    // Título: gerado no INÍCIO do turno, em dispatchSend (ver
+    // startSessionNaming) — aqui ele já apareceu faz tempo.
     // Sugestão só faz sentido para quem está conversando: workers e rotinas
     // não têm ninguém digitando a próxima mensagem.
     if (getAppSettings().promptSuggestions && !input.orchestrationRole && !assistantMessage.error) {

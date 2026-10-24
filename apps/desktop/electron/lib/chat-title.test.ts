@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { looksLikeToolCall, resolveTitle, titleFromUserText, truncateTitle } from './chat-title'
+import {
+  looksLikeToolCall,
+  resolveTitle,
+  titleFromAttachmentNames,
+  titleFromUserText,
+  truncateTitle,
+} from './chat-title'
 
 const BENCHMARK_PROMPT =
   'Benchmark de navegação de código. Use SOMENTE glob, grep, ls e read.\n\nResponda às 4 perguntas sobre este projeto.'
@@ -56,5 +62,31 @@ describe('titleFromUserText', () => {
     expect(titleFromUserText('\n\nComo funciona o cache? Quero detalhes.')).toBe('Como funciona o cache')
     expect(titleFromUserText('a '.repeat(60)).length).toBeLessThanOrEqual(50)
     expect(truncateTitle('x'.repeat(80))).toHaveLength(50)
+  })
+})
+
+describe('titleFromAttachmentNames', () => {
+  it('usa o nome do primeiro anexo, sem extensão', () => {
+    expect(titleFromAttachmentNames([{ filename: 'Contrato de aluguel.pdf' }])).toBe('Contrato de aluguel')
+    expect(titleFromAttachmentNames([{ filename: 'relatorio_final.xlsx' }])).toBe('relatorio final')
+  })
+
+  it('ignora chips e anexos sem nome', () => {
+    expect(
+      titleFromAttachmentNames([
+        { filename: 'foto.png', chip: true },
+        {},
+        { filename: 'planta-baixa.jpg' },
+      ]),
+    ).toBe('planta baixa')
+  })
+
+  it('não come um "ponto decimal" no lugar da extensão', () => {
+    expect(titleFromAttachmentNames([{ filename: 'versao 1.2' }])).toBe('versao 1.2')
+  })
+
+  it('devolve vazio quando não há nada utilizável', () => {
+    expect(titleFromAttachmentNames(undefined)).toBe('')
+    expect(titleFromAttachmentNames([{}])).toBe('')
   })
 })

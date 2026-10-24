@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { rejectSession as rejectSessionAsks } from './ask-broker'
-import { abortChat, runChat } from './chat-engine'
+import { abortChat, runChat, startSessionNaming } from './chat-engine'
 import { abortLoop, runChatWithLoop } from './loop-engine'
 import { abortOrchestration, runOrchestration } from './orchestrator'
 import { clearSessionTrust } from './permission'
@@ -32,6 +32,12 @@ export async function dispatchSend(win: BrowserWindow, input: SendMessageInput):
   if (session?.orchestration?.role === 'worker') {
     input = { ...input, options: { ...input.options, orchestrate: undefined } }
   }
+  // Nomear o chat AQUI, antes do roteamento: é o único ponto por onde passam
+  // todas as origens (desktop, companion, Orquestra, Loop) e ele roda antes do
+  // pré-processamento dos anexos, que pode levar dezenas de segundos. Antes o
+  // título nascia no fim do turno — e o caminho da Orquestra (runOrchestration
+  // não passa por runChatTurn) nunca nomeava nada.
+  await startSessionNaming(win, input, session)
   // Orquestração é exclusiva do modo code
   if (input.options.orchestrate && input.mode !== 'code') {
     input = { ...input, options: { ...input.options, orchestrate: undefined } }
