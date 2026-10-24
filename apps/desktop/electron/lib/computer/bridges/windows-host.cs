@@ -30,7 +30,7 @@ public class HostError : Exception
     public HostError(string code, string message) : base(message) { Code = code; }
 }
 
-public static class OrbitHost
+public static partial class OrbitHost
 {
     // ------------------------------------------------------------- Win32
 
@@ -90,7 +90,8 @@ public static class OrbitHost
     static readonly JavaScriptSerializer Json = MakeJson();
     static bool selfElevatedKnown;
     static bool selfElevated;
-    static int generation;
+    // Semente aleatoria: depois que o host reinicia, um ref velho nao pode bater com a geracao nova.
+    static int generation = new Random().Next(1, 1000000);
     static readonly Dictionary<int, RefMap> Maps = new Dictionary<int, RefMap>();
     static readonly Dictionary<string, string> NameByPath = new Dictionary<string, string>();
 
@@ -157,11 +158,8 @@ public static class OrbitHost
         return DispatchAction(op, a);
     }
 
-    // Ponto de extensao das acoes (mouse, teclado, elemento...): ver windows-host-actions.
-    static object DispatchAction(string op, Dictionary<string, object> a)
-    {
-        throw new HostError("badRequest", "Unknown op: " + op);
-    }
+    // As acoes (mouse, teclado, elemento...) moram em windows-host-actions.cs:
+    // static object DispatchAction(string op, Dictionary<string, object> a)
 
     // ----------------------------------------------------------- helpers
 

@@ -119,6 +119,8 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
   // cursor. No macOS não (Fase 0) — lá o modo dirigido é só acessibilidade.
   const messageMouse = mode === 'pid' && driver.capabilities().messageMouse
   const keys = (input: string) => parseKeys(input, driver.platform)
+  // O atalho de "ir até o fim da linha" é Cmd no Mac e Ctrl no Windows.
+  const modKey = driver.platform === 'win32' ? 'ctrl' : 'cmd'
 
   const handle = req.element !== undefined ? registry.element(record, req.element) : null
   const pointAt = (h: ElementHandle | null, x?: number, y?: number): [number, number] => {
@@ -170,7 +172,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     const sel = r?.selection
     if (!sel) return ''
     if (sel.length === 0) {
-      return ` Nothing is selected now (text cursor at ${sel.location}) — the gesture missed the text. Check the y against the line in the latest observation (a point below the last line maps to the end of the text), or select with the keyboard (e.g. "shift+cmd+left").`
+      return ` Nothing is selected now (text cursor at ${sel.location}) — the gesture missed the text. Check the y against the line in the latest observation (a point below the last line maps to the end of the text), or select with the keyboard (e.g. "shift+${modKey}+left").`
     }
     return ` Selection now: ${sel.length} character(s)${sel.text ? ` ${JSON.stringify(sel.text)}` : ''}.`
   }
@@ -323,7 +325,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       const result = await element(handle, 'select', { find: req.text, occurrence: req.occurrence })
       const sel = result.selection
       if (!result.done || !sel) {
-        return done(`Element ${handle.index} (${label(handle)}) did not accept a selection — click into it and use the keyboard (e.g. "shift+cmd+right").`)
+        return done(`Element ${handle.index} (${label(handle)}) did not accept a selection — click into it and use the keyboard (e.g. "shift+${modKey}+right").`)
       }
       return done(
         `Selected ${sel.length} character(s) in element ${handle.index} (${label(handle)})${sel.text ? `: ${JSON.stringify(sel.text)}` : ''} (range ${sel.location}–${sel.location + sel.length}). Typing now replaces it.`,

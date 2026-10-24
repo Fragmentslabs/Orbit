@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import HOST_ACTIONS_CS from '../bridges/windows-host-actions.cs?raw'
 import HOST_CS from '../bridges/windows-host.cs?raw'
 import HOST_PS1 from '../bridges/windows.ps1?raw'
 import { createPersistentRunner, type PersistentRunner, type PersistentSpawn } from '../runner'
@@ -35,16 +36,17 @@ const STARTUP_GRACE_MS = 25_000
 let hostFile: Promise<string> | null = null
 
 /**
- * Grava host.ps1 e host.cs lado a lado, numa pasta que carrega o hash do
+ * Grava host.ps1, host.cs e actions.cs lado a lado, numa pasta que carrega o hash do
  * conteúdo (uma versão nova do Orbit nunca roda o host velho). O .ps1 vai com
  * BOM: sem ele, o PowerShell 5.1 lê o arquivo na página de código ANSI.
  */
 function ensureHostFiles(): Promise<string> {
   hostFile ??= (async () => {
-    const hash = createHash('sha1').update(HOST_PS1).update(HOST_CS).digest('hex').slice(0, 10)
+    const hash = createHash('sha1').update(HOST_PS1).update(HOST_CS).update(HOST_ACTIONS_CS).digest('hex').slice(0, 10)
     const dir = path.join(os.tmpdir(), 'orbit-computer', `win-${hash}`)
     await fsp.mkdir(dir, { recursive: true })
     await fsp.writeFile(path.join(dir, 'host.cs'), HOST_CS, 'utf8')
+    await fsp.writeFile(path.join(dir, 'actions.cs'), HOST_ACTIONS_CS, 'utf8')
     const ps1 = path.join(dir, 'host.ps1')
     await fsp.writeFile(ps1, String.fromCharCode(0xfeff) + HOST_PS1, 'utf8')
     return ps1

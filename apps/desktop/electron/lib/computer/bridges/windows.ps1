@@ -7,8 +7,8 @@
 # chamada ao C# ja compilado.
 #
 # Regras que o arquivo segue:
-#  - o C# mora em windows-host.cs (o driver grava os dois arquivos lado a lado
-#    como host.ps1 e host.cs);
+#  - o C# mora em windows-host.cs (leitura) e windows-host-actions.cs (acoes); o
+#    driver grava os tres arquivos lado a lado como host.ps1, host.cs e actions.cs;
 #  - ASCII puro (o Orbit grava com BOM, mas nao dependemos disso);
 #  - stdin/stdout em UTF-8 sem BOM: o PowerShell 5.1 usaria a pagina de codigo
 #    ANSI e corromperia texto fora do ASCII;
@@ -33,7 +33,8 @@ if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
     $loadError = 'PowerShell is running in ' + $ExecutionContext.SessionState.LanguageMode + ' (Constrained Language Mode), which blocks the UI Automation host. A policy such as AppLocker or WDAC is enabled on this machine.'
 } else {
     try {
-        Add-Type -TypeDefinition (Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSCommandPath) 'host.cs') -Raw -Encoding UTF8) -ReferencedAssemblies 'System.Core', 'UIAutomationClient', 'UIAutomationTypes', 'WindowsBase', 'System.Drawing', 'System.Web.Extensions'
+        $dir = Split-Path -Parent $PSCommandPath
+        Add-Type -Path (Join-Path $dir 'host.cs'), (Join-Path $dir 'actions.cs') -ReferencedAssemblies 'System.Core', 'UIAutomationClient', 'UIAutomationTypes', 'WindowsBase', 'System.Drawing', 'System.Web.Extensions'
         $ready = $true
     } catch {
         $loadError = 'The UI Automation host could not be compiled: ' + $_.Exception.Message
