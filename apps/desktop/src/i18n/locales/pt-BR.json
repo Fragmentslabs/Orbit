@@ -982,9 +982,22 @@
       ]
     },
     "summaryCard": "Resumo das mensagens anteriores (contexto compactado)",
+    "summaryCardContinuation": "Resumo da conversa anterior (continuação em outro chat)",
+    "compactionSuggest": {
+      "title": "Continuar em um chat novo?",
+      "body_one": "Esta conversa já foi compactada {{count}} vez. A próxima compactação resume um resumo — o começo da conversa, o porquê das decisões, se perde primeiro.",
+      "body_other": "Esta conversa já foi compactada {{count}} vezes. A próxima compactação resume um resumo — o começo da conversa, o porquê das decisões, se perde primeiro.",
+      "newChat": "Continuar em novo chat",
+      "compactHere": "Compactar aqui",
+      "hint": "Limite de {{threshold}} compactações — o chat novo abre com um resumo; este fica intacto.",
+      "failed": "Não foi possível gerar o resumo de continuidade. Tente de novo.",
+      "dismiss": "Dispensar"
+    },
     "brokenMessage": "Não foi possível mostrar esta mensagem.",
     "earlierMessages_one": "Mostrar {{count}} mensagem anterior",
     "earlierMessages_other": "Mostrar {{count}} mensagens anteriores",
+    "pendingAsk_one": "{{count}} pergunta pendente",
+    "pendingAsk_other": "{{count}} perguntas pendentes",
     "noModelSelected": "Nenhum modelo selecionado. Configure um provedor em Configurações."
   },
   "usage": {
@@ -1086,6 +1099,13 @@
     "loadingOlder": "Carregando mensagens anteriores…"
   },
   "ask": {
+    "subchat": {
+      "title": "Isto cabe em outro chat",
+      "deny": "Negar",
+      "newChat": "Implementar em novo chat",
+      "here": "Fazer neste chat",
+      "moreOptions": "Outras opções"
+    },
     "critical": "Ação crítica: ",
     "otherAnswer": "Ou escreva outra resposta…",
     "noteOn": "Observação sobre \"{{option}}\" (opcional)",
@@ -1919,6 +1939,32 @@
       "description": "Idioma da interface e das respostas do assistente.",
       "system": "Sistema"
     },
+    "behavior": {
+      "title": "Como eu falo",
+      "styles": {
+        "default": {
+          "label": "Padrão",
+          "hint": "Equilibrado, sem enfeite"
+        },
+        "direct": {
+          "label": "Direto",
+          "hint": "Resposta primeiro"
+        },
+        "mentor": {
+          "label": "Mentor",
+          "hint": "Explica o porquê"
+        },
+        "technical": {
+          "label": "Técnico",
+          "hint": "Preciso e neutro"
+        }
+      },
+      "notePlaceholder": "Ex.: quando for assunto de interface, seja ainda mais curto.",
+      "noteHint": "Uma frase que você diria a um colega novo. Vale mais que o estilo acima.",
+      "showPrompt": "Ver o texto exato que eu leio",
+      "promptEmpty": "Sem instrução de estilo — o padrão do Orbit.",
+      "promptHint": "Em inglês, porque é literalmente o que entra no meu prompt. Só leitura."
+    },
     "defaultModel": "Modelo padrão",
     "subagentModel": "Modelo de subagentes",
     "orchestraModel": "Modelo de orquestra",
@@ -2018,6 +2064,12 @@
         "auto": "Perto do limite",
         "75": "Aos 75% do contexto",
         "50": "Aos 50% do contexto"
+      },
+      "compactSuggest": {
+        "title": "Sugerir continuar em outro chat",
+        "description": "Quando a conversa já foi compactada várias vezes, oferece continuar num chat novo (com um resumo do estado atual) em vez de compactar de novo.",
+        "after_one": "Depois de {{count}} compactação",
+        "after_other": "Depois de {{count}} compactações"
       },
       "retries": {
         "title": "Novas tentativas em falha temporária",
@@ -3142,6 +3194,78 @@
       }
     }
   },
+  "overlay": {
+    "sessionTitle": "Atalho",
+    "placeholder": "Pergunte, traduza ou explique…",
+    "placeholderSelection": "Pergunte sobre o trecho selecionado…",
+    "selected": "Selecionado",
+    "selectedIn": "Selecionado em {{app}}",
+    "listening": "Ouvindo…",
+    "thinking": "Pensando…",
+    "speaking": "Falando…",
+    "close": "Fechar",
+    "speak": "Falar",
+    "type": "Digitar",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "noModel": "Escolha um modelo em Preferências → Overlay.",
+    "preparing": "Preparando a conversa…",
+    "callUnavailable": "Ligue a fala e o ditado em Preferências → Voz para falar com o Orbit."
+  },
+  "overlaySettings": {
+    "title": "Overlay",
+    "description": "O painel do atalho global.",
+    "shortcut": {
+      "title": "Atalho global",
+      "description": "⇧⌘espaço abre o painel por cima de qualquer app."
+    },
+    "shortcutConflict": "O sistema recusou o atalho — outro app deve estar usando ⇧⌘espaço.",
+    "openMode": {
+      "title": "Abrir em",
+      "description": "Como o painel abre quando você aperta o atalho.",
+      "text": "Campo de texto",
+      "call": "Modo chamada",
+      "needsVoice": "Para abrir falando, ligue a fala e o ditado em Preferências → Voz."
+    },
+    "persona": {
+      "title": "Persona",
+      "description": "A persona animada no lugar do ícone."
+    },
+    "opacity": {
+      "title": "Transparência",
+      "description": "Opacidade do fundo do painel; o texto continua sólido."
+    },
+    "model": {
+      "title": "Modelo do atalho",
+      "description": "Usado nas perguntas do painel. O botão ao lado escolhe o nível de thinking deste modelo.",
+      "none": "O modelo da conversa",
+      "noModel": "Nenhum modelo escolhido — o painel não consegue responder."
+    },
+    "vision": {
+      "title": "Modo visão",
+      "description": "A tela é lida pelo modelo de visão e volta como texto.",
+      "off": "Desligado: a imagem só vai ao modelo se ele enxergar.",
+      "needsModel": "Escolha um modelo de visão para o Orbit conseguir olhar a tela.",
+      "model": "Modelo de visão",
+      "none": "Nenhum",
+      "textOnly": "Este modelo não vê imagens. Ligue o modo visão e escolha um modelo de visão para o Orbit conseguir olhar a tela.",
+      "viaVision": "Este modelo não vê imagens — a tela será lida pelo modelo de visão."
+    },
+    "prerequisites": {
+      "title": "Pré-requisitos",
+      "hint": "O que estiver desligado o agente diz que não consegue fazer, em vez de inventar.",
+      "screen": "Ver a tela",
+      "screenModel": "modelo com visão",
+      "screenVision": "modo visão",
+      "speech": "Falar (TTS)",
+      "dictation": "Ouvir (ditado)",
+      "computer": "Usar o computador",
+      "on": "ligado",
+      "off": "desligado",
+      "open": "Abrir"
+    },
+    "openNow": "Abrir agora"
+  },
   "computerSettings": {
     "master": {
       "title": "Controlar o computador",
@@ -3167,7 +3291,8 @@
       "open": "Abrir ajustes",
       "request": "Pedir",
       "dev": "Em desenvolvimento a permissão é do binário \"Electron\" deste projeto — outros projetos Electron aparecem com o mesmo nome em Ajustes e não valem. Use \"Pedir\" para criar a entrada certa. Gravação de Tela pede reiniciar o app.",
-      "responsible": "O Orbit foi aberto pelo {{app}}, então o macOS confere as permissões no {{app}} — não no \"Electron\" nem no \"Orbit\". Libere o {{app}} em Acessibilidade e Gravação de Tela, ou abra o app pelo Finder. Gravação de Tela pede reiniciar."
+      "responsible": "O Orbit foi aberto pelo {{app}}, então o macOS confere as permissões no {{app}} — não no \"Electron\" nem no \"Orbit\". Libere o {{app}} em Acessibilidade e Gravação de Tela, ou abra o app pelo Finder. Gravação de Tela pede reiniciar.",
+      "screenManual": "Se o Orbit não aparecer na lista de Gravação de Tela, o macOS não o adicionou sozinho: clique no + embaixo da lista, escolha o Orbit em Aplicativos, ligue e reinicie o Orbit."
     },
     "test": {
       "title": "Testar",
@@ -3192,6 +3317,11 @@
     "unavailable": {
       "mas": "Indisponível na versão da Mac App Store: o sandbox da loja bloqueia acessibilidade e envio de eventos. Use a versão do site.",
       "platform": "Por enquanto, disponível só no macOS e no Windows."
+    },
+    "model": {
+      "title": "Modelo do agente de computador",
+      "none": "O mesmo da conversa",
+      "hint": "Tarefas de várias ações em outros apps vão para um agente dedicado, com contexto curto. Um modelo menor e mais rápido (com visão) deixa cada passo mais rápido."
     }
   },
   "computer": {
@@ -3223,7 +3353,9 @@
         "drag": "Arrastar",
         "invoke": "Acionar",
         "triple_click": "Clique triplo",
-        "select_text": "Selecionar “{{text}}”"
+        "select_text": "Selecionar “{{text}}”",
+        "task": "Tarefa no computador: {{goal}}",
+        "batch": "{{count}} ações em sequência"
       },
       "target": {
         "element": "no elemento {{index}}",
@@ -3257,6 +3389,7 @@
     "slidesCount_other": "{{count}} slides",
     "fullscreen": "Tela cheia",
     "exitFullscreen": "Sair da tela cheia",
+    "openInSidebar": "Abrir na sidebar",
     "openTab": "Abrir o deck no painel",
     "deck": "Deck de slides",
     "gone": "Este deck não está mais no registro — peça para o agente escrevê-lo de novo."

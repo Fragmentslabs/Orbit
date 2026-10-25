@@ -982,9 +982,22 @@
       ]
     },
     "summaryCard": "Summary of earlier messages (compacted context)",
+    "summaryCardContinuation": "Summary of the previous conversation (continued in another chat)",
+    "compactionSuggest": {
+      "title": "Continue in a new chat?",
+      "body_one": "This conversation has been compacted {{count}} time. The next compaction summarizes a summary — the beginning of the conversation, the reasoning behind decisions, is lost first.",
+      "body_other": "This conversation has been compacted {{count}} times. The next compaction summarizes a summary — the beginning of the conversation, the reasoning behind decisions, is lost first.",
+      "newChat": "Continue in a new chat",
+      "compactHere": "Compact here",
+      "hint": "{{threshold}}-compaction threshold — the new chat opens with a summary; this one stays intact.",
+      "failed": "Could not generate the continuation summary. Try again.",
+      "dismiss": "Dismiss"
+    },
     "brokenMessage": "This message could not be displayed.",
     "earlierMessages_one": "Show {{count}} earlier message",
     "earlierMessages_other": "Show {{count}} earlier messages",
+    "pendingAsk_one": "{{count}} pending question",
+    "pendingAsk_other": "{{count}} pending questions",
     "noModelSelected": "No model selected. Set up a provider in Settings."
   },
   "usage": {
@@ -1086,6 +1099,13 @@
     "loadingOlder": "Loading previous messages…"
   },
   "ask": {
+    "subchat": {
+      "title": "This belongs in another chat",
+      "deny": "Decline",
+      "newChat": "Implement in a new chat",
+      "here": "Do it in this chat",
+      "moreOptions": "More options"
+    },
     "critical": "Critical action: ",
     "otherAnswer": "Or write another answer…",
     "noteOn": "Note on \"{{option}}\" (optional)",
@@ -1919,6 +1939,32 @@
       "description": "Interface language and the assistant's reply language.",
       "system": "System"
     },
+    "behavior": {
+      "title": "How I talk",
+      "styles": {
+        "default": {
+          "label": "Default",
+          "hint": "Balanced, no filler"
+        },
+        "direct": {
+          "label": "Direct",
+          "hint": "Answer first"
+        },
+        "mentor": {
+          "label": "Mentor",
+          "hint": "Explains the why"
+        },
+        "technical": {
+          "label": "Technical",
+          "hint": "Precise and neutral"
+        }
+      },
+      "notePlaceholder": "E.g.: when it's about UI, be even shorter.",
+      "noteHint": "A sentence you would say to a new colleague. It wins over the style above.",
+      "showPrompt": "Show the exact text I read",
+      "promptEmpty": "No style instruction — the Orbit default.",
+      "promptHint": "In English, because it is literally what goes into my prompt. Read-only."
+    },
     "defaultModel": "Default model",
     "subagentModel": "Subagent model",
     "orchestraModel": "Orchestra model",
@@ -2018,6 +2064,12 @@
         "auto": "Near the limit",
         "75": "At 75% of context",
         "50": "At 50% of context"
+      },
+      "compactSuggest": {
+        "title": "Suggest continuing in another chat",
+        "description": "Once the conversation has been compacted several times, offers to continue in a new chat (with a summary of the current state) instead of compacting again.",
+        "after_one": "After {{count}} compaction",
+        "after_other": "After {{count}} compactions"
       },
       "retries": {
         "title": "Retries on temporary failure",
@@ -3142,6 +3194,78 @@
       }
     }
   },
+  "overlay": {
+    "sessionTitle": "Quick ask",
+    "placeholder": "Ask, translate or explain…",
+    "placeholderSelection": "Ask about the selected text…",
+    "selected": "Selected",
+    "selectedIn": "Selected in {{app}}",
+    "listening": "Listening…",
+    "thinking": "Thinking…",
+    "speaking": "Speaking…",
+    "close": "Close",
+    "speak": "Speak",
+    "type": "Type",
+    "copy": "Copy",
+    "copied": "Copied",
+    "noModel": "Pick a model in Settings → Overlay.",
+    "preparing": "Preparing the conversation…",
+    "callUnavailable": "Turn on speech and dictation in Settings → Voice to talk to Orbit."
+  },
+  "overlaySettings": {
+    "title": "Overlay",
+    "description": "The panel behind the global shortcut.",
+    "shortcut": {
+      "title": "Global shortcut",
+      "description": "⇧⌘space opens the panel over any app."
+    },
+    "shortcutConflict": "The system refused the shortcut — another app is probably using ⇧⌘space.",
+    "openMode": {
+      "title": "Open in",
+      "description": "How the panel opens when you hit the shortcut.",
+      "text": "Text field",
+      "call": "Call mode",
+      "needsVoice": "To open talking, turn on speech and dictation in Settings → Voice."
+    },
+    "persona": {
+      "title": "Persona",
+      "description": "The animated persona instead of the icon."
+    },
+    "opacity": {
+      "title": "Transparency",
+      "description": "Opacity of the panel background; the text stays solid."
+    },
+    "model": {
+      "title": "Overlay model",
+      "description": "Used for the panel's questions. The button next to it picks this model's thinking level.",
+      "none": "The conversation model",
+      "noModel": "No model chosen — the panel cannot answer."
+    },
+    "vision": {
+      "title": "Vision mode",
+      "description": "The screen is read by the vision model and comes back as text.",
+      "off": "Off: the screenshot only goes to the model if it can see images.",
+      "needsModel": "Pick a vision model so Orbit can look at the screen.",
+      "model": "Vision model",
+      "none": "None",
+      "textOnly": "This model cannot see images. Turn on Vision mode and pick a vision model so Orbit can look at the screen.",
+      "viaVision": "This model cannot see images — the screen will be read by the vision model."
+    },
+    "prerequisites": {
+      "title": "Prerequisites",
+      "hint": "Whatever is off, the agent says it cannot do instead of making it up.",
+      "screen": "See the screen",
+      "screenModel": "model with vision",
+      "screenVision": "Vision mode",
+      "speech": "Speak (TTS)",
+      "dictation": "Listen (dictation)",
+      "computer": "Use the computer",
+      "on": "on",
+      "off": "off",
+      "open": "Open"
+    },
+    "openNow": "Open now"
+  },
   "computerSettings": {
     "master": {
       "title": "Control the computer",
@@ -3167,7 +3291,8 @@
       "open": "Open settings",
       "request": "Request",
       "dev": "In development the permission belongs to this project's \"Electron\" binary — other Electron projects show up with the same name in Settings and don't count. Use \"Request\" to create the right entry. Screen Recording needs an app restart.",
-      "responsible": "Orbit was launched by {{app}}, so macOS checks the permissions on {{app}} — not on \"Electron\" or \"Orbit\". Allow {{app}} in Accessibility and Screen Recording, or open the app from Finder. Screen Recording needs a restart."
+      "responsible": "Orbit was launched by {{app}}, so macOS checks the permissions on {{app}} — not on \"Electron\" or \"Orbit\". Allow {{app}} in Accessibility and Screen Recording, or open the app from Finder. Screen Recording needs a restart.",
+      "screenManual": "If Orbit doesn't show up in the Screen Recording list, macOS didn't add it on its own: click the + below the list, pick Orbit in Applications, turn it on and restart Orbit."
     },
     "test": {
       "title": "Test",
@@ -3192,6 +3317,11 @@
     "unavailable": {
       "mas": "Unavailable in the Mac App Store version: the store sandbox blocks accessibility and event posting. Use the version from the website.",
       "platform": "For now, available on macOS and Windows only."
+    },
+    "model": {
+      "title": "Computer agent model",
+      "none": "Same as the conversation",
+      "hint": "Multi-step tasks in other apps go to a dedicated agent with a short context. A smaller, faster model (with vision) makes each step quicker."
     }
   },
   "computer": {
@@ -3223,7 +3353,9 @@
         "drag": "Drag",
         "invoke": "Invoke",
         "triple_click": "Triple-click",
-        "select_text": "Select “{{text}}”"
+        "select_text": "Select “{{text}}”",
+        "task": "Computer task: {{goal}}",
+        "batch": "{{count}} actions in a row"
       },
       "target": {
         "element": "on element {{index}}",
@@ -3257,6 +3389,7 @@
     "slidesCount_other": "{{count}} slides",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit fullscreen",
+    "openInSidebar": "Open in sidebar",
     "openTab": "Open the deck in the panel",
     "deck": "Slide deck",
     "gone": "This deck is no longer registered — ask the agent to write it again."
