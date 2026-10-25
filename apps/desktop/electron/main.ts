@@ -1,4 +1,17 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, globalShortcut, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
+import {
+  disposeOverlay,
+  hideOverlay,
+  markOverlayReady,
+  openOverlay,
+  overlayShortcutStatus,
+  prewarmOverlay,
+  resizeOverlay,
+  setupOverlay,
+  syncOverlayShortcut,
+  toggleOverlay,
+  watchOverlaySettings,
+} from './lib/overlay/window'
 import { audioIdFrom, readAudio, registerAudioProtocol } from './lib/audio-store'
 import { registerVideoProtocol } from './lib/video/store'
 import {
@@ -42,13 +55,13 @@ import {
   type MaterialInput,
 } from './lib/session-materials'
 import { registerBundledFfmpeg } from './lib/video/ffmpeg'
+import { registerYtdlpOnPath } from './lib/ytdlp/binary'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
-import { registerYtdlpOnPath } from './lib/ytdlp/binary'
 import { chmodSync, existsSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
@@ -78,7 +91,7 @@ import {
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { createRemoteRepo } from './lib/github-repo'
 import { discoverGitRepos } from './lib/git-repos'
-import { compactSession, getRunningSessionIds } from './lib/chat-engine'
+import { compactSession, continuationBrief, getRunningSessionIds } from './lib/chat-engine'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
 import { approvePlan, getOrchestrationRunningSessionIds, juntarDeNovo, rejectPlan } from './lib/orchestrator'
@@ -174,6 +187,7 @@ import type { SendMessageInput } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
+import { pruneMediaJournals } from './lib/session/media-journal'
 import * as esteira from './lib/esteira'
 import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat, validarPastaDosWorktrees } from './lib/worktrees/servico'
 import { pastaNoRepositorioPrincipal } from './lib/worktrees/principal'
@@ -187,7 +201,6 @@ import type { Memory, MemoryEvent } from '@shared/memory'
 const execFileAsync = promisify(execFile)
 
 const _require = createRequire(import.meta.url)
-import { pruneMediaJournals } from './lib/session/media-journal'
 const nodePty = _require('node-pty') as typeof NodePty
 const JSZip = _require('jszip') as typeof import('jszip')
 
@@ -702,11 +715,13 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
-  }
+  // No macOS o app segue vivo sem janelas, e o clique no Dock é a porta de
+  // volta. Não serve perguntar ao `getAllWindows()`: as janelas auxiliares
+  // ficam vivas escondidas — o painel do Computer Use continua existindo
+  // depois de usado, e o overlay nasce pré-aquecido no boot — então a lista
+  // nunca volta a ficar vazia. O clique no Dock não trazia janela nenhuma e o
+  // app parecia fechado, estando aberto.
+  showMainWindow()
 })
 
 const terminals = new Map<string, NodePty.IPty>()
@@ -1430,6 +1445,10 @@ app.whenReady().then(() => {
   // pode disparar (rotina agendada) sem nenhum pedido vindo da UI.
   void loadMainLocale()
 
+  // Diários de mídia (o revert de peças e galeria): saem os de conversas
+  // excluídas e os de mais de 30 dias. Em segundo plano — nada depende disso.
+  void pruneMediaJournals(30 * 24 * 60 * 60 * 1000, async (id) => (await readJson(StorageKeys.session(id))) !== null).catch(() => 0)
+
   createAppMenu()
 
   // Controles da titlebar customizada (frame: false em win/linux)
@@ -1445,10 +1464,6 @@ app.whenReady().then(() => {
   ipcMain.handle('window:isFullscreen', () => win?.isFullScreen() ?? false)
 
   ipcMain.handle('select-folder', async () => {
-  // Diários de mídia (o revert de peças e galeria): saem os de conversas
-  // excluídas e os de mais de 30 dias. Em segundo plano — nada depende disso.
-  void pruneMediaJournals(30 * 24 * 60 * 60 * 1000, async (id) => (await readJson(StorageKeys.session(id))) !== null).catch(() => 0)
-
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
     })
@@ -2056,6 +2071,9 @@ app.whenReady().then(() => {
   ipcMain.handle('chat:compact', (_event, sessionId: string) => {
     if (win) void compactSession(win, sessionId)
   })
+  // Brief de continuidade para o chat novo (card de compactação). Gera no
+  // modelo auxiliar e devolve o texto já com o cabeçalho de resumo.
+  ipcMain.handle('chat:continuationBrief', (_event, sessionId: string) => continuationBrief(sessionId))
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
   ipcMain.handle('plan:saveFile', async (_event, directory: string, content: string) => {
     await savePlanFile(directory, content)
@@ -2155,15 +2173,15 @@ app.whenReady().then(() => {
   // dos shells do agente.
   registerVideoProtocol()
   registerBundledFfmpeg()
+  // yt-dlp baixado pelo próprio app (ytdlp_install) também entra no PATH dos
+  // shells do agente — é o `bash` que faz o que o EDL não cobre.
+  registerYtdlpOnPath()
   // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
   // scheme já foram declarados no topo do módulo.
   registerArtifactProtocol()
   // Composições de motion do preview (orbit-motion://, ver video/motion-store):
   // serve a PASTA registrada e o script do runtime que o render também usa.
   registerMotionProtocol()
-  // yt-dlp baixado pelo próprio app (ytdlp_install) também entra no PATH dos
-  // shells do agente — é o `bash` que faz o que o EDL não cobre.
-  registerYtdlpOnPath()
 
   // Canvas de design (orbit-design://, ver lib/design/design-store): serve a
   // pasta registrada (canvas.json + artboards), sem runtime injetado — o
@@ -2204,6 +2222,20 @@ app.whenReady().then(() => {
     if (!id && ref.path) id = await slidesIdForPath(ref.path)
     if (!id && ref.sessionId && ref.name) id = await slidesIdForName(ref.sessionId, ref.name)
     return id ? reopenSlides(id) : false
+  })
+
+  // Resolver o deck SEM abrir aba: o card do chat mostra o próprio deck inline
+  // (como o artefato faz com o HTML) e só precisa do id e da entrada relativa
+  // para montar o iframe. Mesma resolução do `slides:open`, sem o efeito de
+  // abrir — quem manda abrir é o botão da sidebar.
+  ipcMain.handle('slides:resolve', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    let id = ref.id ?? null
+    if (!id && ref.path) id = await slidesIdForPath(ref.path)
+    if (!id && ref.sessionId && ref.name) id = await slidesIdForName(ref.sessionId, ref.name)
+    if (!id) return null
+    const deck = await getSlides(id)
+    if (!deck) return null
+    return { id, entry: path.relative(deck.folder, deck.entry).split(path.sep).join('/') }
   })
 
   // Baixar o deck em PDF. A impressão acontece no main (slides-export) — o
@@ -2762,6 +2794,22 @@ app.whenReady().then(() => {
   // Configurações gerais: o renderer empurra a cada mudança (ver app-settings).
   ipcMain.on('settings:sync', (_event, raw: unknown) => void setAppSettings(raw))
 
+  // Overlay (⇧⌘espaço): o painel do rodapé. O atalho é global (funciona com o
+  // Orbit atrás), e o renderer do painel abre/fecha pelo mesmo caminho da
+  // Preferências e do menu.
+  // O renderer do painel avisa que montou: só a partir daí um `overlay:open`
+  // pode chegar sem se perder.
+  ipcMain.on('overlay:ready', () => markOverlayReady())
+  ipcMain.handle('overlay:toggle', () => toggleOverlay())
+  ipcMain.handle('overlay:open', (_event, call?: boolean) => openOverlay({ call }))
+  ipcMain.handle('overlay:close', () => hideOverlay())
+  ipcMain.handle('overlay:resize', (_event, height: number) => resizeOverlay(height))
+  ipcMain.handle('overlay:status', () => overlayShortcutStatus())
+  ipcMain.handle('overlay:settings', () => getAppSettings().overlay)
+  // "Copiar" do painel: navigator.clipboard depende de gesto/permissão da
+  // página; o main escreve direto.
+  ipcMain.handle('clipboard:write', (_event, text: string) => clipboard.writeText(String(text ?? '')))
+
   // O que depende do SISTEMA reage à preferência, em vez de ser lido no boot:
   // a bandeja existe enquanto "fechar para a bandeja" estiver ligado, e a
   // abertura automática é registrada/removida na hora em que a pessoa decide.
@@ -3037,7 +3085,10 @@ app.whenReady().then(() => {
     // A saída real começa aqui: daqui para baixo o `close` da janela não pode
     // mais ser convertido em esconder.
     quitting = true
-    // Devolve as flags de acessibilidade ligadas nos apps e solta o atalho.
+    // Devolve as flags de acessibilidade ligadas nos apps e solta os atalhos
+    // globais (⇧⌘espaço do overlay e o de pânico do Computer Use).
+    globalShortcut.unregisterAll()
+    disposeOverlay()
     void disposeComputerUse()
     destroyTray()
     killAllProcesses()
@@ -3108,11 +3159,29 @@ app.whenReady().then(() => {
     if (settings.launchAtLogin) await applyLaunchAtLogin(true)
     // Ditado pelo Whisper: o servidor dele sobe junto com o app.
     syncWhisperServer(settings)
+    // Atalho do overlay e a janela pré-aquecida: só depois das preferências,
+    // porque é nelas que está o interruptor.
+    syncOverlayShortcut()
+    prewarmOverlay()
   })
 
   // Câmera, microfone, localização etc. dos sites do navegador integrado:
   // pergunta ao usuário por site (antes o Electron aprovava tudo calado).
   setupBrowserPermissions(BROWSER_PARTITION)
+
+  // Overlay (⇧⌘espaço): a janela nasce escondida — o atalho não pode pagar o
+  // carregamento do renderer na primeira vez. É uma página própria (como os
+  // painéis do Computer Use) para não arrastar os sincronizadores da principal.
+  setupOverlay({
+    preload: path.join(__dirname, 'preload.mjs'),
+    load: (target) => {
+      if (VITE_DEV_SERVER_URL) void target.loadURL(`${VITE_DEV_SERVER_URL}/overlay.html`)
+      else void target.loadFile(path.join(RENDERER_DIST, 'overlay.html'))
+    },
+  })
+  // Opacidade/persona mudando nas Preferências com o painel aberto, e o
+  // atalho seguindo o interruptor.
+  watchOverlaySettings()
 
   createWindow()
 })

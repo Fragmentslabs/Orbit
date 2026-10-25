@@ -46,17 +46,19 @@ import { createWebFetchTool, createWebSearchTool } from './web'
 import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { isComputerAvailable } from '../computer'
 import { createComputerTools } from './computer'
+import { createComputerTaskTool } from './computer-task'
+import { createEndCallTool, createOverlayTools } from './overlay'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createYtdlpTools } from './ytdlp'
 import { createMotionTools } from './motion'
 import { createDesignTools } from './design'
-import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
-import { createFontTools } from './fonts'
 import { createSlidesTools } from './slides'
 import { createPieceExportTool } from './piece-export'
 import { createPanelTools } from './panel'
+import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
+import { createFontTools } from './fonts'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -95,6 +97,9 @@ export function buildToolSet(
         visionModel: input.visionModel,
       }),
     )
+    // Subagente: o laço de várias ações roda com contexto curto (e o modelo
+    // das Preferências → Computador, se houver), não a cada passo aqui.
+    tools.computer_task = createComputerTaskTool(input, ctx?.abort)
   }
   // Skills: no prompt entram com a descrição; o conteúdo completo vem sob
   // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
@@ -115,6 +120,22 @@ export function buildToolSet(
     }
     if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, scope)
   }
+  // Overlay (⇧⌘espaço): a pergunta é sobre o que está na TELA. Sem estas duas
+  // tools o agente responderia no escuro e pediria para a pessoa colar o texto.
+  // Só overlays expõem — no chat normal o custo de uma imagem por turno não se
+  // justifica. `end_call` vale em qualquer conversa falada.
+  if (input.options.overlay) {
+    Object.assign(
+      tools,
+      createOverlayTools({
+        // Sem visão declarada, a resposta segura é NÃO anexar imagem: um modelo
+        // só de texto com um print anexado quebra ou inventa.
+        modelVision: modelVision ?? ctx?.modelVision ?? false,
+        visionModel: input.visionModel,
+      }),
+    )
+  }
+  if (input.options.overlay || input.options.voiceCall) tools.end_call = createEndCallTool()
   // Regra de ouro: workers podem usar subagentes, mas NUNCA orquestrar (sem recursão infinita).
   // Se orchestrate está ativo (este worker é um orquestrador), bloqueamos delegação.
   const allowDelegation = input.options.subagents === true && !input.options.orchestrate
@@ -392,25 +413,6 @@ export function buildToolSet(
       ),
     )
   }
-  // Browser do painel direito: teste de apps web + modo documentação.
-  // Workers ficam de fora — o painel é um recurso único e visível. Com as
-  // ferramentas de navegador desligadas nas Preferências, só quando o pedido
-  // veio do próprio navegador em tela cheia (ver agentMayUseBrowser).
-  if (ctx && input.orchestrationRole !== 'worker') {
-    const panelTools = createPanelBrowserTools(ctx)
-    if (agentMayUseBrowser(input)) {
-      Object.assign(tools, panelTools)
-      // Automação em lote: roda numa janela oculta, sem disputar o painel.
-      Object.assign(tools, createBrowserScriptTools(ctx))
-      // Gravação de um roteiro em vídeo (mesma janela oculta, captura por CDP).
-      // Não pede permissão e não abre janela — mas só deve ser chamada quando o
-      // usuário pede uma gravação (ver a descrição da tool).
-      Object.assign(tools, createBrowserRecordTools(ctx))
-    } else {
-      // show_image também mostra imagens do projeto e da galeria — isso não é
-      // usar o navegador, então fica.
-      tools.show_image = panelTools.show_image
-    }
   // Peças do Orbit (motion, design, slides): as MESMAS tools do chat. A peça
   // mora no armazenamento do app, não no repositório — o projeto entra como
   // FONTE de material (os *_asset com `path`) e como destino só quando o
@@ -442,6 +444,25 @@ export function buildToolSet(
     }
   }
 
+  // Browser do painel direito: teste de apps web + modo documentação.
+  // Workers ficam de fora — o painel é um recurso único e visível. Com as
+  // ferramentas de navegador desligadas nas Preferências, só quando o pedido
+  // veio do próprio navegador em tela cheia (ver agentMayUseBrowser).
+  if (ctx && input.orchestrationRole !== 'worker') {
+    const panelTools = createPanelBrowserTools(ctx)
+    if (agentMayUseBrowser(input)) {
+      Object.assign(tools, panelTools)
+      // Automação em lote: roda numa janela oculta, sem disputar o painel.
+      Object.assign(tools, createBrowserScriptTools(ctx))
+      // Gravação de um roteiro em vídeo (mesma janela oculta, captura por CDP).
+      // Não pede permissão e não abre janela — mas só deve ser chamada quando o
+      // usuário pede uma gravação (ver a descrição da tool).
+      Object.assign(tools, createBrowserRecordTools(ctx))
+    } else {
+      // show_image também mostra imagens do projeto e da galeria — isso não é
+      // usar o navegador, então fica.
+      tools.show_image = panelTools.show_image
+    }
   }
   if (allowBrain && ctx) {
     Object.assign(tools, createCodeMemoryTools(input, ctx))
