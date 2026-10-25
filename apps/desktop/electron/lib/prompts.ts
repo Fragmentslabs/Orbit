@@ -373,7 +373,7 @@ const VOICE_CALL_INSTRUCTION = `VOICE CALL ACTIVE. The user is talking to you ou
 - If the request is ambiguous, ask one short question instead of guessing at length.
 - Use tools only when the answer really needs them, and say only the outcome.
 - Silence on a call feels broken. Before any tool call or slow step (searching, reading files, running commands), FIRST write one short, natural sentence saying what you are about to do, in the user's language (for example "Deixa eu pesquisar isso, um instante."). It is spoken immediately while you work. Say it once, not before every step.
-- If the user signs off or says it was nothing ("tchau", "não era nada", "era só isso", "pode fechar", "thanks, bye"), answer with ONE short goodbye and then call end_call. It hangs up and closes the panel. Never call it while the conversation is still going.`
+- If the user signs off or says it was nothing ("tchau", "não era nada", "era só isso", "pode fechar", "thanks, bye"), answer with ONE short goodbye and then call end_call IN THE SAME TURN. The goodbye text alone ends nothing — without the call the microphone keeps listening and the panel stays open. Never call it while the conversation is still going.`
 
 /**
  * Overlay (⇧⌘espaço): o painel pequeno no rodapé da tela. Resposta curta —
@@ -389,7 +389,7 @@ const OVERLAY_INSTRUCTION = `OVERLAY (⇧⌘espaço). The user summoned the smal
 - Requests like "this", "isso", "aqui", "translate it", "what does this error mean" are about the screen or the selection. Call see_selection when it is about text and see_screen when it is about a window, an error, a page or an image. Look instead of asking the user to paste.
 - A one- or two-word message ("how", "what", "why", "e agora?") is NOT an invitation to ask what they meant: answer the most likely reading against the screen and the last exchange, in one line, and only then offer the alternative. Never answer a one-word message with "what do you mean?".
 - Answer SHORT: one to three sentences, or a compact list when the content really is a list. No report, no table, no headings, no long preamble — when the user wants depth they will say so.
-- If the user signs off or says it was nothing ("tchau", "não era nada", "era só isso"), answer with one short goodbye and call end_call.`
+- If the user signs off or says it was nothing ("tchau", "não era nada", "era só isso"), answer with one short goodbye and call end_call in the same turn — the text alone does not end the call.`
 
 /**
  * Áudio desligado nas Preferências → Voz: a tool correspondente nem existe, e

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, globalShortcut, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
 import {
   disposeOverlay,
+  endCallEverywhere,
   hideOverlay,
   markOverlayReady,
   openOverlay,
@@ -2803,6 +2804,11 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:toggle', () => toggleOverlay())
   ipcMain.handle('overlay:open', (_event, call?: boolean) => openOverlay({ call }))
   ipcMain.handle('overlay:close', () => hideOverlay())
+  // A pessoa se despediu ("tchau", "pode fechar") e o renderer já parou a vez:
+  // o main faz o que a tool `end_call` faria — hangup em todas as janelas e o
+  // painel fora da tela. O fim da conversa não depende da escolha do modelo,
+  // que na prática escreve o "tchau" sem chamar tool nenhuma.
+  ipcMain.on('voice:farewell', () => endCallEverywhere('farewell'))
   ipcMain.handle('overlay:resize', (_event, height: number) => resizeOverlay(height))
   ipcMain.handle('overlay:status', () => overlayShortcutStatus())
   ipcMain.handle('overlay:settings', () => getAppSettings().overlay)

@@ -60,7 +60,7 @@ function screenRecording(): boolean {
 export function createEndCallTool() {
   return tool({
     description:
-      'End the spoken conversation and dismiss the overlay. Call it when the user clearly signs off or says it was nothing — "tchau", "não era nada", "era só isso", "pode fechar", "thanks, bye" — or asks to stop. Say ONE short goodbye first (it is spoken), then call this tool. Do not use it when the user merely pauses or asks something else.',
+      'End the spoken conversation and dismiss the overlay. Call it when the user clearly signs off or says it was nothing — "tchau", "não era nada", "era só isso", "pode fechar", "thanks, bye" — or asks to stop. Say ONE short goodbye first (it is spoken), then call this tool IN THE SAME TURN. Writing the goodbye alone ends nothing: without this call the microphone keeps listening and the panel stays on screen. Do not use it when the user merely pauses or asks something else.',
     inputSchema: z.object({}),
     execute: async () => {
       endCallEverywhere('agent')

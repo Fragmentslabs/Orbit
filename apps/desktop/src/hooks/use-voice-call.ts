@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { VOICE_DEFAULTS } from "@shared/voice"
+import { isFarewellUtterance, VOICE_DEFAULTS } from "@shared/voice"
 import type { WaveLevels } from "@/src/components/dictation-wave"
 import { useDictation } from "@/src/hooks/use-dictation"
 import { readTtsEngine, readTtsPrefs, useSpeak } from "@/src/hooks/use-speak"
@@ -105,6 +105,8 @@ export function useVoiceCall({
   )
 
   const lastPartialRef = useRef("")
+  /** A última fala da pessoa foi uma despedida: a vez não volta a ouvir. */
+  const farewellRef = useRef(false)
   const onPartial = useCallback((text: string) => {
     // Chamada encerrada: parcial atrasado de uma captura que já foi cancelada.
     if (!activeRef.current) return
@@ -131,6 +133,10 @@ export function useVoiceCall({
         return
       }
       setHeard(said)
+      // Despedida reconhecida na hora em que é dita: a chamada acaba quando a
+      // resposta terminar de tocar (ver backToListening) — sem depender de o
+      // modelo escolher a tool end_call.
+      farewellRef.current = isFarewellUtterance(said)
       setSentences([])
       replyRef.current = { sentAt: Date.now(), offset: 0, streaming: false, toolSeen: false, done: false, ignore: false, sawBusy: false }
       setPhase("thinking")
@@ -161,6 +167,15 @@ export function useVoiceCall({
     const reply = replyRef.current
     reply.ignore = true
     reply.streaming = false
+    // Despedida: em vez de voltar a ouvir, encerra. O aviso ao main entra no
+    // MESMO caminho da tool `end_call` — hangup em todas as janelas e o painel
+    // do overlay fora da tela —, em vez de só parar o microfone desta.
+    if (farewellRef.current) {
+      farewellRef.current = false
+      hangUpRef.current()
+      window.ipcRenderer?.send("voice:farewell")
+      return
+    }
     listen()
   }, [listen])
 
@@ -249,6 +264,7 @@ export function useVoiceCall({
     setError(null)
     setHeard("")
     setSentences([])
+    farewellRef.current = false
     replyRef.current = idleReply()
     // Um erro de um ditado anterior derrubaria a chamada logo ao começar.
     dictationRef.current.dismissError()
@@ -264,6 +280,9 @@ export function useVoiceCall({
     if (!activeRef.current) return
     replyRef.current.ignore = true
     replyRef.current.streaming = false
+    // Interrompeu: a pessoa continua na conversa, então a despedida dita antes
+    // não pode derrubar a chamada no fim desta vez.
+    farewellRef.current = false
     stopSpeaking()
     listen()
   }, [listen, stopSpeaking])
@@ -273,6 +292,7 @@ export function useVoiceCall({
     activeRef.current = false
     setActive(false)
     replyRef.current = idleReply()
+    farewellRef.current = false
     stopSpeaking()
     dictationRef.current.cancel()
     setPartial("")

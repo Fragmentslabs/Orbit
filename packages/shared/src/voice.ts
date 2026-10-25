@@ -272,3 +272,53 @@ export const VOICE_DEFAULTS: VoiceSettings = {
   stt: { enabled: true, engine: "parakeet", modelId: null, language: "auto", live: true, threads: 4, preload: true, micDeviceId: null },
   call: { enabled: true, silenceMs: 1300 },
 }
+
+/** Cortesia em volta da despedida: sai da frase sem mudar o sentido dela. */
+const COURTESY = new Set([
+  "orbit", "obrigado", "obrigada", "valeu", "por", "favor", "ok", "okay", "ta", "entao", "agora", "gente",
+])
+
+/** A frase inteira, já normalizada (sem acento, minúscula, sem pontuação). */
+const FAREWELL_PHRASES = new Set([
+  "tchau", "tchau tchau", "tchauzinho", "ate logo", "ate mais", "ate a proxima", "ate breve", "ate amanha",
+  "adeus", "bye", "bye bye", "goodbye", "see you", "ciao", "adios", "hasta luego",
+  "pode fechar", "pode encerrar", "pode desligar", "fecha", "encerra", "encerrar", "desliga",
+  "nao era nada", "era so isso", "era isso", "so isso", "isso e tudo", "nada mais", "nada nao",
+  "falou",
+])
+
+/** Palavras que podem compor uma despedida (todas precisam estar aqui). */
+const FAREWELL_WORDS = new Set([
+  "tchau", "tchauzinho", "ciao", "adeus", "adios", "bye", "goodbye", "falou",
+  "ate", "logo", "mais", "proxima", "breve", "amanha", "hasta", "luego", "see", "you",
+  "pode", "fechar", "fecha", "encerrar", "encerra", "desligar", "desliga",
+  "nao", "era", "so", "isso", "tudo", "nada", "e", "sim", "ja",
+])
+
+/** Sozinha, uma destas já fecha a conversa. */
+const STRONG_FAREWELL = new Set([
+  "tchau", "tchauzinho", "ciao", "adeus", "adios", "bye", "goodbye", "falou",
+  "fechar", "fecha", "encerrar", "encerra", "desligar", "desliga",
+])
+
+/**
+ * A fala é SÓ uma despedida? Quando é, a chamada termina sozinha.
+ *
+ * O fim da conversa não pode depender de o modelo escolher a tool `end_call`:
+ * na prática ele escreve o "tchau" e não chama nada, e a pessoa fica com um
+ * microfone aberto e o painel na tela. A regra é estreita de propósito — a
+ * frase INTEIRA precisa ser um adeus (cortesia em volta é ignorada), então
+ * "como se diz tchau em japonês" não encerra nada.
+ */
+export function isFarewellUtterance(raw: string): boolean {
+  const words = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word && !COURTESY.has(word))
+  if (words.length === 0 || words.length > 6) return false
+  if (FAREWELL_PHRASES.has(words.join(" "))) return true
+  return words.every((word) => FAREWELL_WORDS.has(word)) && words.some((word) => STRONG_FAREWELL.has(word))
+}
