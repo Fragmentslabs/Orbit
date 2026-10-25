@@ -1,8 +1,8 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
+import { ArrowDown, ChevronRight, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -31,6 +31,7 @@ import { Suggestion } from "@/src/components/ai/suggestion"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { SummaryCard } from "@/src/components/messages/summary-card"
+import { CompactionSuggestionCard } from "@/src/components/compaction-suggestion-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
@@ -339,7 +340,7 @@ function EarlierMessages({ hiddenCount, onLoad, paused }: {
   )
 }
 
-function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
+function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer }: {
   messages: ChatMessage[]
   /** O histórico da sessão ainda não chegou do disco. */
   historyPending: boolean
@@ -351,6 +352,9 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
   planIds: Set<string>
   planReview: PlanReview | undefined
   plan?: OrchestrationPlan | undefined
+  /** Cards que pertencem à conversa (pedido do agente, revert, orquestração)
+   *  e por isso rolam com ela, em vez de ocuparem a faixa fixa acima do input. */
+  footer?: ReactNode
 }) {
   const { t } = useTranslation()
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
@@ -613,6 +617,7 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
             />
           </div>
         )}
+        {footer}
       </ConversationContent>
       <ConversationScrollButton />
       <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} planIds={planIds} />
@@ -652,6 +657,9 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
   const planReview = useSessionStore((s) => (session ? s.planReviews[session.id] : undefined))
   const pendingAsks = useSessionStore((s) => (session ? s.pendingAsks[session.id] ?? NO_ASKS : NO_ASKS))
+  const compactionSuggestion = useSessionStore((s) =>
+    session ? s.compactionSuggestion[session.id] : undefined,
+  )
   // IDs de mensagens de usuário que geraram planos — computado do review + mensagens
   const planMsgIds = useMemo(() => {
     const ids = new Set<string>()
@@ -766,6 +774,42 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const [providerHintVisible, setProviderHintVisible] = useState(false)
   const noProvider = useNoProviderConnected()
   const providersLoading = useProvidersLoading()
+
+  // Chip de pendência: o card do pedido agora vive na conversa, então pode
+  // ficar fora de vista enquanto a pessoa lê o histórico. O chip só aparece
+  // nesse caso — com o card à vista ele seria ruído. Volta a sumir sozinho
+  // quando o pedido é respondido (aí não há mais pendência nenhuma).
+  const pendingAsksRef = useRef<HTMLDivElement | null>(null)
+  const [pendingAskVisible, setPendingAskVisible] = useState(true)
+  const hasPendingAsks = pendingAsks.length > 0
+
+  useEffect(() => {
+    const el = pendingAsksRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setPendingAskVisible(entry.isIntersecting),
+      { threshold: 0.15 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+    // historyPending entra nas dependências: enquanto o histórico não chega, a
+    // conversa (e o footer com o card) não está montada, e o ref é nulo.
+  }, [hasPendingAsks, session?.id, historyPending])
+
+  const revealPendingAsk = useCallback(() => {
+    const el = pendingAsksRef.current
+    if (!el) return
+    // O scroller real é a div interna do StickToBottom (o Conversation é
+    // overflow-y-hidden) — mesmo caminho que o salto da busca percorre.
+    let scroller = el.parentElement
+    while (scroller) {
+      const overflowY = getComputedStyle(scroller).overflowY
+      if (overflowY === "auto" || overflowY === "scroll") break
+      scroller = scroller.parentElement
+    }
+    if (!scroller) return
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })
+  }, [])
 
   // Conectou um provedor (ou a inicialização revelou que existem) → card some
   useEffect(() => {
@@ -1111,6 +1155,94 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     introVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1.5"
   }`
 
+  // ── Cards conversacionais, dentro do fluxo ────────────────────────────
+  // Pedido do agente, revert, plano e progresso só existem QUANDO existe
+  // conversa, então moram nela: entram como último item da lista e rolam
+  // junto. Antes ocupavam a faixa fixa acima do input, e cada card que
+  // aparecia encurtava o histórico — com dois ou três, a conversa colapsava.
+  // Ficam de fora só os que também existem SEM conversa (init do projeto,
+  // aviso de visão e de provedor): esses precisam aparecer na tela inicial,
+  // onde não há lista para entrar, e continuam na faixa.
+  const planInFlow = !!plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running" || plan.status === "done")
+  // A oferta de continuar num chat novo só vale para a contagem de resumos da
+  // hora em que foi feita: uma compactação nova (que muda a contagem) esconde
+  // o card sem precisar de nenhuma invalidação manual.
+  const summaryCount = useMemo(
+    () => messages.reduce((total, m) => (m.summary ? total + 1 : total), 0),
+    [messages],
+  )
+  const showCompactionSuggestion =
+    !!compactionSuggestion &&
+    !compactionSuggestion.dismissed &&
+    compactionSuggestion.summaries === summaryCount
+
+  const hasInlineCards =
+    !!session?.revert || planInFlow || pendingAsks.length > 0 || showCompactionSuggestion
+
+  // -mt-4 come o gap-8 do ConversationContent pela metade: o card fica perto
+  // do turno que o gerou, sem colar na última mensagem.
+  const inlineCards = (
+    <div className="mx-auto -mt-4 flex w-full max-w-2xl flex-col gap-2 px-1 pb-1">
+      {/* Revert ativo: barra com alterações desfeitas + botão de desfazer */}
+      {session?.revert && <RevertBar session={session} />}
+      {/* Plano de orquestração proposto — aprovar/rejeitar */}
+      {session && plan && plan.status === "proposed" && (
+        <OrchestrationPlanCard sessionId={session.id} plan={plan} />
+      )}
+      {/* Plano em execução/concluído — progresso das tarefas. O mode é fixo:
+          worker de orquestração roda sempre na pasta de trabalho. */}
+      {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
+        <TaskProgress
+          tasks={plan.tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            mode: "code" as const,
+            fase: t.fase,
+            extra: t.extra,
+            revisions: t.revisions,
+            nota: t.notaRevisao,
+          }))}
+          acompanhamento={plan.revisao}
+          onJuntarDeNovo={() => chatApi.juntarOrquestracao(session.id)}
+          title={t("chat.orchestrationTitle")}
+          defaultExpanded={plan.status !== "done"}
+          onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
+        />
+      )}
+      {/* Contexto perto do limite depois de compactações acumuladas: oferece
+          continuar num chat novo (com brief do agente) em vez de resumir um
+          resumo. É oferta, não bloqueio — ignorada, a compactação automática
+          do próximo turno roda como sempre. */}
+      {session && showCompactionSuggestion && compactionSuggestion && (
+        <CompactionSuggestionCard
+          sessionId={session.id}
+          summaries={compactionSuggestion.summaries}
+          threshold={compactionSuggestion.threshold}
+        />
+      )}
+      {/* Pedidos aguardando resposta (permissão / question): o card é a última
+          coisa da conversa — é onde o turno parou esperando. Itens com batchId
+          (workers em lote) agrupam num card único de submit único. O ref é o
+          que decide se o chip de pendência precisa aparecer. */}
+      {pendingAsks.length > 0 && (
+        <div ref={pendingAsksRef} className="flex flex-col gap-2">
+          {pendingAsks
+            .filter((a) => !a.batchId)
+            .map((ask) => (
+              <AskCard key={ask.requestId} ask={ask} sessionId={session?.id} />
+            ))}
+          {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
+            <AskCardBatch
+              key={batchId}
+              items={pendingAsks.filter((a) => a.batchId === batchId)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
       {/* Breadcrumb de chat orquestrado: pai > worker */}
@@ -1331,70 +1463,37 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
               planIds={planMsgIds}
               planReview={planReview}
               plan={plan}
+              footer={hasInlineCards ? inlineCards : null}
             />
           </div>
         </div>
       </div>
-      {/* Projeto novo no modo código: card oferece o /init automático */}
+      {/* Projeto novo no modo código: card oferece o /init automático. Fica na
+          faixa, e não na conversa, porque existe justamente quando ainda não
+          há conversa nenhuma (a lista está vazia/oculta). */}
       {viewMode === "code" && initDirectory && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <InitProjectCard directory={initDirectory} sessionId={session?.id} />
         </div>
       )}
-      {/* Revert ativo: barra com alterações desfeitas + botão de desfazer */}
-      {session?.revert && (
-        <div className="mx-auto w-full max-w-2xl pb-2">
-          <RevertBar session={session} />
-        </div>
-      )}
-      {/* Plano de orquestração proposto — aprovar/rejeitar */}
-      {session && plan && plan.status === "proposed" && (
-        <div className="mx-auto w-full max-w-2xl pb-2">
-          <OrchestrationPlanCard sessionId={session.id} plan={plan} />
-        </div>
-      )}
-      {/* Plano de orquestração em execução/concluído — progresso das tarefas.
-          O mode é fixo: worker de orquestração roda sempre na pasta de trabalho. */}
-      {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
-        <div className="mx-auto w-full max-w-2xl pb-2">
-          <TaskProgress
-            tasks={plan.tasks.map((t) => ({
-              id: t.id,
-              title: t.title,
-              status: t.status,
-              mode: "code" as const,
-              fase: t.fase,
-              extra: t.extra,
-              revisions: t.revisions,
-              nota: t.notaRevisao,
-            }))}
-            acompanhamento={plan.revisao}
-            onJuntarDeNovo={() => chatApi.juntarOrquestracao(session.id)}
-            title={t("chat.orchestrationTitle")}
-            defaultExpanded={plan.status !== "done"}
-            onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
-          />
-        </div>
-      )}
-      {/* Imagem anexada com modelo sem visão e modo Visão desligado */}
+      {/* Imagem anexada com modelo sem visão e modo Visão desligado. Também
+          pode existir sem conversa (imagem pendente na tela inicial). */}
       <VisionHintCard sessionId={session?.id} />
       {/* Tentativa de envio sem nenhum provedor configurado (primeira execução) */}
       <ProviderHintCard visible={providerHintVisible} onDismiss={() => setProviderHintVisible(false)} />
-      {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
-          Itens com batchId (workers em lote) agrupam num card único de submit único. */}
-      {pendingAsks.length > 0 && (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 pb-2">
-          {pendingAsks
-            .filter((a) => !a.batchId)
-            .map((ask) => (
-              <AskCard key={ask.requestId} ask={ask} sessionId={session?.id} />
-            ))}
-          {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
-            <AskCardBatch
-              key={batchId}
-              items={pendingAsks.filter((a) => a.batchId === batchId)}
-            />
-          ))}
+      {/* Pendência fora de vista: o card do pedido está na conversa, e este
+          atalho leva até ele. Só existe quando o card saiu da área visível. */}
+      {hasPendingAsks && !pendingAskVisible && (
+        <div className="mx-auto flex w-full max-w-2xl px-1 pb-1">
+          <button
+            type="button"
+            onClick={revealPendingAsk}
+            className="group inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            <HelpCircle className="size-3.5 shrink-0" />
+            {t("chat.pendingAsk", { count: pendingAsks.length })}
+            <ArrowDown className="size-3.5 shrink-0 opacity-70 transition-transform group-hover:translate-y-0.5" />
+          </button>
         </div>
       )}
       {viewMode === "chat" ? (

@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
   dialog: {},
 }))
 
-const { applyTextEdits } = await import('./tools/motion-chat')
+const { applyTextEdits } = await import('./tools/piece-common')
 let media: typeof import('./media')
 
 beforeAll(async () => {

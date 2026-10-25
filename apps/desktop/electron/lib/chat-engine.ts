@@ -5,6 +5,7 @@ import type { BrowserWindow } from 'electron'
 import type {
   AgentPart,
   ChatEvent,
+  CatalogModel,
   ChatMessage,
   FilePart,
   MessagePart,
@@ -25,7 +26,14 @@ import {
 } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
-import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
+import {
+  compactHistory,
+  countSummaries,
+  findLastSummaryIndex,
+  generateContinuationBrief,
+  shouldCompact,
+  SUMMARY_PREFIX,
+} from './compaction'
 import { estimateTokens, maxStepsFor } from './context-budget'
 import { createStepPreparer } from './agent-step'
 import { manualSavesUnder, stripFilesFromPatch } from './manual-saves'
@@ -34,7 +42,9 @@ import { t as mainT } from './i18n'
 import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
-import { buildSystemPrompt } from './prompts'
+import { buildSystemPrompt, promptMemoryIds } from './prompts'
+import { retrieveForTurn } from './memory/service'
+import { renderMemorySuggestions } from './memory/retrieval'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
@@ -79,12 +89,14 @@ import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
+import { hoistToolImages } from './tool-images'
 import { endActivity } from './computer/session'
 import { designNameFromInputJson, openDesignLive } from './tools/design'
 import { openMotionLive } from './tools/motion'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
+import { forwardToOverlay, getOverlayWindow } from './overlay/window'
 import { modoGlobal } from './permission/modo-global'
 
 // Tools cujo input (ainda em streaming) abre a aba correspondente AO VIVO,
@@ -334,6 +346,47 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
     }
   }
   return { type: 'text', text: `[Unsupported file attached: ${file.filename ?? file.mime}]` }
+}
+
+/** Texto que o usuário/modelo escreveu numa mensagem (sem chips de anexo). */
+function turnText(message: ChatMessage): string {
+  return message.parts
+    .filter((p): p is TextPart => p.type === 'text' && !p.source)
+    .map((p) => p.text)
+    .join('\n')
+    .trim()
+}
+
+/** Últimos turnos da conversa, para desambiguar uma mensagem curta. */
+function recentTurns(history: ChatMessage[]): Array<{ role: 'user' | 'assistant'; text: string }> {
+  return history
+    // As duas últimas são o turno ATUAL (a pergunta e o assistant ainda vazio).
+    .slice(0, -2)
+    .slice(-6)
+    .map((m) => ({ role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const), text: turnText(m) }))
+    .filter((turn) => turn.text.length > 0)
+}
+
+/**
+ * Cola o bloco de memórias no FIM da última mensagem do usuário.
+ *
+ * No fim, e não no começo, porque a pergunta do usuário é o que o modelo
+ * precisa ler por último antes de responder; e na mensagem, e não no system
+ * prompt, porque o system é congelado por sessão e o cache de prefixo dos
+ * provedores depende disso.
+ */
+function withMemoryBlock(messages: ModelMessage[], block: string): ModelMessage[] {
+  if (!block) return messages
+  const last = messages[messages.length - 1]
+  if (!last || last.role !== 'user') return messages
+  if (typeof last.content === 'string') {
+    return [...messages.slice(0, -1), { ...last, content: `${last.content}\n\n${block}` }]
+  }
+  const parts = Array.isArray(last.content) ? last.content : []
+  return [
+    ...messages.slice(0, -1),
+    { ...last, content: [...parts, { type: 'text' as const, text: block }] } as ModelMessage,
+  ]
 }
 
 /** Chip de anexo sem o data URL original (evita duplicar bytes grandes no
@@ -1251,6 +1304,74 @@ const SUGGESTION_SYSTEM =
   'If there is no obvious next step, reply with an empty line.'
 
 /**
+ * Sugestão de continuidade ao FIM do turno.
+ *
+ * A compactação automática roda no INÍCIO do turno, antes da resposta — um
+ * card ali apareceria no lugar do que a pessoa acabou de pedir. Aqui o usage
+ * real do turno já é conhecido e não há turno rodando, que é exatamente o que
+ * a compactação manual exige (compactSession recusa durante um turno).
+ *
+ * Só sugere a partir de `compactSuggestionAfter` resumos: uma ou duas
+ * compactações funcionam bem; da terceira em diante o resumo já é um resumo de
+ * resumo e o começo da conversa se perde. É uma OFERTA — ignorada, a
+ * compactação automática do próximo turno roda como sempre.
+ */
+async function maybeSuggestCompaction(
+  win: BrowserWindow,
+  sessionId: string,
+  history: ChatMessage[],
+  catalogModel: CatalogModel | undefined,
+  modelVision: boolean,
+) {
+  const { autoCompact, compactSuggestionAfter } = getAppSettings()
+  if (!compactSuggestionAfter) return
+  // Rotina não tem ninguém para decidir nada: o card só ficaria parado.
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  if (!session || session.routineId) return
+  const summaries = countSummaries(history)
+  if (summaries < compactSuggestionAfter) return
+  const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
+  const historyTokens = estimateTokens(toModelMessages(history, modelVision))
+  const earlyAt = autoCompact === '75' ? 0.75 : autoCompact === '50' ? 0.5 : undefined
+  if (!shouldCompact(lastTokens, catalogModel, historyTokens, earlyAt)) return
+  emit(win, { type: 'compaction:suggest', sessionId, summaries, threshold: compactSuggestionAfter })
+}
+
+/**
+ * Brief de continuidade para um chat novo (a partir do card de compactação).
+ * Lê o histórico do disco — o renderer não tem a cópia — e devolve o texto já
+ * com o cabeçalho de resumo, que é como o novo chat o recebe: uma mensagem
+ * `summary: true` gerada pelo agente, não uma fala do usuário.
+ */
+export async function continuationBrief(
+  sessionId: string,
+): Promise<{ title: string; text: string } | null> {
+  // Turno rodando teria a própria cópia do histórico e gravaria por cima.
+  if (abortControllers.has(sessionId)) return null
+  const history = await loadMessages(sessionId)
+  const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant' && m.providerId)
+  const providerId = lastAssistant?.providerId
+  const modelId = lastAssistant?.modelId
+  if (!providerId || !modelId) return null
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  try {
+    const aux = await resolveAuxModel(
+      { providerId, modelId },
+      { sessionId, minContext: MIN_COMPACTION_CONTEXT },
+    )
+    const brief = await generateContinuationBrief(history, aux.model, aux.providerOptions)
+    if (!brief) return null
+    return {
+      title: `${session?.title ?? 'Conversa'} — continuação`,
+      text: `${SUMMARY_PREFIX}\n\n${brief}`,
+    }
+  } catch (err) {
+    console.error('[continuation] brief falhou:', err)
+    return null
+  }
+}
+
+/**
  * Próxima mensagem provável do usuário, com o modelo auxiliar. Cosmética como
  * o título: qualquer falha só significa não mostrar sugestão.
  */
@@ -1281,6 +1402,11 @@ async function generateSuggestion(input: SendMessageInput, reply: ChatMessage, w
 
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
+  // O overlay é uma janela à parte: sem este repasse, um turno pedido pelo
+  // painel (⇧⌘espaço) transmitiria só para a janela principal, e o painel
+  // ficaria mudo esperando a resposta. Evita o envio duplo quando a origem já
+  // é ele mesmo.
+  if (win !== getOverlayWindow()) forwardToOverlay('chat:event', event)
   forwardChatEvent(event)
 }
 
@@ -1413,13 +1539,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     simple: input.options.simple || undefined,
   }
   history.push(assistantMessage)
+  bindMediaJournal(assistantMessage.id)
   await saveMessages(sessionId, history)
   emit(win, { type: 'message', sessionId, message: assistantMessage })
 
   // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
   // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
   // independente da pasta de trabalho selecionada (as tools read/glob/bash só
-  bindMediaJournal(assistantMessage.id)
   // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
   // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
   // delega para o modelo de visão configurado (modo Visão) — sob demanda, via
@@ -1849,8 +1975,26 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // acumuladas do turno anterior + a instrução de continuar (padrão do
     // opencode: injetar uma "synthetic user message" e re-entrar no loop,
     // com teto de tentativas por turno).
+    // Memórias do turno entram na MESMA mensagem do usuário, nunca no system
+    // prompt: o system é congelado por sessão para o cache de prefixo dos
+    // provedores, e mudá-lo a cada pergunta jogaria esse cache fora. O bloco é
+    // recuperado com a mensagem atual (e, se ela não se explica sozinha, com o
+    // turno anterior) — ver memory/retrieval.ts.
+    const memoryBlock =
+      input.options.brainContext && input.orchestrationRole !== 'worker'
+        ? renderMemorySuggestions(
+            await retrieveForTurn({
+              text: input.text,
+              mode: input.mode,
+              directory: toolContext?.directory,
+              recent: recentTurns(history),
+              // O que já está no bloco fixo do prompt não se repete aqui.
+              exclude: promptMemoryIds(input.sessionId, input.mode, input.directory),
+            }),
+          )
+        : ''
     const initialMessages = normalizeMessages(
-      toModelMessages(history.slice(0, -1), modelVision),
+      withMemoryBlock(toModelMessages(history.slice(0, -1), modelVision), memoryBlock),
       interleavedReasoningField(provider, primary.modelId),
     )
     let autoContinues = 0
@@ -1898,6 +2042,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // provedor recusa a requisição inteira.
           const droppedBefore = stepPreparer.dropped
           const prepared = stepPreparer.prepare(messages)
+          // Imagem devolvida por tool não chega ao modelo no adaptador
+          // openai-compatible (vira base64 em string): ela sai do resultado e
+          // viaja como mensagem de usuário — ver tool-images.ts. Antes do
+          // medidor, porque o base64 no resultado inflava a conta sem servir
+          // para nada.
+          const hoisted = hoistToolImages(prepared)
+          const preparedWithImages = hoisted.messages
           if (stepPreparer.dropped > droppedBefore) {
             console.warn(
               `[context] step ${stepNumber}: ${stepPreparer.dropped - droppedBefore} resultado(s) de tool descartado(s) (teto de trabalho ${stepPreparer.workingBudget}, segurança ${stepPreparer.budget} tokens)`,
@@ -1906,7 +2057,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // Medidor ao vivo: o que está prestes a sair, quando cresceu além
           // do último valor real. É o aviso que faltava num turno longo — o
           // número só se mexia no fim da resposta (ou nunca, se ela falhasse).
-          const outgoing = estimateTokens(prepared)
+          const outgoing = estimateTokens(preparedWithImages)
           if (outgoing > lastContextInput) {
             lastContextInput = outgoing
             emitContext(outgoing, 0, true)
@@ -1916,11 +2067,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // steps.length === maxSteps (isStepCount usa igualdade). Com
           // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
           // terminar numa tool call sem texto.
-          if (stepNumber < maxSteps - 1) return prepared === messages ? {} : { messages: prepared }
+          if (stepNumber < maxSteps - 1) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
           return {
             activeTools: [],
             toolChoice: 'none' as const,
-            messages: [...prepared, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
+            messages: [...preparedWithImages, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
           }
         },
         onError: () => {
@@ -2561,6 +2712,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
+    // Turno encerrado: é aqui que a próxima compactação pode virar uma oferta
+    // de chat novo (ver maybeSuggestCompaction). Worker não tem quem decida.
+    if (input.orchestrationRole !== 'worker') {
+      void maybeSuggestCompaction(win, sessionId, history, catalogModel, modelVision)
+    }
     // Notificação nativa (janela fora de foco + prefs habilitada)
     void notifyNewMessage(sessionId, assistantMessage)
 

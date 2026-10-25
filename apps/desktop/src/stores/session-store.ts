@@ -78,6 +78,16 @@ export interface LiveContext {
   cacheWrite?: number
 }
 
+/** Oferta de continuar num chat novo, emitida pelo engine ao fim do turno. */
+export interface CompactionSuggestion {
+  /** Resumos no histórico na hora da oferta (= compactações feitas). */
+  summaries: number
+  /** A partir de quantos resumos o engine passou a sugerir. */
+  threshold: number
+  /** Dispensada para ESTA contagem; uma compactação nova libera de novo. */
+  dismissed: boolean
+}
+
 /** Aviso transitório do unrevert: o que ficou intacto por ter mudado depois. */
 export interface RevertNotice {
   sessionId: string
@@ -121,6 +131,10 @@ interface SessionState {
   _planReviewOutbox: Record<string, true>
   /** Pedidos de permissão/question aguardando resposta, por sessão */
   pendingAsks: Record<string, PendingAskUI[]>
+  /** Oferta de continuar num chat novo (contexto perto do limite), por sessão.
+   *  `dismissed` vale para ESTA contagem de resumos: uma compactação nova
+   *  (que muda a contagem) libera o card de novo. */
+  compactionSuggestion: Record<string, CompactionSuggestion>
 
   initialize: () => Promise<void>
   ensureMessages: (sessionId: string) => Promise<void>
@@ -131,6 +145,16 @@ interface SessionState {
   reviewPlanReview: (sessionId: string, feedback: string) => void
   dismissPlanReview: (sessionId: string) => void
   dismissOrchestration: (sessionId: string) => void
+  /** Fecha a oferta de continuar num chat novo (não volta até a próxima
+   *  compactação, que muda a contagem de resumos). */
+  dismissCompactionSuggestion: (sessionId: string) => void
+  /** Cria o chat filho da oferta: mesma pasta/modo do pai, `parentId` para a
+   *  sidebar/breadcrumb e o brief do agente como resumo de abertura. */
+  createContinuationSession: (
+    parentId: string,
+    title: string,
+    summaryText: string,
+  ) => Promise<SessionInfo | null>
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   setPendingFolder: (folderId: string | null) => void
@@ -347,6 +371,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   planReviews: {},
   _planReviewOutbox: {},
   pendingAsks: {},
+  compactionSuggestion: {},
   unreadCounts: {},
 
   initialize: async () => {
@@ -574,6 +599,71 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })()
   },
 
+  dismissCompactionSuggestion: (sessionId) => {
+    set((state) => {
+      const current = state.compactionSuggestion[sessionId]
+      if (!current || current.dismissed) return state
+      return {
+        compactionSuggestion: {
+          ...state.compactionSuggestion,
+          [sessionId]: { ...current, dismissed: true },
+        },
+      }
+    })
+  },
+
+  createContinuationSession: async (parentId, title, summaryText) => {
+    const parent = get().sessions.find((s) => s.id === parentId)
+    if (!parent) return null
+    const now = Date.now()
+    const child: SessionInfo = {
+      id: nanoid(),
+      title,
+      mode: parent.mode,
+      pinned: false,
+      archived: false,
+      folderId: parent.folderId,
+      // Mesma pasta de trabalho: o chat novo continua o MESMO trabalho, e sem
+      // worktree pai e filho editam o mesmo checkout (por isso o brief diz o
+      // escopo do que está em jogo).
+      directory: parent.directory,
+      extraDirectories: parent.extraDirectories,
+      // Anexado: breadcrumb no filho, aba automática no painel do pai, e
+      // exclusão/arquivamento em cascata (ver removeSession/archiveSession).
+      parentId,
+      createdAt: now,
+      updatedAt: now,
+    }
+    // O brief é do AGENTE, não do usuário: entra como mensagem de resumo do
+    // sistema (summary: true), que é o formato que o modelo já lê como
+    // "resumo da conversa até aqui" e a UI mostra como card recolhível.
+    const seed: ChatMessage = {
+      id: nanoid(),
+      role: "assistant",
+      summary: true,
+      // Não é compactação DESTA conversa: é o brief que abriu o chat. A UI
+      // rotula diferente (SummaryCard) para não parecer que já compactou.
+      continuation: true,
+      parts: [{ id: nanoid(), type: "text", text: summaryText, state: "done" }],
+      createdAt: now,
+    }
+    await storage.write(StorageKeys.session(child.id), child)
+    await storage.write(StorageKeys.messages(child.id), [seed])
+    set((state) => {
+      // A oferta cumpriu o papel: some da conversa do pai.
+      const compactionSuggestion = { ...state.compactionSuggestion }
+      delete compactionSuggestion[parentId]
+      return {
+        sessions: [child, ...state.sessions],
+        messages: { ...state.messages, [child.id]: [seed] },
+        compactionSuggestion,
+      }
+    })
+    loadedMessages.add(child.id)
+    emitChatEvent({ type: "session", sessionId: child.id, session: child })
+    return child
+  },
+
   acceptPlanReview: (sessionId, permissionMode, orchestrate) => {
     const review = get().planReviews[sessionId]
     if (!review || review.status !== "proposed") return
@@ -691,9 +781,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       for (const sid of ids) delete planReviews[sid]
       const pendingAsks = { ...state.pendingAsks }
       for (const sid of ids) delete pendingAsks[sid]
+      const compactionSuggestion = { ...state.compactionSuggestion }
+      for (const sid of ids) delete compactionSuggestion[sid]
       const unreadCounts = { ...state.unreadCounts }
       for (const sid of ids) delete unreadCounts[sid]
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, unreadCounts }
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, compactionSuggestion, unreadCounts }
     })
   },
 
@@ -827,9 +919,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       for (const sid of idSet) delete planReviews[sid]
       const pendingAsks = { ...state.pendingAsks }
       for (const sid of idSet) delete pendingAsks[sid]
+      const compactionSuggestion = { ...state.compactionSuggestion }
+      for (const sid of idSet) delete compactionSuggestion[sid]
       const unreadCounts = { ...state.unreadCounts }
       for (const sid of idSet) delete unreadCounts[sid]
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, unreadCounts }
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, compactionSuggestion, unreadCounts }
     })
   },
 
@@ -1535,6 +1629,26 @@ case "message": {
       set((state) => ({ suggestions: { ...state.suggestions, [sessionId]: event.text } }))
       break
 
+    case "compaction:suggest":
+      set((state) => {
+        const previous = state.compactionSuggestion[sessionId]
+        // O engine reemite a cada fim de turno enquanto a condição valer. Se a
+        // pessoa já dispensou para ESTA contagem, o card não volta — uma
+        // compactação (que muda a contagem) é o que libera de novo.
+        if (previous && previous.summaries === event.summaries && previous.dismissed) return state
+        return {
+          compactionSuggestion: {
+            ...state.compactionSuggestion,
+            [sessionId]: {
+              summaries: event.summaries,
+              threshold: event.threshold,
+              dismissed: false,
+            },
+          },
+        }
+      })
+      break
+
     case "title":
       set((state) => {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
@@ -1597,7 +1711,9 @@ case "message": {
         delete unreadCounts[sessionId]
         const pendingAsks = { ...state.pendingAsks }
         delete pendingAsks[sessionId]
-        return { sessions, messages, activeIds, planReviews, unreadCounts, pendingAsks }
+        const compactionSuggestion = { ...state.compactionSuggestion }
+        delete compactionSuggestion[sessionId]
+        return { sessions, messages, activeIds, planReviews, unreadCounts, pendingAsks, compactionSuggestion }
       })
       break
 
@@ -1614,11 +1730,19 @@ case "message": {
     }
 
     case "permission":
-    case "question": {
+    case "question":
+    case "subchat": {
       const ask: PendingAskUI =
         event.type === "permission"
           ? { requestId: event.requestId, kind: "permission", claim: event.claim, origin: event.origin }
-          : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }
+          : event.type === "subchat"
+            ? {
+                requestId: event.requestId,
+                kind: "subchat",
+                subchat: { title: event.title, brief: event.brief },
+                origin: event.origin,
+              }
+            : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }
       set((state) => {
         const current = state.pendingAsks[sessionId] ?? []
         if (current.some((a) => a.requestId === ask.requestId)) return state

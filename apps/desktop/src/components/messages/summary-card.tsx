@@ -20,7 +20,9 @@ export function SummaryCard({ message }: { message: ChatMessage }) {
     <Collapsible open={open} onOpenChange={setOpen} className="not-prose my-2 w-full">
       <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground">
         <NotebookPen className="size-3.5 shrink-0" />
-        <span className="flex-1">{t("chat.summaryCard")}</span>
+        <span className="flex-1">
+          {message.continuation ? t("chat.summaryCardContinuation") : t("chat.summaryCard")}
+        </span>
         <ChevronDownIcon className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </CollapsibleTrigger>
       <CollapsibleContent>
