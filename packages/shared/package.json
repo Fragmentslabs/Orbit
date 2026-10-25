@@ -13,6 +13,7 @@
     "./companion": "./src/companion.ts",
     "./models": "./src/models.ts",
     "./memory": "./src/memory.ts",
+    "./persona": "./src/persona.ts",
     "./skills": "./src/skills.ts",
     "./mcp": "./src/mcp.ts",
     "./analytics": "./src/analytics.ts"
