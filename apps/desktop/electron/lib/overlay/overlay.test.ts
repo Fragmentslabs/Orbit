@@ -106,8 +106,19 @@ describe('prompt do overlay', () => {
     const prompt = await buildSystemPrompt(turn({ voiceCall: true }))
     expect(prompt).toContain('VOICE CALL ACTIVE')
     expect(prompt).toContain('end_call')
-    expect(prompt).toMatch(/não era nada/i)
-    // tchau, bye: o modelo não pode encerrar no meio de uma conversa normal.
+    // A despedida é decisão do modelo, não uma lista de palavras: o prompt fala
+    // em qualquer idioma e diz que só o texto não encerra nada.
+    expect(prompt).toMatch(/in any language/i)
+    expect(prompt).toMatch(/text alone ends nothing/i)
+    // E o modelo não pode encerrar no meio de uma conversa normal.
     expect(prompt).toMatch(/Never call it while the conversation is still going/i)
+  })
+
+  it('o prompt do overlay e da chamada não fixa frases em português', async () => {
+    const overlay = await buildSystemPrompt(turn({ overlay: true }))
+    const call = await buildSystemPrompt(turn({ voiceCall: true }))
+    for (const prompt of [overlay, call]) {
+      expect(prompt).not.toMatch(/tchau|não era nada|era só isso|pode fechar|agora foi|isso|aqui/i)
+    }
   })
 })
