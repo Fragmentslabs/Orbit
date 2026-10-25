@@ -129,6 +129,17 @@ describe('controle de tela pelo bash', () => {
   })
 })
 
+describe('cu_batch', () => {
+  it('pede a mesma aprovação por app, com o número de passos', () => {
+    const pedido = assess('cu_batch', { app: 'com.apple.TextEdit', steps: [{ action: 'left_click' }, { action: 'type' }] }, null)
+    expect(pedido?.ruleId).toBe('cu:app:com.apple.TextEdit')
+    expect(pedido?.claim.detail).toContain('2 ações em sequência')
+    expect(assess('computer_task', { goal: 'x' }, null)).toBeNull()
+  })
+})
+
+
+
 describe('assess — subchats', () => {
   it('instruir um subchat pede permissão e mostra a instrução', () => {
     const a = assess('send_to_subchat', { subchatId: 'ses_f1', message: 'Agora cubra aspas escapadas' }, null)

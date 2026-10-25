@@ -102,6 +102,11 @@ const NATIVE_TOOLS = new Set([
   // savePath, restrito ao pedido explícito. Mesma convenção das de imagem.
   'audio_transcribe',
   'audio_generate',
+  // Overlay: ler a tela e a seleção do app da frente é o que a pessoa pediu ao
+  // abrir o painel; encerrar a chamada é o "tchau, Orbit". Nenhuma escreve.
+  'see_screen',
+  'see_selection',
+  'end_call',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',
@@ -196,44 +201,39 @@ const NATIVE_TOOLS = new Set([
   'motion_preview',
   'motion_write',
   'motion_edit',
+  'motion_read',
   'motion_render',
   'motion_asset',
+  'motion_delete',
   // Design (canvas de artboards no painel): mesmo threat model — motor local,
   // entrega é um arquivo no storage do Orbit. Sem entrar aqui cairia no
   // catch-all de MCP como servidor "design" e pediria permissão a cada chamada.
-  'motion_read',
   'design_write',
   'design_edit',
-  'motion_delete',
   'design_read',
   'design_preview',
   'design_asset',
+  'design_delete',
   // Slides (deck no painel): mesmo threat model do design — o deck é um arquivo
   // montado no storage do app. Fora desta lista cairia no catch-all de MCP como
   // servidor "slides" e pediria permissão a cada chamada.
   'slides_preview',
   'slides_write',
-  'design_delete',
+  'slides_edit',
+  'slides_read',
+  'slides_asset',
+  'slides_delete',
   // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
   // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
   'image_search',
   'image_import',
   'motion_frame',
-  'slides_edit',
-  'slides_read',
-  'slides_asset',
-  'slides_delete',
   'show_video',
   'video_guide',
   'video_probe',
   'video_transcribe',
   'video_timeline',
   'video_render',
-  // Computer Use — leitura: listar apps, observar (screenshot + árvore), buscar
-  // e ver permissões. Só existem com o interruptor das Preferências E o modo
-  // da conversa ligados, e a denylist vale também aqui (isForbidden). Agir
-  // (cu_computer) passa pelo gate — ver assessComputer.
-  'cu_apps',
   // Mídia por link (yt-dlp): leitura de uma página pública e gravação no
   // storage do Orbit (chat) ou em downloads/ da pasta de trabalho (código) —
   // o mesmo threat model de media_compress e webfetch, que também não pedem
@@ -243,9 +243,19 @@ const NATIVE_TOOLS = new Set([
   'ytdlp_download',
   'ytdlp_transcript',
   'ytdlp_install',
+  // Computer Use — leitura: listar apps, observar (screenshot + árvore), buscar
+  // e ver permissões. Só existem com o interruptor das Preferências E o modo
+  // da conversa ligados, e a denylist vale também aqui (isForbidden). Agir
+  // (cu_computer) passa pelo gate — ver assessComputer.
+  'cu_apps',
   'cu_observe',
   'cu_query',
   'cu_permissions',
+  // Delega a um subagente: as ações dele passam pelo gate uma a uma (por app).
+  'computer_task',
+  'cu_record_start',
+  'cu_record_mark',
+  'cu_record_stop',
 ])
 
 /**
@@ -273,6 +283,8 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
         ? `key: ${String(args.key ?? '')}`
         : action === 'open_app'
           ? 'abrir / trazer para a frente'
+          : action === 'batch'
+            ? `${String(args.batchSteps ?? '?')} ações em sequência`
           : args.element !== undefined
             ? `${action} no elemento ${String(args.element)}`
             : `${action}${args.x !== undefined ? ` em (${String(args.x)}, ${String(args.y)})` : ''}`
@@ -439,6 +451,11 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
     return assessFileWrite(toolName, args.filePath)
   }
   if (toolName === 'cu_computer') return assessComputer(args)
+  // Lote: a mesma aprovação por app, com o número de passos no detalhe.
+  if (toolName === 'cu_batch') {
+    const steps = Array.isArray(args.steps) ? args.steps.length : 0
+    return assessComputer({ ...args, action: 'batch', batchSteps: steps })
+  }
   // Remover worktree apaga a pasta e o que não foi commitado nela: pergunta
   // sempre, mesmo no modo total (a regra do plano de worktrees nos chats).
   if (toolName === 'worktree_remove') {
