@@ -26,6 +26,9 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'computer-panels': path.resolve(__dirname, 'computer-panels.html'),
+        // Overlay do atalho global (⇧⌘espaço): página própria para o painel
+        // abrir só com o que precisa — sem os sincronizadores da principal.
+        overlay: path.resolve(__dirname, 'overlay.html'),
       },
     },
   },

@@ -284,6 +284,15 @@ export function useVoiceCall({
   // Saiu da tela no meio da chamada: desliga tudo.
   useEffect(() => () => hangUpRef.current(), [])
 
+  // A tool `end_call` (o agente ouviu "tchau, Orbit") encerra a conversa em
+  // qualquer janela — inclusive nesta, que pode ser a principal ou o overlay.
+  // O evento vem do main porque o pedido nasce de uma tool, não da UI.
+  useEffect(() => {
+    if (!window.ipcRenderer) return
+    const wrapper = window.ipcRenderer.on("voice:hangup", () => hangUpRef.current())
+    return () => window.ipcRenderer.off("voice:hangup", wrapper)
+  }, [])
+
   return {
     active,
     phase,

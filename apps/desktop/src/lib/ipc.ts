@@ -44,6 +44,7 @@ import type {
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
+import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
 import type { PanelEvent } from "@/src/stores/panel-store"
 
 export type { SearchHit }
@@ -113,6 +114,35 @@ export const openWithApi = {
     window.ipcRenderer.invoke("openwith:unregister") as Promise<{ ok: boolean; error?: string }>,
 }
 
+/**
+ * Overlay do atalho global (⇧⌘espaço). A janela é do main; o renderer do painel
+ * pede para fechar, redimensionar (a altura acompanha o conteúdo) e escuta o
+ * contexto que o main monta ao abrir — a seleção já vem lida de lá, porque
+ * depois do foco o app da frente passa a ser o Orbit.
+ */
+export const overlayApi = {
+  /** O renderer montou: o main só manda `overlay:open` depois disto. */
+  ready: () => window.ipcRenderer.send("overlay:ready"),
+  toggle: () => window.ipcRenderer.invoke("overlay:toggle"),
+  open: (call?: boolean) => window.ipcRenderer.invoke("overlay:open", call),
+  close: () => window.ipcRenderer.invoke("overlay:close"),
+  /** Altura do conteúdo; a janela mantém a borda de baixo ancorada. */
+  resize: (height: number) => window.ipcRenderer.invoke("overlay:resize", height),
+  status: () =>
+    window.ipcRenderer.invoke("overlay:status") as Promise<{ shortcut: string; ok: boolean; error?: string }>,
+  settings: () => window.ipcRenderer.invoke("overlay:settings") as Promise<OverlaySettings>,
+  /** Copiar a resposta (a área de transferência do renderer exige gesto/permite). */
+  copy: (text: string) => window.ipcRenderer.invoke("clipboard:write", text) as Promise<void>,
+  onOpen: (listener: (context: OverlayContext) => void) => {
+    const wrapper = window.ipcRenderer.on("overlay:open", (payload) => listener(payload as OverlayContext))
+    return () => window.ipcRenderer.off("overlay:open", wrapper)
+  },
+  onEvent: (listener: (event: OverlayEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("overlay:event", (payload) => listener(payload as OverlayEvent))
+    return () => window.ipcRenderer.off("overlay:event", wrapper)
+  },
+}
+
 export const sound = {
   play: (name: string) =>
     (window.ipcRenderer?.invoke("sound:play", name) ?? Promise.resolve(false)) as Promise<boolean>,
@@ -164,7 +194,7 @@ export const computerApi = {
   stop: (sessionId?: string) => window.ipcRenderer.invoke("computer:stop", sessionId) as Promise<void>,
   requestAccessibility: () => window.ipcRenderer.invoke("computer:request-accessibility") as Promise<boolean>,
   /** Cria a entrada do app em Gravação de Tela e abre o painel */
-  requestScreen: () => window.ipcRenderer.invoke("computer:request-screen") as Promise<void>,
+  requestScreen: () => window.ipcRenderer.invoke("computer:request-screen") as Promise<{ granted: boolean }>,
   openPane: (pane: "accessibility" | "screen") => window.ipcRenderer.invoke("computer:open-pane", pane) as Promise<void>,
   onEvent: (listener: (event: ComputerEvent) => void) => {
     if (!window.ipcRenderer) return () => {}
@@ -265,6 +295,13 @@ export const chatApi = {
    *  o status de streaming sem esperar o próximo evento). */
   running: () => window.ipcRenderer.invoke("chat:running") as Promise<string[]>,
   compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
+  /** Brief de continuidade para um chat novo (card de compactação): o main lê
+   *  o histórico e gera o texto no modelo auxiliar, já com o cabeçalho de resumo. */
+  continuationBrief: (sessionId: string) =>
+    window.ipcRenderer.invoke("chat:continuationBrief", sessionId) as Promise<{
+      title: string
+      text: string
+    } | null>,
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
   /** Tenta de novo juntar no chat o trabalho aceito dos workers (worktrees) */
@@ -719,6 +756,11 @@ export const slidesApi = {
    *  traduz pelo registro. `false` quando o deck saiu do registro. */
   open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("slides:open", ref) as Promise<boolean>,
+  /** O id e a entrada do deck SEM abrir aba — é com isso que o card do chat
+   *  monta o palco inline (`orbit-slides://<id>/<entrada>`). `null` quando o
+   *  deck saiu do registro. */
+  resolve: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
+    window.ipcRenderer.invoke("slides:resolve", ref) as Promise<{ id: string; entry: string } | null>,
   /** O arquivo do deck mudou no disco: remonta o palco. */
   onChanged: (listener: (payload: { id: string }) => void) => {
     const wrapper = window.ipcRenderer.on("slides:changed", (payload) => listener(payload as { id: string }))

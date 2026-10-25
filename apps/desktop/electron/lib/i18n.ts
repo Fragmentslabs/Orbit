@@ -361,6 +361,10 @@ export const MESSAGES = {
     'pt-BR': 'Orbit está controlando {{apps}}',
     en: 'Orbit is controlling {{apps}}',
   },
+  'computer.overlayGlobal': {
+    'pt-BR': 'Orbit está usando o seu mouse em {{apps}} — não mexa',
+    en: 'Orbit is using your mouse in {{apps}} — hands off',
+  },
   'computer.overlayStop': {
     'pt-BR': 'Parar',
     en: 'Stop',
