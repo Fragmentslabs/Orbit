@@ -1,7 +1,9 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
 import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory, RelationType } from '@shared/memory'
-import { isCodeContext, jaccard, searchMemories } from '@shared/memory'
+import { isCodeContext, jaccard } from '@shared/memory'
+import { PRODUCTION_RETRIEVAL, retrieveCandidates } from '@shared/memory-select'
+import { Bm25Index, lexicalDocOf } from '@shared/memory-retrieval'
 import {
   defaultWeight,
   extendedExpiry,
@@ -15,6 +17,8 @@ import {
 } from './domain'
 import { buildProjectMap, rootOf, type ProjectMap } from './project-map'
 import * as repo from './repository'
+import { embedTexts, modelInstalled, syncIndex, vectorsById } from './embedding'
+import { suggestMemories, type MemorySuggestion } from './retrieval'
 import { pastaNoRepositorioPrincipal } from '../worktrees/principal'
 
 /**
@@ -27,6 +31,10 @@ export const memoryEvents = new EventEmitter()
 
 function emit(action: MemoryEvent['action'], memory: Memory) {
   memoryEvents.emit('event', { action, memory } satisfies MemoryEvent)
+  // Qualquer mutação pode invalidar o vetor daquela memória: o índice de
+  // embeddings é sincronizado em segundo plano, com debounce, e nunca no
+  // caminho da resposta.
+  scheduleIndexSync()
 }
 
 function newId() {
@@ -71,6 +79,16 @@ export interface SaveMemoryInput {
   /** Subprojeto dentro do projeto (ex.: "front", "back") — só quando kind === "project" */
   subproject?: string
   sessionId?: string
+  /**
+   * Enriquecimento para a busca (opcional, preenchido por quem grava).
+   * `text` continua sendo a fonte da verdade: estes campos só ajudam a
+   * recuperação e nunca podem conter fato que o texto não tenha.
+   */
+  title?: string
+  summary?: string
+  entities?: string[]
+  keywords?: string[]
+  concepts?: string[]
   /** Ids de memórias relacionadas (cria links) */
   relatedIds?: string[]
   /** Tipo da relação por id de destino. "parent" = hierarquia, "related" = conexão livre */
@@ -92,6 +110,33 @@ export interface SaveMemoryResult {
 }
 
 const JACCARD_THRESHOLD = 0.85
+
+type EnrichmentInput = Pick<SaveMemoryInput, "title" | "summary" | "entities" | "keywords" | "concepts">
+
+/**
+ * Campos derivados que acompanham a memória. Campo não enviado continua como
+ * está: na fusão — e no revise — o enriquecimento antigo não é apagado.
+ */
+function enrichmentOf(input: EnrichmentInput): Partial<Memory> {
+  const list = (items?: string[]) => {
+    const clean = (items ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 12)
+    return clean.length ? clean : undefined
+  }
+  // As chaves ausentes ficam AUSENTES, não `undefined`: espalhar `undefined`
+  // sobre uma memória existente apagaria o enriquecimento que já estava lá.
+  const out: Partial<Memory> = {}
+  const title = input.title?.trim()
+  if (title) out.title = title
+  const summary = input.summary?.trim()
+  if (summary) out.summary = summary
+  const entities = list(input.entities)
+  if (entities) out.entities = entities
+  const keywords = list(input.keywords)
+  if (keywords) out.keywords = keywords
+  const concepts = list(input.concepts)
+  if (concepts) out.concepts = concepts
+  return out
+}
 
 export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   const now = Date.now()
@@ -136,6 +181,7 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
       expiresAt: extendedExpiry(existing),
       originProjectId: existing.originProjectId ?? originProjectId,
       originProjectName: existing.originProjectName ?? originProjectName,
+      ...enrichmentOf(input),
     }
     if (input.document) {
       await repo.writeDoc(merged.id, input.document)
@@ -177,6 +223,7 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
       : input.kind === 'general' && input.category === 'learning' ? 'learning'
       : undefined,
     area: input.kind === 'project' ? input.area : undefined,
+    ...enrichmentOf(input),
   }
   if (input.document) {
     await repo.writeDoc(memory.id, input.document)
@@ -210,6 +257,51 @@ export interface SearchMemoryInput {
 /** Quantos vizinhos de grafo entram por cima do resultado léxico */
 const GRAPH_EXPANSION_LIMIT = 4
 
+/**
+ * Documentos anexados das memórias do conjunto: o que está dentro do `.md`
+ * também precisa ser encontrável, não só o texto da memória. Lê apenas quem
+ * declara `hasDoc` e nunca derruba a busca por causa de um documento ilegível.
+ */
+async function docsFor(pool: Memory[]): Promise<Map<string, string>> {
+  const withDoc = pool.filter((m) => m.hasDoc)
+  if (withDoc.length === 0) return new Map()
+  const out = new Map<string, string>()
+  await Promise.all(
+    withDoc.map(async (memory) => {
+      try {
+        const doc = await repo.readDoc(memory.id)
+        if (doc?.trim()) out.set(memory.id, doc)
+      } catch {
+        /* documento ilegível não invalida a memória */
+      }
+    }),
+  )
+  return out
+}
+
+/**
+ * Vetores do índice semântico, ou vazio quando o modelo não está instalado.
+ * Buscar nunca dispara download: quem procura não pode esperar 130 MB.
+ */
+async function indexVectors(): Promise<Map<string, Float32Array>> {
+  if (!modelInstalled()) return new Map()
+  try {
+    return await vectorsById()
+  } catch {
+    return new Map()
+  }
+}
+
+/** Embedding da consulta — undefined quando o modelo falta, e a busca segue lexical. */
+async function queryVector(query: string): Promise<Float32Array | undefined> {
+  try {
+    const [vec] = await embedTexts([query])
+    return vec
+  } catch {
+    return undefined
+  }
+}
+
 export async function search(input: SearchMemoryInput): Promise<Memory[]> {
   const now = Date.now()
   const pool = (await alive()).filter((m) => {
@@ -219,12 +311,31 @@ export async function search(input: SearchMemoryInput): Promise<Memory[]> {
     if (input.excludeCodeContext && isCodeContext(m)) return false
     return true
   })
-  const results = searchMemories(pool, input.query, input.limit ?? 8)
+  // Uma só lista lexical — BM25 sobre o texto indexável, com o `.md` anexado —
+  // fundida com o vetor da consulta, na calibração do bench. Sem modelo, o
+  // lexical fica sozinho e a busca continua funcionando.
+  const docs = await docsFor(pool)
+  const lexical = new Bm25Index(pool.map((memory) => lexicalDocOf(memory, docs.get(memory.id))))
+  const vectors = await indexVectors()
+  const queryVec = vectors.size > 0 ? await queryVector(input.query) : undefined
+  const candidates = retrieveCandidates(
+    { queryVec, lexicalQuery: input.query, vectors, lexical },
+    PRODUCTION_RETRIEVAL,
+  )
+
+  const poolById = new Map(pool.map((m) => [m.id, m]))
+  const limit = input.limit ?? 8
+  const results: Memory[] = []
+  for (const candidate of candidates) {
+    const memory = poolById.get(candidate.id)
+    if (!memory) continue
+    results.push(memory)
+    if (results.length >= limit) break
+  }
 
   // Navegação do grafo: memórias ligadas (relatedIds) aos melhores resultados
   // entram no retorno — ex: a busca acha o node "Design System" e traz junto
   // as memórias de botões/tokens ligadas a ele, sem depender de tokens léxicos.
-  const poolById = new Map(pool.map((m) => [m.id, m]))
   const included = new Set(results.map((m) => m.id))
   const expanded: Memory[] = []
   for (const memory of results) {
@@ -366,6 +477,16 @@ export interface ReviseMemoryInput {
   directory?: string
   /** Subpasta do projeto que a memória descreve (só kind="project"). */
   subproject?: string
+  /**
+   * Enriquecimento para a busca. Reescrever o texto de uma memória antiga é a
+   * chance de preencher isto — sem esses campos ela continua sendo indexada
+   * só pelo que der para derivar do texto.
+   */
+  title?: string
+  summary?: string
+  entities?: string[]
+  keywords?: string[]
+  concepts?: string[]
 }
 
 /**
@@ -401,6 +522,7 @@ export async function revise(id: string, input: ReviseMemoryInput): Promise<Memo
     ...(input.area != null ? { area: input.area } : undefined),
     ...(input.subproject != null && kind === 'project' ? { subproject: input.subproject } : undefined),
     category,
+    ...enrichmentOf(input),
   }
   if (input.area === null) delete next.area
 
@@ -495,15 +617,19 @@ export async function tree(projectId: string): Promise<TreeNodeSummary[]> {
 }
 
 /**
- * Promove in-place: seasonal → core; project/context → decision.
+ * Promove in-place: seasonal → general; project/context → decision.
  * `promotedFrom` registra a origem (kind/category anterior) para a UI.
+ *
+ * `general` e não `core`: core só é injetado no prompt do chat (ver
+ * loadPromptContext), e o padrão que se repete vale sobretudo no código —
+ * promovê-lo para core o faria desaparecer justamente ali.
  */
 export async function promote(id: string): Promise<Memory | null> {
   const memory = await repo.get(id)
   if (!memory) return null
   let next: Memory | null = null
   if (memory.kind === 'seasonal') {
-    next = { ...memory, kind: 'core', expiresAt: null, promotedFrom: 'seasonal' }
+    next = { ...memory, kind: 'general', expiresAt: null, promotedFrom: 'seasonal' }
   } else if (memory.kind === 'project' && memory.category === 'context') {
     next = { ...memory, category: 'decision', expiresAt: null, promotedFrom: 'project/context' }
   }
@@ -566,6 +692,11 @@ export async function resolveProjectScope(pasta: string): Promise<ProjectScope> 
 export interface PromptContext {
   core: Memory[]
   seasonal: Memory[]
+  /**
+   * Sazonais que já se repetiram o bastante para virar padrão. O agente pergunta
+   * na conversa antes de promover — é o "sim" do usuário que faz a regra.
+   */
+  promotable: Memory[]
   general: Memory[]
   /** kind="general" + category="learning" — lições reutilizáveis entre projetos */
   learning: Memory[]
@@ -588,7 +719,70 @@ const CATEGORY_PRIORITY: Record<ProjectCategory, number> = {
   learning: 4,
 }
 
-/** Memórias injetadas silenciosamente no system prompt (~600 tokens no pior caso). */
+/**
+ * Quantos usos fazem uma sazonal parecer padrão. Fica ABAIXO do limiar da
+ * promoção automática (5 — ver shouldPromote): a ideia é o agente perguntar
+ * ANTES de o sistema decidir sozinho, porque a regra só deve nascer com o aval
+ * de quem vai conviver com ela. A promoção automática continua como rede de
+ * segurança para quando ninguém perguntou (brain desligado, sessão fechada).
+ */
+const PROMOTION_ASK_HITS = 3
+
+function repeatingSeasonals(pool: Memory[], now: number): Memory[] {
+  return pool
+    .filter((m) => m.kind === 'seasonal' && !isExpired(m, now) && m.hits >= PROMOTION_ASK_HITS)
+    .sort((a, b) => b.hits - a.hits)
+    .slice(0, 3)
+}
+
+/**
+ * Orçamento do bloco do system prompt, em caracteres.
+ *
+ * O limite é de TAMANHO, não de quantidade de memórias: contar itens não
+ * protege contra uma memória longa, e era assim que um texto de milhares de
+ * caracteres entrava inteiro no prompt — em toda mensagem, para sempre.
+ */
+const CONTEXT_BUDGET_CHARS = 3600
+
+/** Teto por linha: uma memória longa não pode engolir o bloco. */
+const CONTEXT_LINE_MAX_CHARS = 220
+
+/**
+ * Corta o bloco para caber no orçamento, na ordem de prioridade do prompt:
+ * o permanente primeiro, o ocasional depois. Quando o orçamento acaba, o que
+ * vem depois fica de fora — e isso é o comportamento certo, não um empate.
+ */
+function trimContext(ctx: PromptContext): PromptContext {
+  let used = 0
+  const take = (list: Memory[]): Memory[] => {
+    const out: Memory[] = []
+    for (const memory of list) {
+      const text =
+        memory.text.length > CONTEXT_LINE_MAX_CHARS
+          ? `${memory.text.slice(0, CONTEXT_LINE_MAX_CHARS - 1).trimEnd()}…`
+          : memory.text
+      const cost = text.length + 8 // marcador e separador da linha
+      if (used + cost > CONTEXT_BUDGET_CHARS) break
+      used += cost
+      out.push(text === memory.text ? memory : { ...memory, text })
+    }
+    return out
+  }
+  return {
+    ...ctx,
+    core: take(ctx.core),
+    project: take(ctx.project),
+    general: take(ctx.general),
+    learning: take(ctx.learning),
+    seasonal: take(ctx.seasonal),
+    promotable: take(ctx.promotable),
+  }
+}
+
+/**
+ * Memórias injetadas silenciosamente no system prompt, já cortadas para caber
+ * no orçamento de `CONTEXT_BUDGET_CHARS` (ver trimContext).
+ */
 export async function loadPromptContext(
   mode: 'chat' | 'code',
   directory?: string,
@@ -598,21 +792,26 @@ export async function loadPromptContext(
   const generalAll = pool.filter((m) => m.kind === 'general')
   const learningPool = generalAll.filter((m) => m.category === 'learning')
   const general = generalAll.filter((m) => m.category !== 'learning').sort(byWeight)
+  const promotable = repeatingSeasonals(pool, Date.now())
+  // A candidata não se repete no bloco de contexto: a mesma linha duas vezes
+  // (uma como "use como contexto", outra como "pergunte") só confunde.
+  const promotableIds = new Set(promotable.map((m) => m.id))
 
   if (mode === 'chat') {
-    return {
+    return trimContext({
       core: pool.filter((m) => m.kind === 'core').sort(byWeight).slice(0, 15),
       seasonal: pool
-        .filter((m) => m.kind === 'seasonal')
+        .filter((m) => m.kind === 'seasonal' && !promotableIds.has(m.id))
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 8),
+      promotable,
       general: general.slice(0, 10),
       // Aprendizados são contexto de código ("Prisma no Alpine exige openssl")
       // e não ajudam em nada numa conversa — injetá-los aqui só gastava tokens
       // e misturava os dois contextos.
       learning: [],
       project: [],
-    }
+    })
   }
 
   const scope = directory ? await resolveProjectScope(directory) : undefined
@@ -643,16 +842,17 @@ export async function loadPromptContext(
     .slice(0, 5)
     .map(({ m }) => m)
 
-  return {
+  return trimContext({
     core: [],
     seasonal: [],
+    promotable,
     general: general.slice(0, 8),
     learning,
     project,
     projectName: scope?.covered ? scope.projectName : project[0]?.projectName,
     map: buildProjectMap(members, scope?.subproject) ?? undefined,
     subproject: scope?.subproject,
-  }
+  })
 }
 
 /** Executado pelo scheduler: expira (com cascata do doc) e promove automaticamente. */
@@ -676,5 +876,105 @@ export async function cleanup(): Promise<void> {
       await repo.put(next)
       emit('promoted', next)
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recuperação por contexto (embeddings + lexical)
+// ---------------------------------------------------------------------------
+
+let syncTimer: NodeJS.Timeout | null = null
+let syncRunning: Promise<unknown> | null = null
+
+/**
+ * Reindexação em segundo plano. Debounce curto para uma sequência de saves do
+ * /init não disparar uma passada por memória, e nunca em série com a resposta.
+ */
+export function scheduleIndexSync(delayMs = 2_000): void {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = setTimeout(() => {
+    syncTimer = null
+    void syncMemoryIndex()
+  }, delayMs)
+  syncTimer.unref?.()
+}
+
+/** Sincroniza o índice de embeddings com o acervo (idempotente). */
+export async function syncMemoryIndex(): Promise<{ indexed: number; pending: number; ok: boolean }> {
+  if (syncRunning) {
+    await syncRunning.catch(() => {})
+  }
+  const run = (async () => {
+    const pool = await alive()
+    const result = await syncIndex(pool)
+    return { indexed: result.indexed, pending: 0, ok: !result.failed }
+  })()
+  syncRunning = run.catch(() => {})
+  try {
+    return await run
+  } catch (err) {
+    console.error('[memory] sincronização do índice falhou:', err)
+    return { indexed: 0, pending: 0, ok: false }
+  } finally {
+    syncRunning = null
+  }
+}
+
+/**
+ * Acervo elegível para a recuperação por contexto, por modo.
+ *
+ * `core` fica FORA de propósito: memória permanente já entra no bloco fixo do
+ * prompt, e recuperá-la de novo só gastaria token e duplicaria a mesma linha.
+ */
+export async function retrievalPool(mode: 'chat' | 'code', directory?: string): Promise<Memory[]> {
+  const pool = await alive()
+  if (mode === 'chat') {
+    return pool.filter((m) => (m.kind === 'seasonal' || m.kind === 'general') && !isCodeContext(m))
+  }
+  const scope = directory ? await resolveProjectScope(directory) : undefined
+  const projectId = scope?.projectId
+  return pool.filter((m) => m.kind === 'general' || (m.kind === 'project' && m.projectId === projectId))
+}
+
+/**
+ * Sugestões de memória no turno — ligadas por padrão, só id + metadados.
+ *
+ * A validação de 24/10 reprovou a injeção de TEXTO: precisão de 84% na fixture
+ * de ajuste (meta: 98% com IC95 inferior >= 90%), 10/10 no conjunto bloqueado
+ * com IC95 [72%; 100%], e o nível de ponteiro deu 0/8 úteis — a similaridade
+ * não separa "vai ajudar" de "é sobre o mesmo assunto".
+ *
+ * A sugestão não repete esse erro porque não afirma nada: manda o id e o
+ * enquadramento (`general/preferences`) e deixa o conteúdo a um memory_open de
+ * distância. Um palpite errado custa uma linha ignorada, não uma resposta
+ * contaminada. E o que já está no bloco fixo do prompt é excluído aqui — os
+ * dois caminhos não contam a mesma história duas vezes.
+ *
+ * Desligável com ORBIT_MEMORY_SUGGEST=0.
+ */
+export const MEMORY_SUGGESTIONS_ENABLED = process.env.ORBIT_MEMORY_SUGGEST !== '0'
+
+/** Sugestões do turno. Nunca lança (ver suggestMemories). */
+export async function retrieveForTurn(input: {
+  text: string
+  mode: 'chat' | 'code'
+  directory?: string
+  recent?: Array<{ role: 'user' | 'assistant'; text: string }>
+  /** Ids já presentes no bloco do system prompt desta sessão. */
+  exclude?: readonly string[]
+}): Promise<MemorySuggestion[]> {
+  if (!MEMORY_SUGGESTIONS_ENABLED) return []
+  try {
+    const pool = await retrievalPool(input.mode, input.directory)
+    return await suggestMemories({
+      message: input.text,
+      recent: input.recent,
+      pool,
+      docs: await docsFor(pool),
+      exclude: input.exclude,
+    })
+  } catch (err) {
+    console.error('[memory] sugestões do turno falharam:', err)
+    return []
   }
 }

@@ -13,6 +13,26 @@ import type { ToolContext } from './context'
  *       isoladas por projeto (projectId derivado do directory — nunca do modelo).
  */
 
+/**
+ * Enriquecimento de busca, oferecido aos dois memory_save (chat e código) e ao
+ * memory_update. Tudo opcional: quem chama o modelo já tem o texto, então
+ * preencher custa poucos tokens e evita uma segunda passada de LLM só para
+ * indexar. O que não vier é derivado do texto (memory-retrieval.ts).
+ */
+const ENRICHMENT = z.object({
+  title: z.string().optional().describe('Short descriptive title (3-8 words)'),
+  summary: z.string().optional().describe('Faithful one-line summary of the fact stored'),
+  entities: z
+    .array(z.string())
+    .optional()
+    .describe('People, projects, products, places and identifiers that appear in the text'),
+  keywords: z.array(z.string()).optional().describe('Search terms a future question might use (any language)'),
+  concepts: z
+    .array(z.string())
+    .optional()
+    .describe('Paraphrases/intentions that should lead here, e.g. "booking a flight" for a seat preference'),
+})
+
 function describe(m: Memory): string {
   const kind = m.kind === 'project' ? `project/${m.category}` : m.kind
   const area = m.area ? ` area=${m.area}` : ''
@@ -22,7 +42,10 @@ function describe(m: Memory): string {
   // A vizinhança entra no describe de propósito: é lendo daqui que o agente
   // descobre a que nó pendurar a próxima memória, em vez de criar uma solta.
   const links = m.relatedIds.length ? ` linked to: ${m.relatedIds.join(', ')}` : ' NO CONNECTIONS'
-  return `#${m.id} [${kind}]${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${m.text}${tags}${doc}${links}`
+  // O título é a manchete escolhida para esta memória — cinco palavras que
+  // dizem o que o texto às vezes leva três linhas para dizer.
+  const title = m.title ? `${m.title} — ` : ''
+  return `#${m.id} [${kind}]${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${title}${m.text}${tags}${doc}${links}`
 }
 
 function saveReply(result: { id: string; merged: boolean; text: string }): string {
@@ -205,7 +228,7 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   return {
     memory_save: tool({
       description:
-        'Saves a lasting memory about the user. NOT saving is the default — only use for genuinely useful information. kind: "seasonal" (expires; recent activities), "core" (permanent; personal facts), "general" (permanent; preferences that apply in all modes).',
+        'Saves a lasting memory about the user. NOT saving is the default — only use for genuinely useful information. kind: "seasonal" (expires; recent activities), "core" (permanent; personal facts), "general" (permanent; preferences that apply in all modes). Fill the search fields (title, summary, keywords, concepts) — they are what makes the memory findable later, and they never say anything the text does not.',
       inputSchema: z.object({
         text: z.string().describe('The memory, as a short, self-contained sentence'),
         kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Default: seasonal'),
@@ -213,8 +236,9 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         tags: z.array(z.string()).optional().describe('Keywords for future search'),
         relatedIds: z.array(z.string()).optional().describe('Ids of related memories (creates links). Pass ids of existing parents/related memories.'),
         relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }. Default: related'),
+        ...ENRICHMENT.shape,
       }),
-      execute: async ({ text, kind, weight, tags, relatedIds, relatedTypes }) => {
+      execute: async ({ text, kind, weight, tags, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
         const result = await memory.save({
           text,
           kind: kind ?? 'seasonal',
@@ -222,6 +246,11 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
           tags,
           relatedIds,
           relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
+          title,
+          summary,
+          entities,
+          keywords,
+          concepts,
           sessionId: input.sessionId,
         })
         return saveReply(result)
@@ -392,8 +421,9 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           .record(z.string(), z.enum(['parent', 'related']))
           .optional()
           .describe('Relationship per id. Mark the owning area as "parent": { "mem_abc": "parent" }'),
+        ...ENRICHMENT.shape,
       }),
-      execute: async ({ text, kind, category, area, subproject, weight, tags, document, relatedIds, relatedTypes }) => {
+      execute: async ({ text, kind, category, area, subproject, weight, tags, document, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
           return 'Error: project memories require the category field (preference | convention | structure | decision | context | database | standard).'
@@ -416,6 +446,11 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           document,
           relatedIds,
           relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
+          title,
+          summary,
+          entities,
+          keywords,
+          concepts,
           // Sempre enviado: define o projeto em memórias "project" e registra a
           // origem nas "general", para o canvas ancorá-las na árvore certa. É
           // a raiz do escopo: numa subpasta, a memória entra na árvore da mãe.
@@ -449,11 +484,13 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           ])
           .optional(),
         document: z.string().optional().describe('Replaces the attached markdown'),
+        ...ENRICHMENT.shape,
       }),
-      execute: async ({ id, text, addTags, tags, weight, kind, category, area, document }) => {
+      execute: async ({ id, text, addTags, tags, weight, kind, category, area, document, title, summary, entities, keywords, concepts }) => {
         try {
           const updated = await memory.revise(id, {
             text, addTags, tags, weight, kind, category, area, document,
+            title, summary, entities, keywords, concepts,
             directory: (await scope()).directory,
           })
           if (!updated) return `Memory #${id} not found.`

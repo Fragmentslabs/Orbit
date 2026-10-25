@@ -113,15 +113,19 @@ export interface Promotion {
 }
 
 /**
- * Promoção 100% automática (aplicada pelo scheduler):
- * - seasonal → core quando hits >= 5 OU weight >= 0.85
+ * Promoção automática (aplicada pelo scheduler, como rede de segurança para
+ * quando o agente não chegou a perguntar):
+ * - seasonal → general quando hits >= 5 OU weight >= 0.85
  * - project/context → decision quando hits >= 3 e ainda não expirou
  * Retorna o destino da promoção ou null.
+ *
+ * `general` e não `core`: core só é injetado no prompt do chat, e um padrão que
+ * se repete vale sobretudo no código, onde core não chega.
  */
 export function shouldPromote(memory: Memory, now: number): Promotion | null {
   if (isExpired(memory, now)) return null
   if (memory.kind === 'seasonal' && (memory.hits >= 5 || memory.weight >= 0.85)) {
-    return { kind: 'core' }
+    return { kind: 'general' }
   }
   if (memory.kind === 'project' && memory.category === 'context' && memory.hits >= 3) {
     return { kind: 'project', category: 'decision' }
