@@ -26,6 +26,8 @@ apps/desktop/resources/whisper
 # ffmpeg/ffprobe estáticos da edição de vídeo (apps/desktop/scripts/fetch-ffmpeg.mjs)
 apps/desktop/.ffmpeg-build
 apps/desktop/resources/ffmpeg
+# Modelo de embedding empacotado (npm run memory:bundle) — 139 MB, nunca versionar
+apps/desktop/resources/memory-embed
 # Saídas da edição de vídeo/motion: a pasta edit/ que as ferramentas criam ao lado do
 # footage (renders, transcrições, folhas de contato) é sempre gerada, nunca autoria.
 edit/
@@ -52,3 +54,4 @@ release
 
 # Assets do AppX gerados no build:store (scripts/generate-appx-assets.mjs)
 apps/desktop/build/appx
+apps/desktop/.cache

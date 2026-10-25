@@ -62,6 +62,19 @@
       "from": "resources/ffmpeg/${platform}-${arch}",
       "to": "ffmpeg",
       "filter": ["ffmpeg*", "ffprobe*"]
+    },
+    // Modelo de embedding da memória (Bekko a8m, ~139 MB): vai DENTRO do app
+    // para a busca semântica funcionar desde o primeiro abrir, sem download,
+    // sem tela e sem falha de rede. Preparado por `npm run memory:bundle`
+    // antes do electron-builder (scripts/bundle-memory-model.mjs).
+    //
+    // Não é por arquitetura: os pesos são os mesmos em arm64 e x64, então uma
+    // cópia só serve para os dois instaladores. E como os bytes não mudam
+    // entre releases, a atualização diferencial do updater não rebaixa estes
+    // blocos.
+    {
+      "from": "resources/memory-embed",
+      "to": "memory-embed"
     }
   ],
   "mac": {
