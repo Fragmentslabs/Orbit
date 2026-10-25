@@ -62,6 +62,21 @@ export function OverlayApp() {
   const initRef = useRef<Promise<void> | null>(null)
   const autoStarted = useRef<number | null>(null)
 
+  /**
+   * Altura do card para a janela acompanhar. A janela é transparente e o card
+   * tem cantos arredondados: se ela ficar MENOR que ele, o topo é cortado e os
+   * cantos de cima viram uma linha reta. Por isso a medida é reportada também a
+   * cada ABERTURA — o ResizeObserver só fala quando o tamanho muda, e reabrir
+   * o painel no mesmo estado deixava a janela no piso.
+   */
+  const reportHeight = useCallback(() => {
+    const node = panelRef.current
+    if (!node) return
+    // +16 é o vão do wrapper (p-2): 8 em cima e 8 embaixo. A janela precisa
+    // dele inteiro, senão o card encosta nas bordas e perde o arredondamento.
+    void overlayApi.resize(Math.ceil(node.getBoundingClientRect().height) + 16)
+  }, [])
+
   const overlayModel = useAppSettingsModel()
   const selectedModel = useProviderStore((s) => s.selectedModel)
   const model = overlayModel ?? selectedModel
@@ -185,6 +200,10 @@ export function OverlayApp() {
       // para o que foi dito antes), mas o painel nasce vazio.
       setAskedAt(Date.now())
       autoStarted.current = null
+      // Reporta a altura no próximo frame: o main reancora a janela sem saber
+      // o tamanho do card, e sem isto uma reabertura no mesmo estado mantinha a
+      // janela no piso — cortando o topo e os cantos de cima.
+      requestAnimationFrame(reportHeight)
       void ensureSessionRef
         .current()
         .catch(() => null)
@@ -205,7 +224,7 @@ export function OverlayApp() {
       offOpen()
       offEvent()
     }
-  }, [])
+  }, [reportHeight])
 
   // Abriu em modo chamada: começa a ouvir assim que a sessão existe. Uma vez
   // por abertura — desligar a chamada não pode religá-la em seguida.
@@ -242,13 +261,10 @@ export function OverlayApp() {
   useEffect(() => {
     const node = panelRef.current
     if (!node) return
-    const observer = new ResizeObserver(() => {
-      const height = Math.ceil(node.getBoundingClientRect().height) + 16
-      void overlayApi.resize(height)
-    })
+    const observer = new ResizeObserver(() => reportHeight())
     observer.observe(node)
     return () => observer.disconnect()
-  }, [])
+  }, [reportHeight])
 
   const copy = useCallback(() => {
     if (!answer) return

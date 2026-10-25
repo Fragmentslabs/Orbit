@@ -32,10 +32,11 @@ export interface OverlayHost {
 export const OVERLAY_WIDTH = 660
 const MARGIN_BOTTOM = 18
 /**
- * Piso da altura: é só a linha do campo (persona + input). O painel abre
- * FECHADO — a resposta é que o faz crescer, de 0 até MAX_HEIGHT.
+ * Piso da altura: o card FECHADO (~58 pt: persona + campo) mais o vão de 8 pt
+ * em cima e embaixo. É piso, não tamanho — abaixo disto o card é cortado pela
+ * janela e os cantos arredondados de cima viram uma linha reta.
  */
-const MIN_HEIGHT = 56
+const MIN_HEIGHT = 74
 const MAX_HEIGHT = 520
 /** Tempo do "tchau" antes de a janela sumir (a fala final ainda toca). */
 const FAREWELL_MS = 1200
@@ -44,6 +45,12 @@ let win: BrowserWindow | null = null
 let host: OverlayHost | null = null
 let loading: Promise<BrowserWindow> | null = null
 let height = MIN_HEIGHT
+/**
+ * O renderer já informou a altura real do card alguma vez? Antes disso só existe
+ * o piso; depois dele, a última medida vale mais que o piso — encolher a janela
+ * a cada abertura cortava o card até o próximo relatório.
+ */
+let measured = false
 let shortcutError: string | null = null
 /** Monitor escolhido na abertura: o painel não pula de tela se o cursor sair. */
 let anchorDisplay: ReturnType<typeof screen.getDisplayNearestPoint> | null = null
@@ -213,7 +220,11 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
     at: Date.now(),
   }
 
-  place(MIN_HEIGHT)
+  // Reancora no monitor do cursor SEM encolher para o piso: janela menor que o
+  // card corta o topo dele e os cantos de cima saem retos. Depois da primeira
+  // medida vale a última altura; o renderer reporta a exata assim que abre e o
+  // vão a mais fica transparente (a janela não tem fundo).
+  place(measured ? height : MIN_HEIGHT)
   if (!target.isVisible()) {
     if (call) target.showInactive()
     else {
@@ -254,6 +265,7 @@ export function toggleOverlay(options?: { call?: boolean }): void {
 /** O renderer mede o conteúdo e pede a altura; a janela acompanha. */
 export function resizeOverlay(nextHeight: number): void {
   if (!getOverlayWindow()) return
+  measured = true
   place(nextHeight)
 }
 
