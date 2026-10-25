@@ -59,6 +59,26 @@ export function reasoningPrefKeys(): string[] {
   return Object.keys(useReasoningPrefsStore.getState().prefs)
 }
 
+/**
+ * Preferência de um modelo lida direto do storage, na hora.
+ *
+ * O overlay é outra janela: a cópia em memória dele não acompanha o que a
+ * janela principal grava. Sem isto, o nível de thinking escolhido nas
+ * Preferências só valeria no painel depois de reiniciar o app.
+ */
+export function readReasoningPref(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): ModelReasoningPref | undefined {
+  if (!providerId || !modelId) return undefined
+  try {
+    const prefs = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as ReasoningPrefs
+    return prefs[`${providerId}/${modelId}`]
+  } catch {
+    return undefined
+  }
+}
+
 export function useReasoningPrefs(providerId: string | undefined, modelId: string | undefined) {
   const key = providerId && modelId ? `${providerId}/${modelId}` : null
   const pref = useReasoningPrefsStore((s) => (key ? s.prefs[key] : undefined))

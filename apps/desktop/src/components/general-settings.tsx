@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Archive, FoldVertical, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
+import { Archive, FoldVertical, LayoutList, Lightbulb, MessagesSquare, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
 import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type AutoCompactMode, type ChatViewMode } from "@shared/app-settings"
 import { USER_NAME_MAX } from "@shared/user-name"
 import { ModelField } from "@/src/components/model-field"
@@ -54,6 +54,8 @@ function UserNameField() {
 }
 
 const COUNT_OPTIONS = [0, 1, 2, 3, 5] as const
+/** Limite de compactações antes de oferecer um chat novo (0 = desligado). */
+const COMPACT_SUGGEST_OPTIONS = [0, 1, 2, 3, 4] as const
 
 export function GeneralSettings() {
   const { t } = useTranslation()
@@ -157,6 +159,24 @@ export function GeneralSettings() {
           options={(["auto", "75", "50"] as const).map((value) => ({
             value,
             label: t(`preferences.general.compact.${value}`),
+          }))}
+        />
+      </SettingRow>
+
+      <SettingRow
+        icon={MessagesSquare}
+        title={t("preferences.general.compactSuggest.title")}
+        description={t("preferences.general.compactSuggest.description")}
+      >
+        <SettingSelect
+          value={String(settings.compactSuggestionAfter)}
+          onChange={(v) => update({ compactSuggestionAfter: Number(v) })}
+          options={COMPACT_SUGGEST_OPTIONS.map((n) => ({
+            value: String(n),
+            label:
+              n === 0
+                ? t("preferences.general.off")
+                : t("preferences.general.compactSuggest.after", { count: n }),
           }))}
         />
       </SettingRow>

@@ -1,4 +1,6 @@
 import type { ReasoningConfig } from './chat'
+import { OVERLAY_DEFAULTS, normalizeOverlaySettings, type OverlaySettings } from './overlay'
+import { PERSONA_NOTE_MAX, type PersonaStyle } from './persona'
 import { USER_NAME_MAX } from './user-name'
 import { VOICE_CALL_SILENCE_OPTIONS, VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
 
@@ -65,6 +67,17 @@ export interface AppSettings {
    * ainda não sabe, e a tela inicial usa uma saudação neutra.
    */
   userName: string | null
+  /**
+   * Como o Orbit fala (Preferências → Comportamento). `style` é o ponto de
+   * partida; `note` é o ajuste escrito pelo próprio usuário, na língua dele,
+   * e vence o estilo. Nada aqui é aprendido: comportamento não vira memória —
+   * o que é inferido na conversa morre com ela.
+   */
+  persona: {
+    style: PersonaStyle
+    /** Ajuste livre (≤ PERSONA_NOTE_MAX). Vazio = só o estilo. */
+    note: string
+  }
   /** Sugere a próxima mensagem no input (Tab completa). */
   promptSuggestions: boolean
   chatView: ChatViewMode
@@ -73,6 +86,9 @@ export interface AppSettings {
   /** Exclui conversas arquivadas há N dias (contados desde o arquivamento). null = desligado. */
   deleteArchivedDays: number | null
   autoCompact: AutoCompactMode
+  /** A partir de quantas compactações a conversa sugere continuar num chat
+   *  novo em vez de compactar de novo. 0 = desligado. */
+  compactSuggestionAfter: number
   /** Rodadas extras em falha temporária (mensagens da fila). 0 = desligado. */
   transientRetries: number
   /** Continuações automáticas quando a resposta para no limite de passos. 0 = desligado. */
@@ -103,7 +119,17 @@ export interface AppSettings {
     pointer: ComputerPointer
     /** Lado maior do screenshot enviado ao modelo */
     maxScreenshotEdge: number
+    /**
+     * Modelo do subagente de Computer Use (computer_task). null = o modelo da
+     * conversa. Um modelo menor e mais rápido encurta cada passo do laço.
+     */
+    model: { providerId: string; modelId: string } | null
   }
+  /**
+   * Overlay (atalho global ⇧⌘espaço): o painel que desce no rodapé da tela para
+   * perguntar, traduzir a seleção ou conversar por voz. Ver overlay.ts.
+   */
+  overlay: OverlaySettings
 }
 
 /** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
@@ -123,11 +149,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   auxReasoning: null,
   // Sem nome até o usuário contar: a tela inicial saúda sem ele.
   userName: null,
+  // Sem estilo e sem ajuste: o prompt fica exatamente como era antes da opção.
+  persona: { style: 'default', note: '' },
   promptSuggestions: false,
   chatView: 'summary',
   autoArchiveDays: null,
   deleteArchivedDays: null,
   autoCompact: 'auto',
+  // Duas compactações funcionam bem; da terceira em diante o resumo já é um
+  // resumo de resumo, e o começo da conversa (o porquê das decisões) se perde.
+  compactSuggestionAfter: 2,
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -153,7 +184,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     enabled: false,
     pointer: 'directed',
     maxScreenshotEdge: 1280,
+    model: null,
   },
+  // Overlay ligado por padrão: é um atalho, não um recurso que age sozinho —
+  // quem não quiser desliga em Preferências → Overlay.
+  overlay: { ...OVERLAY_DEFAULTS },
 }
 
 export const AUTO_ARCHIVE_DAY_OPTIONS = [2, 3, 7, 14, 30, 90] as const
@@ -262,12 +297,24 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
     userName: userName || null,
+    persona: (() => {
+      const p = (value.persona && typeof value.persona === 'object' ? value.persona : {}) as Partial<AppSettings['persona']>
+      return {
+        style: oneOf(p.style, ['default', 'direct', 'mentor', 'technical'], d.persona.style),
+        // Só teto, sem trim: o renderer normaliza a cada tecla, e aparar aqui
+        // engoliria o espaço que o usuário acabou de digitar. Quem consome
+        // (personaPromptLines) é que apara.
+        note: typeof p.note === 'string' ? p.note.slice(0, PERSONA_NOTE_MAX) : '',
+      }
+    })(),
     promptSuggestions: typeof value.promptSuggestions === 'boolean' ? value.promptSuggestions : d.promptSuggestions,
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),
     deleteArchivedDays: dayOption(value.deleteArchivedDays, DELETE_ARCHIVED_DAY_OPTIONS),
     // 'off' de versões anteriores cai no padrão: a opção deixou de existir.
     autoCompact: oneOf(value.autoCompact, ['auto', '75', '50'], d.autoCompact),
+    // Teto de 5: acima disso o card vira ruído em vez de aviso.
+    compactSuggestionAfter: count(value.compactSuggestionAfter, 5, d.compactSuggestionAfter),
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
     sidebarWidth,
@@ -294,7 +341,9 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
         maxScreenshotEdge: (COMPUTER_SCREENSHOT_EDGES as readonly number[]).includes(c.maxScreenshotEdge as number)
           ? (c.maxScreenshotEdge as number)
           : d.computer.maxScreenshotEdge,
+        model: model(c.model),
       }
     })(),
+    overlay: normalizeOverlaySettings(value.overlay),
   }
 }

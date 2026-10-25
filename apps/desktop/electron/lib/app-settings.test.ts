@@ -85,7 +85,7 @@ describe('agentMayUseBrowser', () => {
 
 describe('computer', () => {
   it('desligado por padrão, ponteiro dirigido e 1280 px', () => {
-    expect(normalizeAppSettings(undefined).computer).toEqual({ enabled: false, pointer: 'directed', maxScreenshotEdge: 1280 })
+    expect(normalizeAppSettings(undefined).computer).toEqual({ enabled: false, pointer: 'directed', maxScreenshotEdge: 1280, model: null })
   })
 
   it('só aceita os valores oferecidos na tela', () => {
@@ -93,11 +93,13 @@ describe('computer', () => {
       enabled: true,
       pointer: 'global',
       maxScreenshotEdge: 1600,
+      model: null,
     })
     expect(normalizeAppSettings({ computer: { pointer: 'mouse', maxScreenshotEdge: 999 } }).computer).toEqual({
       enabled: false,
       pointer: 'directed',
       maxScreenshotEdge: 1280,
+      model: null,
     })
   })
 })
@@ -123,5 +125,16 @@ describe('agentMayControlComputer', () => {
     await setAppSettings({ computer: { enabled: true } })
     expect(agentMayControlComputer(pedido({ orchestrationRole: 'worker' }), true)).toBe(false)
     expect(agentMayControlComputer(pedido(), false)).toBe(false)
+  })
+})
+
+describe('computer.model', () => {
+  it('modelo do agente de computador: nulo por padrão, válido mantido, lixo descartado', () => {
+    expect(normalizeAppSettings(undefined).computer.model).toBeNull()
+    expect(normalizeAppSettings({ computer: { model: { providerId: 'anthropic', modelId: 'claude-haiku' } } }).computer.model).toEqual({
+      providerId: 'anthropic',
+      modelId: 'claude-haiku',
+    })
+    expect(normalizeAppSettings({ computer: { model: 'haiku' } }).computer.model).toBeNull()
   })
 })

@@ -18,6 +18,8 @@ import { ModelField } from "@/src/components/model-field"
 import { ModelThinkingMenu, ThinkingMenu } from "@/src/components/thinking-menu"
 import { GeneralSettings } from "@/src/components/general-settings"
 import { WorktreeSettings } from "@/src/components/worktree-settings"
+import { useAppSettings } from "@/src/stores/app-settings"
+import { PERSONA_NOTE_MAX, personaPromptLines, type PersonaStyle } from "@shared/persona"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
@@ -253,6 +255,94 @@ function LanguageSection() {
 
 
 
+/** Ordem em que os estilos aparecem na tela. */
+const PERSONA_OPTIONS: PersonaStyle[] = ["default", "direct", "mentor", "technical"]
+
+/**
+ * Como o Orbit fala. Vale nos dois modos, por isso fica acima das abas.
+ *
+ * O ajuste é COMPLEMENTO, não edição do prompt: o texto que o modelo lê vive
+ * em inglês no pacote compartilhado, e o usuário escreve na língua dele uma
+ * frase que se soma ao estilo. O "ver o texto exato" mostra o literal, somente
+ * leitura — quem quiser conferir confere, e ninguém quebra a identidade sem
+ * perceber.
+ */
+function BehaviorSection() {
+  const { t } = useTranslation()
+  const persona = useAppSettings((s) => s.settings.persona)
+  const update = useAppSettings((s) => s.update)
+  const [showPrompt, setShowPrompt] = useState(false)
+  // Composição do chat (estilo + ajuste); no código entra mais uma linha de
+  // calibração de registro que não interessa mostrar aqui.
+  const exact = personaPromptLines(persona.style, persona.note, "chat").join("\n\n")
+
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("preferences.behavior.title")}</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {PERSONA_OPTIONS.map((value) => {
+          const active = persona.style === value
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => update({ persona: { ...persona, style: value } })}
+              aria-pressed={active}
+              className={`rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
+                active
+                  ? "border-ring bg-accent shadow-sm"
+                  : "border-input bg-background hover:bg-accent/50"
+              }`}
+            >
+              <span className="block text-[11px] font-medium">
+                {t(`preferences.behavior.styles.${value}.label`)}
+              </span>
+              <span className="block text-[10px] leading-tight text-muted-foreground">
+                {t(`preferences.behavior.styles.${value}.hint`)}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <textarea
+        value={persona.note}
+        onChange={(e) => update({ persona: { ...persona, note: e.target.value } })}
+        maxLength={PERSONA_NOTE_MAX}
+        rows={2}
+        placeholder={t("preferences.behavior.notePlaceholder")}
+        className="mt-3 w-full resize-none rounded-lg border border-input bg-background px-2.5 py-2 text-xs leading-relaxed outline-none placeholder:text-muted-foreground/60 focus:border-ring focus:ring-1 focus:ring-ring"
+      />
+      <div className="mt-1 flex items-start justify-between gap-2">
+        <p className="text-[10px] leading-tight text-muted-foreground/70">
+          {t("preferences.behavior.noteHint")}
+        </p>
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+          {PERSONA_NOTE_MAX - persona.note.length}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowPrompt((v) => !v)}
+        className="mt-2 text-[11px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground"
+      >
+        {t("preferences.behavior.showPrompt")}
+      </button>
+      {showPrompt && (
+        <>
+          <pre className="mt-1.5 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-2.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {exact || t("preferences.behavior.promptEmpty")}
+          </pre>
+          <p className="mt-1 text-[10px] leading-tight text-muted-foreground/60">
+            {t("preferences.behavior.promptHint")}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function PreferencesPanel() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<PrefsTab>("chat")
@@ -268,6 +358,7 @@ export function PreferencesPanel() {
 
       {/* Opções que valem para o app inteiro vêm antes das abas por tipo de conversa. */}
       <LanguageSection />
+      <BehaviorSection />
       <GeneralSettings />
 
       <div className="border-t pt-4">

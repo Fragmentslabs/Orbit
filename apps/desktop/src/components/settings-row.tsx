@@ -57,14 +57,17 @@ export function SettingSelect<T extends string>({
   value,
   options,
   onChange,
+  disabled,
 }: {
   value: T
   options: Array<{ value: T; label: string }>
   onChange: (value: T) => void
+  /** Opção existe mas depende de outra coisa estar ligada (ex.: voz). */
+  disabled?: boolean
 }) {
   return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as T)}>
-      <SelectTrigger className="min-w-40">
+    <Select value={value} onValueChange={(v) => v && onChange(v as T)} disabled={disabled}>
+      <SelectTrigger className="min-w-40" disabled={disabled}>
         <SelectValue>{(v) => options.find((o) => o.value === v)?.label ?? v}</SelectValue>
       </SelectTrigger>
       <SelectContent>

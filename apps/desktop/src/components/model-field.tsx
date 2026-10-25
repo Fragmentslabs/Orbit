@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { BrainIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
+import type { CatalogModel, CatalogProvider } from "@shared/chat"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -28,6 +29,7 @@ export function ModelField({
   onChange,
   nullLabel,
   action,
+  filter,
 }: {
   label: string
   value: DefaultModel | null
@@ -35,6 +37,8 @@ export function ModelField({
   nullLabel?: string
   /** Controle extra ao lado do seletor (ex.: nível de raciocínio) */
   action?: ReactNode
+  /** Restringe a lista (ex.: só modelos com visão para o modelo de visão) */
+  filter?: (provider: CatalogProvider, model: CatalogModel) => boolean
 }) {
   const [open, setOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
@@ -50,10 +54,14 @@ export function ModelField({
         .map((id) => ({
           provider: catalog[id],
           models: Object.values(catalog[id].models)
+            // Filtro antes do corte: o teto de 40 vale para o que sobrou, não
+            // para a lista crua (senão um filtro de visão poderia zerar tudo).
+            .filter((model) => (filter ? filter(catalog[id], model) : true))
             .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
             .slice(0, MAX_MODELS_PER_PROVIDER),
-        })),
-    [catalog, connectedProviders],
+        }))
+        .filter((group) => group.models.length > 0),
+    [catalog, connectedProviders, filter],
   )
 
   const selectedModel = value ? catalog[value.providerId]?.models[value.modelId] : undefined

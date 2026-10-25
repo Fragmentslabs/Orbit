@@ -33,6 +33,17 @@ function loadSelectedModel(): SelectedModel | null {
   return loadJson<SelectedModel>(SELECTED_MODEL_KEY)
 }
 
+/**
+ * Modelo de visão gravado AGORA, lido direto do storage.
+ *
+ * O overlay é outra janela: a cópia em memória dele não acompanha o que a
+ * janela principal grava em localStorage. Sem esta leitura, trocar o modelo de
+ * visão nas Preferências só valeria no próximo turno depois de reiniciar.
+ */
+export function readVisionModel(): SelectedModel | null {
+  return loadJson<SelectedModel>(VISION_MODEL_KEY)
+}
+
 const storedVisionModel = loadJson<SelectedModel>(VISION_MODEL_KEY)
 
 interface ProviderState {
