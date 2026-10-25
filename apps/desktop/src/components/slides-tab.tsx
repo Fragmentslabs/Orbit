@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
@@ -13,28 +13,13 @@ import {
   RotateCw,
   StickyNote,
 } from "lucide-react"
-import { SLIDES_SCHEME } from "@shared/media"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { IconAction } from "@/src/components/ai/artifact-part"
+import { useSlidesDeck } from "@/src/components/slides/use-slides-deck"
 import { slidesApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
-
-/** Marca das mensagens da ponte — a mesma de slides-runtime.ts. */
-const SLIDES_SOURCE = "orbit-slides"
-
-interface SlideInfo {
-  title: string
-  notes: string
-}
-
-interface DeckInfo {
-  total: number
-  width: number
-  height: number
-  slides: SlideInfo[]
-}
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
@@ -69,32 +54,17 @@ function ToggleAction({
 }
 
 /**
- * Caminho da entrada DENTRO da pasta registrada — o que a URL
- * `orbit-slides://<id>/<caminho-relativo>` serve (mesma regra do motion-tab).
- */
-function entryPath(entry: string): string {
-  const cleaned = entry.replace(/\\/g, "/").replace(/^file:\/\//, "")
-  const relative = /^[a-zA-Z]:/.test(cleaned) || cleaned.startsWith("/") ? baseName(cleaned) : cleaned.replace(/^\.\//, "")
-  return relative.split("/").map(encodeURIComponent).join("/")
-}
-
-/**
  * O palco de um deck de slides na aba do painel direito.
  *
- * O iframe carrega a PASTA registrada por `orbit-slides://<id>/<entrada>`; quem
- * monta o 16:9, escala e obedece ao teclado é o runtime injetado no `<head>`
- * (electron/lib/slides/slides-runtime.ts). Aqui ficam as rédeas que são do app:
- * a lista de slides, as notas do apresentador, o contador e a tela cheia.
+ * O iframe carrega a PASTA registrada por `orbit-slides://<id>/<entrada>`; a
+ * ponte com o runtime injetado fica em use-slides-deck.ts, compartilhada com o
+ * card do chat. Aqui ficam a moldura da aba e as rédeas que são de interface:
+ * a lista, as notas do apresentador, o contador e a tela cheia.
  *
- * A ponte é postMessage com `source: "orbit-slides"`:
- *
- *   deck → painel: ready (total, palco, títulos e notas), change (índice),
- *                  error, request-fullscreen
- *   painel → deck: go(index), next, prev
- *
- * O iframe roda em `sandbox="allow-scripts"` SEM `allow-same-origin` (origem
- * opaca): não dá para ler o DOM dele, e é por isso que a lista de slides e as
- * notas chegam pelo `ready` em vez de serem lidas daqui.
+ * A lista mora no RODAPÉ, em fita horizontal, e não numa coluna à direita: o
+ * painel é estreito, e uma sidebar de 208px comia justamente a largura de que o
+ * 16:9 precisa. Deitada, a mesma informação custa ~44px de altura e o palco
+ * respira.
  */
 export function SlidesTab({
   slidesId,
@@ -107,13 +77,6 @@ export function SlidesTab({
   title: string
 }) {
   const { t } = useTranslation()
-  const iframeRef = useRef<HTMLIFrameElement | null>(null)
-
-  /** O que o runtime relatou ao carregar (é também o sinal de "carregou"). */
-  const [deck, setDeck] = useState<DeckInfo | null>(null)
-  const [index, setIndex] = useState(0)
-  const [reloads, setReloads] = useState(0)
-  const [failed, setFailed] = useState<string | null>(null)
   const [showList, setShowList] = useState(true)
   const [showNotes, setShowNotes] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
@@ -121,36 +84,11 @@ export function SlidesTab({
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  const src = useMemo(
-    () => (slidesId && entry ? `${SLIDES_SCHEME}://${slidesId}/${entryPath(entry)}?r=${reloads}` : ""),
-    [slidesId, entry, reloads],
-  )
-
-  /** Comando painel → deck. Sem janela montada, não há para quem mandar. */
-  const post = useCallback((message: Record<string, unknown>) => {
-    const win = iframeRef.current?.contentWindow
-    if (!win) return
-    win.postMessage({ source: SLIDES_SOURCE, ...message }, "*")
-  }, [])
-
-  const total = deck?.total ?? 0
-
-  const go = useCallback(
-    (target: number) => {
-      if (total <= 0) return
-      const next = Math.max(0, Math.min(total - 1, target))
-      setIndex(next)
-      post({ type: "go", index: next })
-    },
-    [post, total],
-  )
-
-  const reload = useCallback(() => {
-    setDeck(null)
-    setIndex(0)
-    setFailed(null)
-    setReloads((n) => n + 1)
-  }, [])
+  const { iframeRef, src, deck, index, total, current, loading, failed, go, reload } = useSlidesDeck({
+    slidesId,
+    entry,
+    onFullscreenRequest: () => setFullscreen((value) => !value),
+  })
 
   /**
    * Baixar em PDF. Quem imprime é o main, sobre o próprio index.html — a aba só
@@ -171,87 +109,6 @@ export function SlidesTab({
       setExporting(false)
     }
   }, [slidesId, exporting, title, t])
-
-  // Outro deck na mesma aba (o card de outro deck reusa a aba): começa do zero.
-  useEffect(() => {
-    setDeck(null)
-    setIndex(0)
-    setFailed(null)
-  }, [slidesId])
-
-  // ---------------------------------------------------------------- ponte
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const win = iframeRef.current?.contentWindow
-      // A origem do iframe é opaca (sandbox sem allow-same-origin): quem diz
-      // que a mensagem é DESTE iframe é a janela de origem, não a origem.
-      if (!win || event.source !== win) return
-      const data = event.data
-      if (!data || data.source !== SLIDES_SOURCE) return
-      if (data.type === "ready") {
-        setFailed(null)
-        setDeck({
-          total: Number(data.total) || 0,
-          width: Number(data.width) || 0,
-          height: Number(data.height) || 0,
-          slides: Array.isArray(data.slides) ? (data.slides as SlideInfo[]) : [],
-        })
-      } else if (data.type === "change") {
-        setIndex(Number(data.index) || 0)
-      } else if (data.type === "error") {
-        setFailed(String(data.message ?? "unknown"))
-      } else if (data.type === "request-fullscreen") {
-        setFullscreen((value) => !value)
-      }
-    }
-    window.addEventListener("message", onMessage)
-    return () => window.removeEventListener("message", onMessage)
-  }, [])
-
-  // O agente reescreveu o arquivo (fs.watch do main): recarrega voltando ao
-  // MESMO slide, que é o que deixa comparar o antes e o depois do ajuste.
-  useEffect(() => {
-    if (!slidesId) return
-    const current = index
-    return slidesApi.onChanged((payload) => {
-      if (payload.id !== slidesId) return
-      setDeck(null)
-      setFailed(null)
-      setReloads((n) => n + 1)
-      // O runtime volta ao slide 0; reenvia o alvo assim que ele responder.
-      window.setTimeout(() => {
-        const win = iframeRef.current?.contentWindow
-        win?.postMessage({ source: SLIDES_SOURCE, type: "go", index: current }, "*")
-      }, 400)
-    })
-    // `index` de propósito fora das dependências: o alvo é o do momento da
-    // recarga, não o de cada troca de slide.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slidesId])
-
-  // Sem "ready" a tempo, a página não vai responder: pergunta ao scheme o que
-  // houve (a mesma URL, por fetch — o scheme aceita CORS) em vez de deixar o
-  // palco girando para sempre.
-  useEffect(() => {
-    if (!src || deck) return
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      if (cancelled) return
-      void fetch(src)
-        .then(async (res) => {
-          if (cancelled || res.ok) return
-          const text = (await res.text().catch(() => "")).trim().slice(0, 120)
-          setFailed(t("slides.loadFailedHttp", { status: res.status, text: text || res.statusText }))
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) setFailed(err instanceof Error ? err.message : String(err))
-        })
-    }, 6000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [src, deck, t])
 
   // Teclado do LADO DE FORA do iframe (com o foco na barra da aba). Dentro do
   // palco quem trata é o runtime — os dois não se atropelam, porque um keydown
@@ -287,7 +144,13 @@ export function SlidesTab({
     return () => window.removeEventListener("keydown", onKey)
   }, [fullscreen, go, index, total])
 
-  const current = deck?.slides[index]
+  // A lista rola sozinha até o slide atual: num deck de 20, a linha ativa não
+  // pode ficar fora de vista só porque o usuário avançou pelo teclado.
+  const activeRowRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: "nearest" })
+  }, [index])
+
   const progress = total > 0 ? ((index + 1) / total) * 100 : 0
 
   if (!slidesId || !entry) {
@@ -355,117 +218,110 @@ export function SlidesTab({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* O palco. O iframe ocupa a área toda e o runtime cuida da escala —
-              a mesma imagem em qualquer tamanho de painel. */}
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
-            <iframe
-              ref={iframeRef}
-              // Remonta o iframe (recarga de verdade): a URL do deck não muda
-              // quando o arquivo é reescrito no lugar.
-              key={`${slidesId}:${reloads}`}
-              src={src}
-              title={title}
-              // SEM allow-same-origin de propósito: `allow-scripts` + same-origin
-              // deixaria o deck remover o próprio sandbox.
-              sandbox="allow-scripts"
-              referrerPolicy="no-referrer"
-              className="h-full w-full border-0 bg-black"
-            />
-            {!deck && !failed && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-black/40 text-xs text-white/70">
-                <Loader2 className="size-3.5 animate-spin" />
-                {t("slides.loading")}
-              </div>
-            )}
-            {failed && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 p-4 text-center">
-                <AlertTriangle className="size-4 text-destructive" />
-                <span className="text-xs font-medium text-white">{t("slides.loadFailed")}</span>
-                <span className="max-w-full break-words text-[11px] text-white/60">{failed}</span>
-                <Button variant="outline" size="sm" onClick={reload}>
-                  {t("slides.retry")}
-                </Button>
-              </div>
-            )}
+      {/* O palco. O iframe ocupa a área toda e o runtime cuida da escala — a
+          mesma imagem em qualquer tamanho de painel. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+        <iframe
+          ref={iframeRef}
+          // A URL muda a cada recarga (o arquivo é reescrito no lugar), então
+          // ela é a chave do remount.
+          key={src}
+          src={src}
+          title={title}
+          // SEM allow-same-origin de propósito: `allow-scripts` + same-origin
+          // deixaria o deck remover o próprio sandbox.
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
+          className="h-full w-full border-0 bg-black"
+        />
+        {loading && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-black/40 text-xs text-white/70">
+            <Loader2 className="size-3.5 animate-spin" />
+            {t("slides.loading")}
           </div>
-
-          {/* Notas do apresentador — o que DIZER neste slide, fora da tela. */}
-          {showNotes && (
-            <div className="max-h-40 shrink-0 overflow-y-auto border-t border-border/60 bg-sidebar px-3 py-2">
-              <div className="mb-1 flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
-                <StickyNote className="size-3" />
-                {t("slides.notes")}
-              </div>
-              {current?.notes ? (
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{current.notes}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{t("slides.noNotes")}</p>
-              )}
-            </div>
-          )}
-
-          {/* Transporte: anterior, contador, próximo — e a barra de progresso
-              colada no rodapé, que é o que se olha de longe. */}
-          <div className="relative flex shrink-0 items-center justify-center gap-1 border-t border-border/60 p-1.5">
-            <IconAction
-              icon={ChevronLeft}
-              label={t("slides.previous")}
-              onClick={() => go(index - 1)}
-              disabled={index <= 0}
-            />
-            <span className="min-w-16 text-center text-[0.6875rem] tabular-nums text-muted-foreground">
-              {total > 0 ? t("slides.counter", { index: index + 1, total }) : "—"}
-            </span>
-            <IconAction
-              icon={ChevronRight}
-              label={t("slides.next")}
-              onClick={() => go(index + 1)}
-              disabled={total === 0 || index >= total - 1}
-            />
-            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
-              <div
-                className="h-full bg-primary transition-[width] duration-200"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Lista dos slides: o índice da apresentação, com o atual em destaque.
-            Miniaturas de verdade exigiriam um render por slide (o iframe é
-            opaco) — o título é o que se procura quando se navega. */}
-        {showList && (
-          <aside className="flex w-52 shrink-0 flex-col overflow-hidden border-l border-border/60">
-            <div className="border-b border-border/60 px-3 py-2 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
-              {t("slides.slidesCount", { count: total })}
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-1">
-              {deck?.slides.map((slide, i) => (
-                <button
-                  key={`${i}-${slide.title}`}
-                  type="button"
-                  onClick={() => go(i)}
-                  className={cn(
-                    "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                    i === index ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/40",
-                  )}
-                >
-                  <span className="w-4 shrink-0 text-right tabular-nums opacity-60">{i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate">{slide.title}</span>
-                  {slide.notes && <StickyNote className="mt-0.5 size-3 shrink-0 opacity-50" />}
-                </button>
-              ))}
-              {!deck && (
-                <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" />
-                  {t("slides.loading")}
-                </div>
-              )}
-            </div>
-          </aside>
         )}
+        {failed && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 p-4 text-center">
+            <AlertTriangle className="size-4 text-destructive" />
+            <span className="text-xs font-medium text-white">{t("slides.loadFailed")}</span>
+            <span className="max-w-full break-words text-[11px] text-white/60">{failed}</span>
+            <Button variant="outline" size="sm" onClick={reload}>
+              {t("slides.retry")}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Notas do apresentador — o que DIZER neste slide, fora da tela. */}
+      {showNotes && (
+        <div className="max-h-32 shrink-0 overflow-y-auto border-t border-border/60 bg-sidebar px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+            <StickyNote className="size-3" />
+            {t("slides.notes")}
+          </div>
+          {current?.notes ? (
+            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{current.notes}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">{t("slides.noNotes")}</p>
+          )}
+        </div>
+      )}
+
+      {/* A lista, em pé, no rodapé: o índice da apresentação empilhado acima do
+          transporte, com rolagem na vertical. Uma fita deitada (ou uma coluna à
+          direita) competia com o 16:9 do palco; aqui ela só custa altura, e só
+          enquanto está aberta. Miniaturas de verdade exigiriam um render por
+          slide (o iframe é opaco) — o título é o que se procura ao navegar. */}
+      {showList && !!deck?.slides.length && (
+        <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/60">
+          {deck.slides.map((slide, i) => (
+            <button
+              key={`${i}-${slide.title}`}
+              ref={i === index ? activeRowRef : undefined}
+              type="button"
+              onClick={() => go(i)}
+              title={slide.title}
+              className={cn(
+                "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                i === index
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/40",
+              )}
+            >
+              <span className="w-4 shrink-0 text-right text-[10px] tabular-nums opacity-60">
+                {i + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{slide.title}</span>
+              {slide.notes && <StickyNote className="size-2.5 shrink-0 opacity-50" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Transporte: anterior, contador, próximo — e a barra de progresso
+          colada no rodapé, que é o que se olha de longe. */}
+      <div className="relative flex shrink-0 items-center justify-center gap-1 border-t border-border/60 p-1.5">
+        <IconAction
+          icon={ChevronLeft}
+          label={t("slides.previous")}
+          onClick={() => go(index - 1)}
+          disabled={index <= 0}
+        />
+        <span className="min-w-16 text-center text-[0.6875rem] tabular-nums text-muted-foreground">
+          {total > 0 ? t("slides.counter", { index: index + 1, total }) : "—"}
+        </span>
+        <IconAction
+          icon={ChevronRight}
+          label={t("slides.next")}
+          onClick={() => go(index + 1)}
+          disabled={total === 0 || index >= total - 1}
+        />
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
+          <div
+            className="h-full bg-primary transition-[width] duration-200"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
     </div>
   )

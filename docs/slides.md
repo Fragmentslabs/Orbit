@@ -1,10 +1,11 @@
 # Slides no painel
 
 Uma aba `slides` no painel direito onde o agente escreve um deck e a pessoa
-apresenta: palco 16:9, teclado, lista de slides, notas do apresentador e tela
-cheia. É a terceira aba do mesmo molde — Design (`canvas.json` + artboards) e
-Motion (composição + player) —, com um contrato de autoria mais barato que os
-dois.
+apresenta: palco 16:9, teclado, lista de slides no rodapé, notas do apresentador
+e tela cheia. O mesmo deck também renderiza INLINE na conversa, como um
+artefato, com as saídas para a sidebar e para a tela cheia. É a terceira aba do
+mesmo molde — Design (`canvas.json` + artboards) e Motion (composição + player)
+—, com um contrato de autoria mais barato que os dois.
 
 ## Status
 
@@ -101,7 +102,9 @@ electron/lib/tools/
   slides.ts           slides_write/edit/read/preview/asset/delete (os dois modos)
   piece-common.ts     o que as três peças dividem: pastas, diário, asset, exclusão
 src/components/
-  slides-tab.tsx      o palco, a lista, as notas e o transporte
+  slides-tab.tsx      a aba: palco, lista de slides, notas e transporte
+  slides/use-slides-deck.ts  a ponte e o índice — o MESMO nas duas superfícies
+  ai/slides-part.tsx  o deck inline na conversa (como o artefato)
 ```
 
 O scheme `orbit-slides://<id>/<caminho>` serve a pasta registrada (nada fora
@@ -112,9 +115,28 @@ ao mesmo slide — o mesmo ciclo do motion/design.
 A ponte é postMessage com `source: "orbit-slides"` (iframe `sandbox="allow-scripts"`,
 sem `allow-same-origin`):
 
-- deck → painel: `ready` (total, palco, títulos, notas), `change` (índice),
+- deck → app: `ready` (total, palco, títulos, notas), `change` (índice),
   `error`, `request-fullscreen`
-- painel → deck: `go(index)`, `next`, `prev`
+- app → deck: `go(index)`, `next`, `prev`
+
+## Onde o deck aparece
+
+Duas superfícies, um comportamento só (`use-slides-deck.ts`): a **aba** do
+painel e o **card na conversa**. Cada uma monta o seu iframe e guarda o seu
+índice; o filtro `event.source === iframe.contentWindow` é o que impede um palco
+de reagir ao `change` do outro.
+
+- **Aba** — o palco ocupa a largura toda e a lista mora no RODAPÉ, em pé, com
+  altura limitada e rolagem na vertical; ela rola sozinha até o slide atual. Uma
+  coluna de 208px à direita comia justamente a largura de que o 16:9 precisa num
+  painel estreito — no rodapé a lista só custa altura, e só enquanto aberta.
+- **Chat** — o deck renderiza inline, como o artefato. `slides:resolve`
+  registra e devolve `id` + entrada SEM abrir aba (é o que alimenta o iframe);
+  do cabeçalho saem as duas saídas: **abrir na sidebar** (`slides:open`) e
+  **tela cheia** (um Dialog com palco próprio, que herda o slide em que o card
+  estava).
+- **Prévia e tela cheia têm pontes separadas** de propósito: fechar o diálogo
+  não reinicia o card, e avançar na tela cheia não mexe no preview.
 
 ## Armadilhas que o teste pegou
 
@@ -191,8 +213,8 @@ espaços de nome na hora de depurar.
 
 ## O que ainda não tem
 
-- Miniaturas de verdade na LISTA do palco (a galeria já tem capa): o iframe é
-  opaco, então cada miniatura exigiria uma captura por slide. Hoje a lista
-  mostra título + número, que é o que se procura ao navegar.
+- Miniaturas de verdade na lista (a galeria já tem capa): o iframe é opaco,
+  então cada miniatura exigiria uma captura por slide. Hoje a lista mostra
+  título + número, que é o que se procura ao navegar.
 - Janela do apresentador (notas + próximo slide + cronômetro numa segunda tela).
 - Transições entre slides.
