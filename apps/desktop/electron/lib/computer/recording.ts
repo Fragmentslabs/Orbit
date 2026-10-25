@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { app, BrowserWindow, desktopCapturer, session, type DesktopCapturerSource } from 'electron'
+import sharp from 'sharp'
 import { resolveFfmpeg } from '../video/ffmpeg'
 import { addVideoToGallery } from '../video/video-gallery'
 import { buildFilter, DEFAULT_PLAN, formatTimeline, planRecording, type RecordedAction, type RecordedMark, type RecordingPlan } from './recording-plan'
@@ -31,6 +32,7 @@ interface ActiveRecording {
   /** Relógio do main quando o MediaRecorder começou */
   startedAt: number
   video: { width: number; height: number }
+  pointer: 'directed' | 'global'
   actions: RecordedAction[]
   marks: RecordedMark[]
   poll: NodeJS.Timeout
@@ -105,7 +107,15 @@ export function recordingWindowId(sessionId: string): number | null {
   return active.get(sessionId)?.window.id ?? null
 }
 
-export async function startRecording(input: { sessionId: string; app: AppInfo; window: WindowInfo; name?: string; fps?: number }): Promise<{ width: number; height: number }> {
+export async function startRecording(input: {
+  sessionId: string
+  app: AppInfo
+  window: WindowInfo
+  name?: string
+  fps?: number
+  /** Ponteiro do momento: no global o cursor real já aparece no vídeo; no dirigido, o Orbit desenha um */
+  pointer?: 'directed' | 'global'
+}): Promise<{ width: number; height: number }> {
   if (active.has(input.sessionId)) throw new ComputerError('badRequest', 'A recording is already running in this conversation — call cu_record_stop first.')
   if (active.size > 0) throw new ComputerError('unavailable', 'Another conversation is recording the screen right now.')
   if (!resolveFfmpeg()) throw new ComputerError('unavailable', 'Recording needs the bundled ffmpeg, which is missing from this build.')
@@ -137,6 +147,7 @@ export async function startRecording(input: { sessionId: string; app: AppInfo; w
       name,
       startedAt,
       video: { width: meta.width, height: meta.height },
+      pointer: input.pointer ?? 'directed',
       actions: [],
       marks: [],
       writing: Promise.resolve(),
@@ -165,7 +176,7 @@ async function flush(rec: ActiveRecording, final = false): Promise<void> {
 /** Ação do agente durante a gravação, no relógio do main. */
 export function noteRecordedAction(
   sessionId: string,
-  action: { startedAt: number; endedAt: number; label: string; hold?: boolean; target?: RecordedAction['target']; window?: Frame },
+  action: { startedAt: number; endedAt: number; label: string; hold?: boolean; pulse?: boolean; target?: RecordedAction['target']; window?: Frame },
 ): void {
   const rec = active.get(sessionId)
   if (!rec) return
@@ -174,6 +185,7 @@ export function noteRecordedAction(
     end: action.endedAt - rec.startedAt,
     label: action.label,
     hold: action.hold,
+    pulse: action.pulse,
     target: action.target,
     window: action.window ?? rec.window.frame,
   })
@@ -192,6 +204,22 @@ export interface FinishedRecording {
   plan: RecordingPlan
   timeline: string
   recordedMs: number
+}
+
+/**
+ * Seta de cursor no estilo do macOS (preta com borda branca), no tamanho da
+ * escala da janela — num monitor Retina o vídeo tem 2× pixels, e a seta acompanha.
+ */
+async function cursorImage(scale: number): Promise<string> {
+  const k = Math.max(1, Math.min(3, scale)) * 1.25
+  const w = Math.round(18 * k)
+  const h = Math.round(26 * k)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 18 26">
+<path d="M2 2 L2 20 L6.6 15.8 L9.6 22.8 L12.6 21.5 L9.7 14.6 L15.8 14.6 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`
+  const file = path.join(os.tmpdir(), 'orbit-computer', `cursor-${w}x${h}.png`)
+  await fsp.mkdir(path.dirname(file), { recursive: true })
+  await sharp(Buffer.from(svg)).png().toFile(file)
+  return file
 }
 
 function run(command: string, args: string[]): Promise<void> {
@@ -226,10 +254,16 @@ export async function stopRecording(sessionId: string, options: { keepIdle?: boo
   const ff = resolveFfmpeg()
   if (!ff) throw new ComputerError('unavailable', 'Recording needs the bundled ffmpeg, which is missing from this build.')
   const output = rec.raw.replace(/\.raw\.(mp4|webm)$/, '.mp4')
-  const { filter, output: label } = buildFilter(plan)
+  // Cursor desenhado só no modo dirigido: lá o cursor real não se move, e sem
+  // ele o vídeo mostra coisas mudando sozinhas. No global o cursor real já
+  // aparece (e dois cursores confundem).
+  const scale = rec.video.width / rec.window.frame[2]
+  const cursorPng = rec.pointer === 'directed' && plan.cursor.length > 0 ? await cursorImage(scale).catch(() => null) : null
+  const { filter, output: label } = buildFilter(plan, 30, cursorPng ? { cursorInput: 1 } : {})
   try {
     await run(ff.ffmpeg, [
       '-y', '-v', 'error', '-i', rec.raw,
+      ...(cursorPng ? ['-i', cursorPng] : []),
       '-filter_complex', filter, '-map', `[${label}]`,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
       output,

@@ -120,6 +120,8 @@ export type BridgeAction =
   | { op: 'hit'; pid: number; x: number; y: number; actions?: string[]; focusText?: boolean }
   | { op: 'scrollAx'; pid: number; x: number; y: number; dx: number; dy: number }
   | { op: 'selection'; pid: number }
+  /** Texto selecionado no app, sem o corte do `selection` (overlay) */
+  | { op: 'readSelection'; pid: number }
   | {
       op: 'element'
       pid: number

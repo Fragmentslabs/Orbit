@@ -18,6 +18,12 @@ export function describeAction(part: ToolPart, t: TFunction): string {
       return t("computer.panels.do.query", { text: String(input.text ?? input.role ?? "") }) + suffix
     case "cu_permissions":
       return t("computer.panels.do.permissions")
+    case "computer_task": {
+      const goal = String(input.goal ?? "").replace(/\s+/g, " ").trim()
+      return t("computer.panels.do.task", { goal: goal.length > 60 ? `${goal.slice(0, 59)}…` : goal })
+    }
+    case "cu_batch":
+      return t("computer.panels.do.batch", { count: Array.isArray(input.steps) ? input.steps.length : 0 }) + suffix
     case "cu_computer": {
       const action = String(input.action ?? "")
       const target =
@@ -72,11 +78,19 @@ export function computerActionSummary(part: ToolPart): string | null {
       return lines.find((l) => l.startsWith("App:")) ?? lines[0]
     case "cu_query":
       return lines.find((l) => /match/.test(l)) ?? lines[0]
+    case "computer_task":
+      // Primeira linha do relatório do agente (a de cima é só o cabeçalho).
+      return lines.slice(1).find((l) => l.trim()) ?? lines[0]
+    case "cu_batch": {
+      // O passo que parou, ou o último que rodou.
+      const steps = text.split("\n\n")[0].split("\n")
+      return steps.find((l) => l.includes("STOPPED")) ?? steps[steps.length - 1]
+    }
     default:
       return lines[0]
   }
 }
 
 export function isComputerTool(tool: string): boolean {
-  return tool.startsWith("cu_")
+  return tool.startsWith("cu_") || tool === "computer_task"
 }

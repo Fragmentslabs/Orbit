@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFilter, formatTimeline, planRecording, planSegments, targetBox, toOutputTime, DEFAULT_PLAN } from './recording-plan'
+import { buildFilter, cursorExpression, formatTimeline, planRecording, planSegments, targetBox, toOutputTime, DEFAULT_PLAN } from './recording-plan'
 
 /**
  * A edição da gravação: o vídeo tem a duração das ações, não a da conversa.
@@ -80,7 +80,7 @@ describe('planRecording', () => {
   it('linha do tempo e pulsos no tempo do vídeo final', () => {
     const plan = planRecording(
       [
-        { start: 2_000, end: 2_400, label: 'left_click on element 3', target: { point: [400, 250] }, window: [100, 50, 600, 400] },
+        { start: 2_000, end: 2_400, label: 'left_click on element 3', target: { point: [400, 250] }, window: [100, 50, 600, 400], pulse: true },
         { start: 30_000, end: 32_000, label: 'wait 2s', hold: true },
       ],
       [{ at: 31_000, label: 'formulário pronto' }],
@@ -99,6 +99,7 @@ describe('planRecording', () => {
       { start: 1_900, end: 3_900, label: 'wait 2s' },
     ])
     expect(plan.pulses).toEqual([{ at: 300, box: { x: 582, y: 382, w: 36, h: 36 } }])
+    expect(plan.cursor).toEqual([{ at: 300, x: 600, y: 400 }])
     expect(formatTimeline(plan)).toBe('0.3–0.7s  left_click on element 3\n1.9–3.9s  wait 2s\n2.9s  ◆ formulário pronto')
   })
 })
@@ -106,7 +107,7 @@ describe('planRecording', () => {
 describe('buildFilter', () => {
   it('trechos em concat e o pulso por cima', () => {
     const plan = planRecording(
-      [{ start: 2_000, end: 2_400, label: 'click', target: { point: [400, 250] }, window: [100, 50, 600, 400] }],
+      [{ start: 2_000, end: 2_400, label: 'click', target: { point: [400, 250] }, window: [100, 50, 600, 400], pulse: true }],
       [],
       10_000,
       { width: 1200, height: 800 },
@@ -116,5 +117,47 @@ describe('buildFilter', () => {
     expect(filter).toContain('concat=n=1:v=1:a=0[cut]')
     expect(filter).toContain("drawbox=x=582:y=382:w=36:h=36:color=0xF5C400@0.95:t=6:enable='between(t,0.300,0.950)'")
     expect(output).toBe('p0')
+  })
+})
+
+describe('pulso e cursor desenhado', () => {
+  const window: [number, number, number, number] = [100, 50, 600, 400]
+  const video = { width: 1200, height: 800 }
+
+  it('rolagem leva o cursor até o alvo, mas sem pulso (só cliques pulsam)', () => {
+    const plan = planRecording(
+      [
+        { start: 1_000, end: 1_200, label: 'scroll down', target: { point: [400, 250] }, window },
+        { start: 1_600, end: 1_800, label: 'left_click', target: { frame: [200, 100, 80, 20] }, window, pulse: true },
+      ],
+      [],
+      5_000,
+      video,
+    )
+    expect(plan.pulses).toHaveLength(1)
+    expect(plan.cursor.map((c) => [c.x, c.y])).toEqual([
+      [600, 400],
+      [280, 120],
+    ])
+  })
+
+  it('o cursor fica parado no 1º alvo, desliza até o próximo e chega no instante da ação', () => {
+    const expr = cursorExpression(
+      [
+        { at: 1_000, x: 100, y: 0 },
+        { at: 2_000, x: 300, y: 0 },
+      ],
+      'x',
+    )
+    // Antes de 2s: interpola de 100 até 300 entre 1.55s e 2s; depois, 300.
+    expect(expr).toBe('if(lt(t,2.000),100+(200)*(3*pow(clip((t-1.550)/0.450,0,1),2)-2*pow(clip((t-1.550)/0.450,0,1),3)),300)')
+    expect(cursorExpression([], 'x')).toBe('0')
+  })
+
+  it('com a entrada do cursor, o filtro sobrepõe a seta no caminho', () => {
+    const plan = planRecording([{ start: 2_000, end: 2_400, label: 'click', target: { point: [400, 250] }, window, pulse: true }], [], 10_000, video)
+    const { filter, output } = buildFilter(plan, 30, { cursorInput: 1 })
+    expect(filter).toContain("[p0][1:v]overlay=x='598':y='398':format=auto[cur]")
+    expect(output).toBe('cur')
   })
 })

@@ -19,6 +19,8 @@ export interface RecordedAction {
   label: string
   /** `wait` fica inteiro no vídeo: é o agente segurando um estado de propósito */
   hold?: boolean
+  /** Desenha o pulso no alvo (só cliques: na rolagem o alvo é o centro da janela) */
+  pulse?: boolean
   /** Onde a ação mirou, em pontos globais, e o frame da janela naquele momento */
   target?: { frame?: Frame; point?: [number, number] }
   window?: Frame
@@ -62,8 +64,17 @@ export interface Pulse {
   box: { x: number; y: number; w: number; h: number }
 }
 
+/** Onde o cursor desenhado está no instante de uma ação (vídeo final, px). */
+export interface CursorStop {
+  at: number
+  x: number
+  y: number
+}
+
 export interface RecordingPlan {
   segments: PlannedSegment[]
+  /** Paradas do cursor desenhado, em ordem */
+  cursor: CursorStop[]
   timeline: TimelineEntry[]
   marks: TimelineEntry[]
   pulses: Pulse[]
@@ -138,6 +149,53 @@ export function targetBox(
   }
 }
 
+/** Centro do alvo no vídeo (onde a ponta do cursor desenhado para). */
+export function targetPoint(
+  target: NonNullable<RecordedAction['target']>,
+  window: Frame,
+  video: { width: number; height: number },
+): { x: number; y: number } | null {
+  const sx = video.width / window[2]
+  const sy = video.height / window[3]
+  let gx: number, gy: number
+  if (target.frame && target.frame[2] > 0 && target.frame[3] > 0) {
+    gx = target.frame[0] + target.frame[2] / 2
+    gy = target.frame[1] + target.frame[3] / 2
+  } else if (target.point) {
+    gx = target.point[0]
+    gy = target.point[1]
+  } else {
+    return null
+  }
+  const x = Math.round((gx - window[0]) * sx)
+  const y = Math.round((gy - window[1]) * sy)
+  if (x < 0 || y < 0 || x > video.width || y > video.height) return null
+  return { x, y }
+}
+
+/** Quanto tempo o cursor desenhado leva para chegar ao próximo alvo. */
+const CURSOR_MOVE_MS = 450
+
+/**
+ * Expressão do ffmpeg para a posição do cursor ao longo do vídeo: parado no
+ * primeiro alvo, desliza até cada alvo seguinte (suavizado nas pontas) e chega
+ * no instante da ação; depois da última, fica parado. `axis` escolhe x ou y.
+ */
+export function cursorExpression(stops: CursorStop[], axis: 'x' | 'y', offset = 0): string {
+  if (stops.length === 0) return '0'
+  const v = (i: number) => stops[i][axis] - offset
+  let expr = String(v(stops.length - 1))
+  for (let i = stops.length - 1; i >= 1; i--) {
+    const t1 = stops[i].at / 1000
+    const t0 = Math.max(stops[i - 1].at, stops[i].at - CURSOR_MOVE_MS) / 1000
+    const span = Math.max(0.001, t1 - t0)
+    const u = `clip((t-${t0.toFixed(3)})/${span.toFixed(3)},0,1)`
+    const eased = `(3*pow(${u},2)-2*pow(${u},3))`
+    expr = `if(lt(t,${t1.toFixed(3)}),${v(i - 1)}+(${v(i) - v(i - 1)})*${eased},${expr})`
+  }
+  return expr
+}
+
 export function planRecording(
   actions: RecordedAction[],
   marks: RecordedMark[],
@@ -149,14 +207,19 @@ export function planRecording(
   const durationMs = segments.reduce((sum, s) => sum + (s.to - s.from), 0)
   const timeline: TimelineEntry[] = []
   const pulses: Pulse[] = []
+  const cursor: CursorStop[] = []
   for (const a of actions) {
     const start = toOutputTime(segments, a.start)
     const end = toOutputTime(segments, Math.min(a.end, recordedMs))
     if (start === null) continue
     timeline.push({ start, end: end ?? start, label: a.label })
     if (a.target && a.window && !a.hold) {
-      const box = targetBox(a.target, a.window, video)
-      if (box) pulses.push({ at: start, box })
+      const point = targetPoint(a.target, a.window, video)
+      if (point) cursor.push({ at: start, ...point })
+      if (a.pulse) {
+        const box = targetBox(a.target, a.window, video)
+        if (box) pulses.push({ at: start, box })
+      }
     }
   }
   const markEntries: TimelineEntry[] = []
@@ -164,7 +227,7 @@ export function planRecording(
     const at = toOutputTime(segments, m.at)
     if (at !== null) markEntries.push({ start: at, end: at, label: m.label })
   }
-  return { segments, timeline, marks: markEntries, pulses, durationMs, cutMs: Math.max(0, recordedMs - durationMs) }
+  return { segments, timeline, marks: markEntries, pulses, cursor, durationMs, cutMs: Math.max(0, recordedMs - durationMs) }
 }
 
 /** Duração de cada pulso de clique no vídeo. */
@@ -175,7 +238,7 @@ const PULSE_MS = 650
  * retângulo amarelo pulsando no alvo de cada ação. O amarelo é o primário do
  * Orbit (#F5C400, perto do oklch do tema).
  */
-export function buildFilter(plan: RecordingPlan, fps = 30): { filter: string; output: string } {
+export function buildFilter(plan: RecordingPlan, fps = 30, options: { cursorInput?: number } = {}): { filter: string; output: string } {
   const parts: string[] = [`[0:v]fps=${fps},format=yuv420p,split=${plan.segments.length}${plan.segments.map((_, i) => `[s${i}]`).join('')}`]
   plan.segments.forEach((s, i) => {
     parts.push(`[s${i}]trim=start=${(s.from / 1000).toFixed(3)}:end=${(s.to / 1000).toFixed(3)},setpts=PTS-STARTPTS[c${i}]`)
@@ -191,6 +254,14 @@ export function buildFilter(plan: RecordingPlan, fps = 30): { filter: string; ou
     )
     last = next
   })
+  // Cursor desenhado (modo dirigido): a imagem da 2ª entrada sobreposta no
+  // caminho entre os alvos. A ponta da seta fica em (2,2) da imagem.
+  if (options.cursorInput !== undefined && plan.cursor.length > 0) {
+    const x = cursorExpression(plan.cursor, 'x', 2)
+    const y = cursorExpression(plan.cursor, 'y', 2)
+    parts.push(`[${last}][${options.cursorInput}:v]overlay=x='${x}':y='${y}':format=auto[cur]`)
+    last = 'cur'
+  }
   return { filter: parts.join(';'), output: last }
 }
 

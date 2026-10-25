@@ -227,6 +227,39 @@ janela** e entrega um MP4 no chat (e na galeria).
   compartilhada" na barra de título, e ele aparece no vídeo.
 - Para páginas web, o `browser_record` (roteiro declarativo) continua melhor.
 
+## Velocidade, subagente e lote
+
+- **Read_back em texto.** Depois de cada ação, o `cu_computer` devolve a árvore
+  em texto. O screenshot só entra no contexto com `screenshot: true` ou quando a
+  árvore está quase vazia. A captura continua acontecendo, porque é ela que
+  atualiza a miniatura. No teste real (Chrome, ~30 ações em 12 min), o custo
+  crescia a cada passo, porque o histórico reenviava todos os screenshots.
+- **`cu_batch`.** Até 15 ações num app numa chamada só, em ordem, parando no
+  primeiro erro (que é dito pelo número) e com uma observação no fim. Serve para
+  sequências previsíveis, como clicar no endereço, digitar e dar Enter.
+- **`computer_task` (subagente).** O agente principal manda um objetivo e um
+  agente dedicado roda o laço com **contexto curto** (só o objetivo e as
+  observações dele, nunca a conversa), usando o modelo de **Preferências →
+  Computador → Modelo do agente de computador** (padrão: o da conversa). As
+  tools `cu_*` dele usam o mesmo `sessionId`, então a faixa, o chip, a miniatura
+  e uma gravação em andamento enxergam o que ele faz, e as permissões aparecem na
+  conversa. Gravação e permissões ficam com o agente principal.
+
+## Gravação: o que mudou depois do teste no Chrome
+
+- **Traz a janela para a frente** ao começar (`bring_to_front`, padrão
+  verdadeiro): ativa o app e faz `AXRaise` na janela. Gravando com a janela
+  atrás, a pessoa não percebia que tinha começado.
+- **Pulso só em clique.** Na rolagem, o "alvo" é o centro da janela, e o vídeo
+  enchia de quadrados amarelos.
+- **Cursor desenhado no modo dirigido.** Uma seta no estilo do macOS desliza de
+  alvo em alvo (450 ms, suavizada) e chega no instante de cada ação. No modo
+  global ela não aparece, porque o cursor real já está no vídeo. Validado com o
+  ffmpeg: parada no 1º alvo, no meio do caminho e no 2º alvo.
+- **Ponteiro global avisa.** A faixa diz "Orbit está usando o seu mouse em … —
+  não mexa". No teste, o ponteiro global estava ligado, e o agente e a pessoa
+  disputaram o mesmo cursor, o que apareceu misturado no vídeo.
+
 ## Permissões do macOS
 
 | Permissão | Para quê | Sem ela |
@@ -241,6 +274,14 @@ botão **Testar** das Preferências faz uma leitura real pelo processo filho, o 
 prova a herança de verdade. A flag `isTrustedAccessibilityClient` sozinha não
 prova isso. No Sequoia, a Gravação de Tela volta a pedir confirmação
 periodicamente.
+
+**Pedido da Gravação de Tela.** O **Pedir** chama `CGRequestScreenCaptureAccess`
+pela bridge, ou seja, num filho do Orbit, para o pedido sair em nome dele. Se
+não vier, as Preferências explicam o caminho manual. No build 0.1.4 instalado
+(não notarizado), o macOS negou o pedido "por política", sem diálogo e sem pôr
+o Orbit na lista. Só o **+** da lista resolveu. Um build antigo com o
+identificador padrão do template (`YourAppID`, release 0.1.1) também aparecia
+como "Orbit" nas duas listas e confundia o teste.
 
 Não usamos o System Events, então nem `NSAppleEventsUsageDescription` nem a
 entitlement `com.apple.security.automation.apple-events` são necessários. Se

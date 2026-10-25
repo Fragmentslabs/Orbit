@@ -1,5 +1,6 @@
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { computerStopShortcut, type ComputerActivity, type ComputerEvent } from '@shared/computer'
+import { getAppSettings } from '../app-settings'
 import { tNow } from '../i18n'
 import { disposeComputerPanels, setComputerPanelsSession } from './panels'
 import { finishOrphanRecording, disposeRecordings } from './recording'
@@ -194,7 +195,9 @@ kbd{font:600 10px -apple-system,system-ui,sans-serif;opacity:.7}
  */
 function showOverlay(): void {
   const apps = [...new Set([...live.values()].map((l) => l.activity.app))].join(', ')
-  const text = tNow('computer.overlay', { apps })
+  // No ponteiro global o agente usa o mouse REAL: a faixa avisa para a pessoa
+  // não disputar o cursor (a mistura aparecia na gravação).
+  const text = tNow(getAppSettings().computer.pointer === 'global' ? 'computer.overlayGlobal' : 'computer.overlay', { apps })
   if (!overlay || overlay.isDestroyed()) {
     const area = screen.getPrimaryDisplay().workArea
     const width = Math.min(720, area.width)

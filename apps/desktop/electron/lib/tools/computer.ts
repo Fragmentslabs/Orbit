@@ -178,6 +178,94 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     return result
   }
 
+  /**
+   * Uma ação do cu_computer (ou um passo do cu_batch): executa, registra no
+   * chip, na linha do tempo da gravação e no alvo da miniatura.
+   */
+  const performAction = async (args: ActionArgs, signal: AbortSignal | undefined) => {
+    const startedAt = Date.now()
+    const outcome = await act(getComputerDriver(), computerRegistry, {
+      sessionId,
+      action: args.action,
+      app: args.app,
+      observationId: args.observation_id,
+      element: args.element,
+      x: args.x,
+      y: args.y,
+      toElement: args.to_element,
+      toX: args.to_x,
+      toY: args.to_y,
+      text: args.text,
+      key: args.key,
+      direction: args.direction,
+      amount: args.amount,
+      seconds: args.seconds,
+      axAction: args.ax_action,
+      occurrence: args.occurrence,
+      pointer: settings().pointer,
+      signal,
+    })
+    if (outcome.app) noteActivity(sessionId, outcome.app.name, outcome.summary)
+    // Gravando: a ação entra na linha do tempo (é ela que decide o que fica
+    // no vídeo e onde vai o pulso de clique). `wait` fica inteiro.
+    if (isRecording(sessionId)) {
+      noteRecordedAction(sessionId, {
+        startedAt,
+        endedAt: Date.now(),
+        label: describeForTimeline(args),
+        hold: args.action === 'wait',
+        target: outcome.target,
+        // Pulso só onde houve clique: na rolagem o "alvo" é o centro da
+        // janela, e o vídeo enchia de quadrados sem sentido. O alvo segue
+        // valendo para o cursor desenhado ir até lá.
+        pulse: CLICK_ACTIONS.has(args.action),
+        window: outcome.record?.window.frame,
+      })
+    }
+    if (outcome.target) {
+      rememberTarget(sessionId, outcome.target, args.action)
+      noteShotChanged(sessionId)
+    }
+    return outcome
+  }
+
+  /** A observação depois de agir: árvore em texto; a imagem só quando pedida ou quando a árvore não diz nada. */
+  const readBack = async (
+    outcome: Awaited<ReturnType<typeof performAction>>,
+    action: string,
+    screenshot: boolean,
+    signal: AbortSignal | undefined,
+    toolCallId: string,
+  ): Promise<string> => {
+    if (!outcome.app) return ''
+    await sleep(action === 'open_app' ? 0 : SETTLE_MS)
+    const before = outcome.record?.digest ?? null
+    let next: ObservationResult
+    try {
+      next = await runObserve({ app: String(outcome.app.pid), windowId: outcome.reopen ? undefined : outcome.record?.window.id }, signal)
+    } catch (err) {
+      // A janela fechou (diálogo confirmado, por exemplo): observa a da frente do app.
+      if (!(err instanceof ComputerError) || err.code !== 'windowNotFound') throw err
+      next = await runObserve({ app: String(outcome.app.pid) }, signal)
+    }
+    const unchanged =
+      before && next.record.digest === before
+        ? '\nNothing changed in the accessibility tree after this action — it may not have worked. Do not repeat it blindly: check the screenshot, try another way (element vs x/y, keyboard, open_app to bring the app forward), or ask the user.'
+        : ''
+    // A imagem entra no contexto só quando pedida ou quando a árvore não
+    // diz nada (app sem acessibilidade): um screenshot por ação era o
+    // grosso do custo, e o histórico reenvia todos a cada passo. A captura
+    // continua acontecendo — é ela que atualiza a miniatura do painel.
+    const treePoor = next.record.elements.size <= 2
+    const imageNote =
+      screenshot || treePoor
+        ? await stashImage(options, toolCallId, next)
+        : next.image
+          ? '\n(Screenshot not loaded to save context — pass screenshot: true, or call cu_observe, when you need to see the screen.)'
+          : ''
+    return `${unchanged}\n\n${next.text}${imageNote}`
+  }
+
   const fail = (err: unknown) => {
     if (err instanceof ComputerError && err.code === 'aborted') endActivity(sessionId)
     return errorText(err)
@@ -267,67 +355,72 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         seconds: z.number().min(0.1).max(10).optional().describe('wait: seconds (default 1)'),
         ax_action: z.string().optional().describe('invoke: accessibility action name (press, increment, decrement, showMenu, confirm, cancel…)'),
         occurrence: z.number().int().min(1).optional().describe('select_text: which occurrence of "text" (default 1)'),
-        read_back: z.boolean().optional().describe('Return a fresh observation after acting (default true)'),
+        read_back: z.boolean().optional().describe('Return a fresh observation after acting (default true) — the tree as text; the screenshot only with screenshot: true'),
+        screenshot: z
+          .boolean()
+          .optional()
+          .describe('Load the screenshot in the read_back too (default false: tree text only, which is much cheaper; the image is loaded automatically when the tree is almost empty)'),
       }),
       execute: async (args, { abortSignal, toolCallId }) => {
         try {
-          const startedAt = Date.now()
-          const outcome = await act(getComputerDriver(), computerRegistry, {
-            sessionId,
-            action: args.action,
-            app: args.app,
-            observationId: args.observation_id,
-            element: args.element,
-            x: args.x,
-            y: args.y,
-            toElement: args.to_element,
-            toX: args.to_x,
-            toY: args.to_y,
-            text: args.text,
-            key: args.key,
-            direction: args.direction,
-            amount: args.amount,
-            seconds: args.seconds,
-            axAction: args.ax_action,
-            occurrence: args.occurrence,
-            pointer: settings().pointer,
-            signal: abortSignal,
-          })
-          if (outcome.app) noteActivity(sessionId, outcome.app.name, outcome.summary)
-          // Gravando: a ação entra na linha do tempo (é ela que decide o que fica
-          // no vídeo e onde vai o pulso de clique). `wait` fica inteiro.
-          if (isRecording(sessionId)) {
-            noteRecordedAction(sessionId, {
-              startedAt,
-              endedAt: Date.now(),
-              label: describeForTimeline(args),
-              hold: args.action === 'wait',
-              target: outcome.target,
-              window: outcome.record?.window.frame,
-            })
-          }
-          if (outcome.target) {
-            rememberTarget(sessionId, outcome.target, args.action)
-            noteShotChanged(sessionId)
-          }
+          const outcome = await performAction(args, abortSignal)
           if (args.read_back === false || !outcome.app || args.action === 'wait') return outcome.summary
-          await sleep(args.action === 'open_app' ? 0 : SETTLE_MS)
-          const before = outcome.record?.digest ?? null
-          let next: ObservationResult
-          try {
-            next = await runObserve({ app: String(outcome.app.pid), windowId: outcome.reopen ? undefined : outcome.record?.window.id }, abortSignal)
-          } catch (err) {
-            // A janela fechou (diálogo confirmado, por exemplo): observa a da frente do app.
-            if (!(err instanceof ComputerError) || err.code !== 'windowNotFound') throw err
-            next = await runObserve({ app: String(outcome.app.pid) }, abortSignal)
-          }
-          const unchanged =
-            before && next.record.digest === before
-              ? '\nNothing changed in the accessibility tree after this action — it may not have worked. Do not repeat it blindly: check the screenshot, try another way (element vs x/y, keyboard, open_app to bring the app forward), or ask the user.'
-              : ''
-          return `${outcome.summary}${unchanged}\n\n${next.text}${await stashImage(options, toolCallId, next)}`
+          return `${outcome.summary}${await readBack(outcome, args.action, args.screenshot === true, abortSignal, toolCallId)}`
         } catch (err) {
           return fail(err)
+        }
+      },
+      toModelOutput,
+    }),
+
+    cu_batch: tool({
+      description:
+        'Runs several cu_computer actions in ONE call, in order, on one app — for sequences whose outcome you can predict (click the address bar, type, press return; fill several fields). Stops at the first failing step and says which. Element indices must come from the latest observation and stay valid only while the UI does not change; after a step that changes the screen, prefer x/y or the keyboard, or split the batch. Returns one observation at the end.',
+      inputSchema: z.object({
+        app: z.string().describe('Bundle id, name or pid of the target app'),
+        steps: z
+          .array(
+            z.object({
+              action: z.enum(COMPUTER_ACTIONS),
+              element: z.number().int().optional(),
+              x: z.number().optional(),
+              y: z.number().optional(),
+              to_element: z.number().int().optional(),
+              to_x: z.number().optional(),
+              to_y: z.number().optional(),
+              text: z.string().optional(),
+              key: z.string().optional(),
+              direction: z.enum(['up', 'down', 'left', 'right']).optional(),
+              amount: z.number().int().min(1).max(20).optional(),
+              seconds: z.number().min(0.1).max(10).optional(),
+              ax_action: z.string().optional(),
+              occurrence: z.number().int().min(1).optional(),
+            }),
+          )
+          .min(1)
+          .max(15)
+          .describe('Steps, same fields as cu_computer (app comes from the top level)'),
+        screenshot: z.boolean().optional().describe('Load the screenshot in the final observation (default false)'),
+      }),
+      execute: async (args, { abortSignal, toolCallId }) => {
+        const done: string[] = []
+        let last: Awaited<ReturnType<typeof performAction>> | null = null
+        let lastAction = ''
+        for (const [i, step] of args.steps.entries()) {
+          try {
+            last = await performAction({ ...step, app: args.app }, abortSignal)
+            lastAction = step.action
+            done.push(`${i + 1}. ${last.summary}`)
+          } catch (err) {
+            const message = fail(err)
+            const head = done.length ? `${done.join('\n')}\n` : ''
+            return `${head}${i + 1}. STOPPED — ${message}\nSteps ${i + 2}–${args.steps.length} were not run. Observe again before continuing.`
+          }
+        }
+        try {
+          return `${done.join('\n')}${last ? await readBack(last, lastAction, args.screenshot === true, abortSignal, toolCallId) : ''}`
+        } catch (err) {
+          return `${done.join('\n')}\n(Final observation failed: ${fail(err)})`
         }
       },
       toModelOutput,
@@ -376,14 +469,29 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         app: z.string().describe('Bundle id, name or pid of the app to record'),
         window_id: z.number().int().optional().describe('Window id from cu_apps (default: the app\'s frontmost window)'),
         name: z.string().max(60).optional().describe('Title of the video in the gallery'),
+        bring_to_front: z
+          .boolean()
+          .optional()
+          .describe('Bring the app and this window to the front before recording (default true — the user usually wants to watch; false records in the background)'),
       }),
       execute: async (args, { abortSignal }) => {
         try {
-          const snapshot = await getComputerDriver().apps(abortSignal)
+          const driver = getComputerDriver()
+          const snapshot = await driver.apps(abortSignal)
           const app = resolveApp(snapshot, args.app)
           assertTargetAllowed(app)
           const win = resolveWindow(snapshot, app, args.window_id)
-          const video = await startRecording({ sessionId, app, window: win, name: args.name })
+          // Quem pede um vídeo quer ver acontecendo: gravar com a janela atrás
+          // de outras deixava a pessoa sem saber que começou (e, no ponteiro
+          // global, mexendo na mesma janela que o agente).
+          if (args.bring_to_front !== false) {
+            await driver.act({ op: 'activate', pid: app.pid }, abortSignal).catch(() => undefined)
+            await driver
+              .act({ op: 'element', pid: app.pid, window: { frame: win.frame, title: win.title }, path: [], kind: 'press', actions: ['AXRaise'] }, abortSignal)
+              .catch(() => undefined)
+            await sleep(400)
+          }
+          const video = await startRecording({ sessionId, app, window: win, name: args.name, pointer: settings().pointer })
           noteActivity(sessionId, app.name, null)
           return `Recording window ${win.id} of ${app.name} (${video.width}×${video.height} px). Act with cu_computer now; idle time between actions is cut. Call cu_record_stop when the flow is done.`
         } catch (err) {
@@ -475,6 +583,29 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     }),
   }
 }
+
+/** Campos de uma ação (cu_computer e cada passo do cu_batch). */
+interface ActionArgs {
+  action: (typeof COMPUTER_ACTIONS)[number]
+  app?: string
+  observation_id?: string
+  element?: number
+  x?: number
+  y?: number
+  to_element?: number
+  to_x?: number
+  to_y?: number
+  text?: string
+  key?: string
+  direction?: 'up' | 'down' | 'left' | 'right'
+  amount?: number
+  seconds?: number
+  ax_action?: string
+  occurrence?: number
+}
+
+/** Ações que ganham o pulso de clique no vídeo. */
+const CLICK_ACTIONS = new Set(['left_click', 'right_click', 'middle_click', 'double_click', 'triple_click', 'invoke'])
 
 /** Rótulo da ação na linha do tempo do vídeo: "left_click on element 3", "type “oi”". */
 function describeForTimeline(args: { action: string; element?: number; x?: number; y?: number; text?: string; key?: string; direction?: string; seconds?: number }): string {

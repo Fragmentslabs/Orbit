@@ -720,6 +720,23 @@ function opSelection(args) {
   return { selection: { location: raw.location, length: raw.length, text: clip(text, 120) } }
 }
 
+// Texto selecionado no app, SEM o corte de 120 caracteres do opSelection: é o
+// que o overlay (⇧⌘espaço) entrega ao modelo quando a pessoa pede "traduz
+// isso". Devolve null quando não há seleção — nunca o texto inteiro do campo.
+function opReadSelection(args) {
+  requireTrust()
+  setGlobalTimeout(0.8)
+  var focused = copyAttr(appElement(args.pid), 'AXFocusedUIElement').value
+  if (!focused || !focused.element) return { selection: null }
+  var picked = copyAttr(focused.element, 'AXSelectedText').value
+  if (picked === null || picked === undefined) return { selection: null }
+  var text = String(picked)
+  if (!text.trim()) return { selection: null }
+  // 20k é teto de contexto, não de seleção: um documento inteiro selecionado
+  // por acidente não pode virar a mensagem.
+  return { selection: { location: 0, length: text.length, text: text.slice(0, 20000) } }
+}
+
 // O elemento com foco de um app (ou do sistema, sem pid): é o que recebe a
 // digitação — o driver confere aqui que não é um campo de senha.
 function opFocused(args) {
@@ -748,6 +765,7 @@ var OPS = {
   focused: opFocused,
   hit: opHit,
   selection: opSelection,
+  readSelection: opReadSelection,
   scrollAx: opScrollAx,
 }
 

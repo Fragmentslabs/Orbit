@@ -103,7 +103,7 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
   )
 }
 
-const isComputerTool = (part: ToolPart) => part.tool.startsWith("cu_")
+const isComputerTool = (part: ToolPart) => part.tool.startsWith("cu_") || part.tool === "computer_task"
 
 /**
  * Miniatura do último screenshot da janela controlada, com o alvo da última

@@ -6,6 +6,7 @@ import { computerStopShortcut, type ComputerStatus, type ComputerTestResult } fr
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
 import { computerApi, windowApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
@@ -17,6 +18,10 @@ export function ComputerPanel() {
   const update = useAppSettings((s) => s.update)
   const [status, setStatus] = useState<ComputerStatus | null>(null)
   const [test, setTest] = useState<ComputerTestResult | "busy" | null>(null)
+  // Pediu a Gravação de Tela e ela não veio: o macOS pode não ter posto o
+  // Orbit na lista — sem este aviso, a pessoa liga um "Orbit" que não é o
+  // app (visto no teste com o build instalado) ou fica sem saber o que fazer.
+  const [screenAsked, setScreenAsked] = useState(false)
 
   const refresh = useCallback(() => {
     void computerApi.status().then(setStatus)
@@ -89,6 +94,16 @@ export function ComputerPanel() {
           />
         </SettingRow>
 
+        <div>
+          <ModelField
+            label={t("computerSettings.model.title")}
+            value={computer.model}
+            nullLabel={t("computerSettings.model.none")}
+            onChange={(model) => set({ model })}
+          />
+          <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{t("computerSettings.model.hint")}</p>
+        </div>
+
         {windowApi.platform === "win32" ? (
           <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <div className="flex items-center gap-3">
@@ -130,9 +145,17 @@ export function ComputerPanel() {
             <PermissionLine
               label={t("computerSettings.permissions.screen")}
               granted={screenOk}
-              onRequest={() => void computerApi.requestScreen().then(refresh)}
+              onRequest={() =>
+                void computerApi.requestScreen().then((r) => {
+                  setScreenAsked(!r.granted)
+                  refresh()
+                })
+              }
               onOpen={() => void computerApi.openPane("screen")}
             />
+            {screenAsked && !screenOk && (
+              <p className="pl-11 text-[11px] text-amber-700 dark:text-amber-300">{t("computerSettings.permissions.screenManual")}</p>
+            )}
             {/* Aberto por um terminal, o dono das permissões é o terminal — o
                 usuário libera o "Electron" e nada muda (Fase 0). */}
             {status?.responsible ? (

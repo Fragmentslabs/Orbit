@@ -55,3 +55,17 @@ describe("computerActionSummary", () => {
     expect(computerActionSummary({ id: "p", type: "tool", tool: "cu_computer", state: "error", error: "Error (blocked): denylist" })).toBe("Error (blocked): denylist")
   })
 })
+
+describe("subagente e lote", () => {
+  it("rótulos", () => {
+    expect(describeAction(part("computer_task", { goal: "Abrir o Safari e   buscar o clima" }), t)).toBe("Tarefa no computador: Abrir o Safari e buscar o clima")
+    expect(describeAction(part("cu_batch", { app: "com.google.Chrome", steps: [{}, {}, {}] }), t)).toBe("3 ações em sequência · Chrome")
+  })
+
+  it("resumo: o relatório do agente e o passo que parou o lote", () => {
+    const done = (tool: string, output: string): ToolPart => ({ id: "p", type: "tool", tool, state: "done", input: {}, output })
+    expect(computerActionSummary(done("computer_task", "Computer agent (haiku) finished in 12s with 8 tool call(s).\n\nAbri o Safari e a busca mostrou 24 °C."))).toBe("Abri o Safari e a busca mostrou 24 °C.")
+    expect(computerActionSummary(done("cu_batch", "1. Clicked.\n2. STOPPED — Error (staleIndex): x\nSteps 3–4 were not run."))).toBe("2. STOPPED — Error (staleIndex): x")
+    expect(computerActionSummary(done("cu_batch", "1. Clicked.\n2. Typed 3 character(s).\n\nApp: Chrome"))).toBe("2. Typed 3 character(s).")
+  })
+})
