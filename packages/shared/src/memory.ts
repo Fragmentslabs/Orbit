@@ -142,6 +142,19 @@ export interface Memory {
   category?: ProjectCategory
   /** Área de conhecimento (gerada pelo /init) — base do grafo de memórias */
   area?: ProjectArea
+  /**
+   * Campos de enriquecimento para a busca (todos opcionais; o `text` continua
+   * sendo a fonte da verdade). Quem grava a memória — o LLM, via memory_save —
+   * pode preenchê-los sem custo extra; quando ausentes, o índice os deriva do
+   * texto (ver memory-retrieval.ts). Nunca contêm fatos que o texto não tenha.
+   */
+  title?: string
+  summary?: string
+  /** Pessoas, projetos, produtos, lugares e identificadores citados */
+  entities?: string[]
+  keywords?: string[]
+  /** Paráfrases e intenções que devem levar a esta memória (qualquer idioma) */
+  concepts?: string[]
 }
 
 export interface MemoryEvent {
@@ -224,27 +237,71 @@ export function jaccard(a: string[], b: string[]): number {
 }
 
 /**
- * Score léxico: tag exata ×3, token no texto ×1, + 0.5×weight + boost de hits.
+ * Peso de um token encontrado só no documento anexado. Calibrado no acervo real
+ * (307 memórias, 58 com documento) contra 46 consultas que só o `.md` responde e
+ * 306 consultas de texto, que servem de controle de regressão:
+ *
+ *   peso   R@1 (doc)   R@5 (doc)   R@1 (texto)
+ *   0.6       56.5%       89.1%        96.7%
+ *   0.8       65.2%       97.8%        96.4%
+ *   0.9       80.4%       97.8%        96.4%
+ *   1.0       87.0%       97.8%        95.8%   ← o texto começa a ceder
+ *
+ * 0.9 é o joelho: o R@5 satura em 0.8 e dali em diante o que se compra é ordem
+ * (R@1), não alcance. Ficar em 1.0 rende mais 6,6 pp no documento, mas custa
+ * 1,3 pp nas consultas de texto — e essas são o formato mais próximo de uma
+ * pergunta real, enquanto as de documento foram construídas para favorecê-lo.
+ */
+export const DOC_TOKEN_WEIGHT = 0.9
+
+/**
+ * Score léxico: tag exata ×3, token no texto ×1, token no documento anexado ×0.6,
+ * + 0.5×weight + boost de hits. O `else if` garante que um token presente nos
+ * dois conte uma vez só (vale o texto, que é o sinal mais forte).
  * Retorna 0 quando nenhum token da consulta bate (memória irrelevante).
  */
-export function scoreMemory(memory: Pick<Memory, "text" | "tags" | "weight" | "hits">, queryTokens: string[]): number {
+export function scoreMemory(
+  memory: Pick<Memory, "text" | "tags" | "weight" | "hits">,
+  queryTokens: string[],
+  doc?: string | null,
+  docWeight = DOC_TOKEN_WEIGHT,
+): number {
   if (queryTokens.length === 0) return 0
   const text = normalizeText(memory.text)
+  const body = doc ? normalizeText(doc) : ""
   const tags = new Set(memory.tags.map(normalizeText))
   let matches = 0
   for (const token of queryTokens) {
     if (tags.has(token)) matches += 3
     else if (text.includes(token)) matches += 1
+    else if (body.includes(token)) matches += docWeight
   }
   if (matches === 0) return 0
   return matches + 0.5 * memory.weight + Math.min(memory.hits / 10, 0.3)
 }
 
-/** Ordena um conjunto de memórias por relevância à consulta e recorta o limite. */
-export function searchMemories<T extends Memory>(pool: T[], query: string, limit = 8): T[] {
+/**
+ * Ordena um conjunto de memórias por relevância à consulta e recorta o limite.
+ * `docs` leva o documento anexado por id — sem ele o comportamento é o de
+ * antes, byte por byte.
+ */
+export interface SearchOptions {
+  /** Documento anexado por id de memória */
+  docs?: Map<string, string>
+  /** Peso de um token encontrado só no documento (default: DOC_TOKEN_WEIGHT) */
+  docWeight?: number
+}
+
+export function searchMemories<T extends Memory>(
+  pool: T[],
+  query: string,
+  limit = 8,
+  options: SearchOptions = {},
+): T[] {
   const tokens = tokenize(query)
+  const docWeight = options.docWeight ?? DOC_TOKEN_WEIGHT
   return pool
-    .map((memory) => ({ memory, score: scoreMemory(memory, tokens) }))
+    .map((memory) => ({ memory, score: scoreMemory(memory, tokens, options.docs?.get(memory.id), docWeight) }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
