@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revisão de memórias — Orbit</title>
+<style>
+  :root {
+    --bg: #131316; --card: #1c1c21; --line: #2c2c33; --fg: #e9e9ee;
+    --muted: #9a9aa6; --primary: #e0b341; --ok: #59b986; --warn: #d98b4a; --danger: #d96b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(19,19,22,.94);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding: 12px 20px;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  .spacer { flex: 1; }
+  button { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: #41414a; }
+  button.primary { background: var(--primary); color: #1a1a1a; border-color: var(--primary); font-weight: 600; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .45; cursor: default; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .pill { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 9px; }
+  .pill.on { color: #1a1a1a; background: var(--primary); border-color: var(--primary); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+  .tag.warn { color: var(--warn); border-color: #4a3a2a; }
+  .tag.ok { color: var(--ok); border-color: #2c4438; }
+  .anchor { background: #16161a; border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+    margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; font-size: 13px; color: #cfcfd8;
+    max-height: 220px; overflow: auto; }
+  .anchor.neg { border-color: #4a2f2f; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
+  textarea, input[type=text] { width: 100%; background: #16161a; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; resize: vertical; }
+  textarea:focus, input:focus { outline: none; border-color: var(--primary); }
+  textarea.q { min-height: 64px; }
+  textarea.ctx { min-height: 54px; }
+  .decisions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .decisions label { margin: 0; color: var(--fg); font-size: 13px; border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 12px; cursor: pointer; display: flex; gap: 7px; align-items: center; }
+  .decisions label:has(input:checked) { border-color: var(--primary); background: #262218; }
+  .decisions input { accent-color: var(--primary); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  footer { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  .count { font-size: 12px; color: var(--muted); }
+  .done { color: var(--ok); }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  .warnbox { border: 1px solid #4a3a2a; background: #241d15; color: #e8c79a; border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 16px; font-size: 13px; }
+  kbd { background: #26262d; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+    padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Revisão de memórias</h1>
+  <span class="pill" id="filterPilot">Piloto (20)</span>
+  <span class="pill" id="filterAll">Todos (50)</span>
+  <span class="spacer"></span>
+  <span class="count" id="progress"></span>
+  <button class="ghost" id="importBtn">Importar</button>
+  <button class="primary" id="exportBtn">Exportar rótulos</button>
+</header>
+<main>
+  <div class="warnbox">
+    Tudo aqui roda no seu computador. Escreva a consulta como você perguntaria de verdade — não copie
+    palavras da memória. Marque <strong>inconclusivo</strong> quando o caso for ambíguo.
+  </div>
+  <div class="card" id="card"></div>
+  <footer>
+    <button id="prevBtn">← Anterior</button>
+    <button id="nextBtn">Próximo →</button>
+    <span class="spacer"></span>
+    <span class="count">Atalhos: <kbd>⌘↵</kbd> próximo · <kbd>⌘⇧I</kbd> inconclusivo</span>
+  </footer>
+</main>
+<input type="file" id="fileInput" accept="application/json" hidden>
+<script>
+const DATA = __ORBIT_DATA__;
+const KEY = 'orbit-memory-review-v2';
+const DECISIONS = [
+  ['inject', 'Conteúdo completo', 'A memória responde ou é indispensável para responder.'],
+  ['pointer', 'Só um ponteiro', 'Ajuda, mas não é indispensável — o modelo pode abrir.'],
+  ['none', 'Nenhuma memória', 'A pergunta não precisa de nada do que está guardado.'],
+  ['inconclusive', 'Inconclusivo', 'Ambíguo demais para rotular.'],
+];
+
+let state = load();
+let filter = 'pilot';
+let index = 0;
+
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch {}
+  return { v: 1, labels: {} };
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function labels() { return state.labels || (state.labels = {}); }
+function current() {
+  const list = visible();
+  if (!list.length) return null;
+  if (index >= list.length) index = list.length - 1;
+  return list[index];
+}
+function visible() {
+  return DATA.scenarios.filter((s) => filter === 'all' || s.pilot);
+}
+function blank(label) {
+  return label || { query: '', context: '', decision: '', reason: '' };
+}
+function answered(id) {
+  const l = labels()[id];
+  return !!(l && l.query.trim() && l.decision);
+}
+
+function render() {
+  const list = visible();
+  const card = document.getElementById('card');
+  document.getElementById('filterPilot').className = 'pill' + (filter === 'pilot' ? ' on' : '');
+  document.getElementById('filterAll').className = 'pill' + (filter === 'all' ? ' on' : '');
+  const done = list.filter((s) => answered(s.id)).length;
+  document.getElementById('progress').textContent = `${done}/${list.length} respondidos`;
+
+  if (!list.length) { card.innerHTML = '<div class="empty">Nenhum cenário neste filtro.</div>'; return; }
+  const s = current();
+  const l = blank(labels()[s.id]);
+  const neg = s.role === 'no-memory';
+
+  card.innerHTML = `
+    <div class="meta">
+      <span class="tag">${s.id}</span>
+      <span class="tag">${neg ? 'tema relacionado — NÃO deve recuperar' : 'memória-alvo'}</span>
+      <span class="tag">${s.kind}${s.category ? ' · ' + s.category : ''}${s.area ? ' · ' + s.area : ''}</span>
+      <span class="tag">${s.length}</span>
+      ${s.similar ? '<span class="tag warn">parecida com outras</span>' : ''}
+      ${s.crossLang ? '<span class="tag ok">sugerido: consulta em outro idioma</span>' : ''}
+      ${s.memoryId ? '<span class="tag">' + s.memoryId + '</span>' : ''}
+    </div>
+    <label>${neg ? 'Memória do tema (só para você situar a pergunta)' : 'Memória que deveria ser encontrada'}</label>
+    <div class="anchor ${neg ? 'neg' : ''}">${escapeHtml(s.text || '(sem texto)')}</div>
+    <label for="q">Sua pergunta, como você faria a um assistente</label>
+    <textarea id="q" class="q" placeholder="ex.: preciso organizar a viagem do mês que vem, o que você lembra sobre como eu gosto de viajar?">${escapeHtml(l.query)}</textarea>
+    <label for="c">Contexto recente (opcional — só se a pergunta depender dele)</label>
+    <textarea id="c" class="ctx" placeholder="ex.: usuário: vou marcar a viagem para o Recife / assistente: prefere sair de manhã ou à noite?">${escapeHtml(l.context)}</textarea>
+    <label>Resultado correto para essa pergunta</label>
+    <div class="decisions">
+      ${DECISIONS.map(([v, t]) => `<label title="${t}"><input type="radio" name="d" value="${v}" ${l.decision === v ? 'checked' : ''}> ${t}</label>`).join('')}
+    </div>
+    <div class="hint">${neg ? 'Aqui o esperado costuma ser <strong>Nenhuma memória</strong> — mas decida pelo que a pergunta pede.' : 'Sugestão do metadado: <strong>' + s.suggested + '</strong>. Corrija se não fizer sentido.'}</div>
+    <label for="r">Motivo curto (uma linha)</label>
+    <input type="text" id="r" placeholder="ex.: a pergunta é sobre o tema, mas não precisa do meu fato" value="${escapeAttr(l.reason)}">
+  `;
+
+  const q = card.querySelector('#q');
+  const c = card.querySelector('#c');
+  const r = card.querySelector('#r');
+  const set = (patch) => { labels()[s.id] = Object.assign(blank(labels()[s.id]), patch); save(); updateProgress(); };
+  q.addEventListener('input', () => set({ query: q.value }));
+  c.addEventListener('input', () => set({ context: c.value }));
+  r.addEventListener('input', () => set({ reason: r.value }));
+  card.querySelectorAll('input[name=d]').forEach((el) =>
+    el.addEventListener('change', () => { set({ decision: el.value }); }));
+  q.focus();
+}
+
+function updateProgress() {
+  const list = visible();
+  document.getElementById('progress').textContent =
+    `${list.filter((s) => answered(s.id)).length}/${list.length} respondidos`;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function go(delta) {
+  const list = visible();
+  index = Math.max(0, Math.min(list.length - 1, index + delta));
+  render();
+}
+
+document.getElementById('filterPilot').onclick = () => { filter = 'pilot'; index = 0; render(); };
+document.getElementById('filterAll').onclick = () => { filter = 'all'; index = 0; render(); };
+document.getElementById('prevBtn').onclick = () => go(-1);
+document.getElementById('nextBtn').onclick = () => go(1);
+
+function buildExport() {
+  const store = labels();
+  return {
+    v: 1,
+    exportedAt: new Date().toISOString(),
+    corpus: DATA.corpus,
+    pilot: DATA.scenarios.filter((s) => s.pilot).map((s) => s.id),
+    labels: DATA.scenarios.map((s) => {
+      const l = blank(store[s.id]);
+      return {
+        id: s.id, memoryId: s.memoryId, role: s.role, pilot: !!s.pilot,
+        stratum: `${s.kind}/${s.category || '-'}/${s.length}${s.crossLang ? '/cross' : ''}`,
+        query: l.query, context: l.context, decision: l.decision, reason: l.reason,
+      };
+    }).filter((l) => l.query.trim() || l.decision),
+  };
+}
+
+function baixar(json) {
+  try {
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rotulos.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    return true;
+  } catch (e) { return false; }
+}
+
+function showExport(json, n) {
+  const old = document.getElementById('exportPanel');
+  if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'exportPanel';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#16181d;color:#e8e8ea;border:1px solid #2a2d34;border-radius:12px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column;gap:12px;padding:16px;font:14px/1.4 -apple-system,system-ui,sans-serif';
+  const h = document.createElement('div');
+  h.style.cssText = 'font-size:13px;color:#a9adb7;line-height:1.5';
+  h.innerHTML = n
+    ? '<strong>' + n + ' cenário(s) no export.</strong> Copie o texto abaixo e salve como <code>rotulos.json</code> em <code>~/.orbit-memory-review/</code>.'
+    : '<strong>Nada respondido ainda.</strong> Preencha pelo menos a consulta ou a decisão — o export sai vazio assim.';
+  const ta = document.createElement('textarea');
+  ta.value = json;
+  ta.readOnly = true;
+  ta.style.cssText = 'width:100%;height:46vh;background:#0f1115;color:#cfd3da;border:1px solid #2a2d34;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,Menlo,monospace;resize:vertical';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap';
+  const mk = (txt, fn, primary) => {
+    const b = document.createElement('button');
+    b.textContent = txt;
+    b.style.cssText = 'cursor:pointer;border-radius:8px;padding:8px 14px;font:13px -apple-system,system-ui,sans-serif;border:1px solid ' + (primary ? '#d6b24a' : '#2a2d34') + ';background:' + (primary ? '#d6b24a' : 'transparent') + ';color:' + (primary ? '#1a1a1a' : '#cfd3da');
+    b.onclick = fn;
+    return b;
+  };
+  row.appendChild(mk('Baixar arquivo', function () { if (!baixar(json)) alert('O navegador bloqueou o download — use Copiar.'); }, false));
+  row.appendChild(mk('Copiar', async function () {
+    ta.focus(); ta.select();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(json);
+      else document.execCommand('copy');
+      row.querySelectorAll('button').forEach(function (b) { if (b.textContent === 'Copiar') b.textContent = 'Copiado'; });
+    } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+  }, true));
+  row.appendChild(mk('Fechar', function () { wrap.remove(); }, false));
+  box.appendChild(h); box.appendChild(ta); box.appendChild(row);
+  wrap.appendChild(box);
+  wrap.addEventListener('click', function (e) { if (e.target === wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+  ta.focus(); ta.select();
+}
+
+document.getElementById('exportBtn').onclick = () => {
+  const out = buildExport();
+  const json = JSON.stringify(out, null, 2);
+  baixar(json);
+  showExport(json, out.labels.length);
+};
+
+document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = (ev) => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(String(reader.result));
+      const incoming = Array.isArray(data.labels) ? data.labels : [];
+      for (const l of incoming) {
+        if (!l.id) continue;
+        labels()[l.id] = {
+          query: l.query || '', context: l.context || '',
+          decision: l.decision || '', reason: l.reason || '',
+        };
+      }
+      save(); render();
+    } catch (err) { alert('Arquivo inválido: ' + err.message); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+};
+
+document.addEventListener('keydown', (ev) => {
+  const meta = ev.metaKey || ev.ctrlKey;
+  if (!meta) return;
+  if (ev.key === 'Enter') { ev.preventDefault(); go(1); }
+  if (ev.shiftKey && (ev.key === 'i' || ev.key === 'I')) {
+    ev.preventDefault();
+    const s = current(); if (!s) return;
+    labels()[s.id] = Object.assign(blank(labels()[s.id]), { decision: 'inconclusive' });
+    save(); render(); go(1);
+  }
+});
+
+render();
+</script>
+</body>
+</html>

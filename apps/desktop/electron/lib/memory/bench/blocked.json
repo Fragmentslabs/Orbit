@@ -1,0 +1,255 @@
+{
+  "_note": "Conjunto BLOQUEADO (split='blocked'): memórias e consultas autorais, criadas depois de o desenho da política estar fechado e usadas UMA vez, só para validar. Cenários novos — nenhuma memória da fixture principal (m001..m069) aparece aqui, para não haver paráfrase atravessando conjuntos. Nenhum dado real.",
+  "memories": [
+    {
+      "id": "b01",
+      "lang": "pt",
+      "type": "health",
+      "text": "Não come nada com glúten desde 2023; em restaurante sempre pede a opção sem trigo.",
+      "title": "Restrição alimentar a glúten",
+      "tags": ["gluten", "alimentacao", "restaurante"],
+      "entities": [],
+      "concepts": ["doença celíaca", "comer fora", "cardápio sem trigo", "restrição alimentar"]
+    },
+    {
+      "id": "b02",
+      "lang": "en",
+      "type": "project",
+      "text": "The Nodara billing service runs on Cloudflare Workers and stores invoices in D1.",
+      "title": "Nodara billing stack",
+      "tags": ["nodara", "billing", "cloudflare", "d1"],
+      "entities": ["Nodara", "Cloudflare Workers", "D1"],
+      "concepts": ["where invoices are stored", "serverless billing backend", "edge database"]
+    },
+    {
+      "id": "b03",
+      "lang": "pt",
+      "type": "episodic",
+      "text": "Na reunião de 12 de março o time decidiu adiar o lançamento do app mobile para junho.",
+      "title": "Adiamento do app mobile",
+      "tags": ["reuniao", "mobile", "cronograma"],
+      "entities": ["app mobile"],
+      "concepts": ["data de lançamento", "decisão de cronograma", "adiamento"]
+    },
+    {
+      "id": "b04",
+      "lang": "es",
+      "type": "travel",
+      "text": "Viaja a Barcelona cada octubre para visitar a su familia; siempre lleva la maleta pequeña.",
+      "title": "Viajes a Barcelona",
+      "tags": ["barcelona", "familia", "viaje"],
+      "entities": ["Barcelona"],
+      "concepts": ["visitar a la familia", "viaje anual", "equipaje pequeño"]
+    },
+    {
+      "id": "b05",
+      "lang": "ja",
+      "type": "preference",
+      "text": "朝の会議は避けたい。集中できるのは午後です。",
+      "title": "午後の方が集中できる",
+      "tags": ["会議", "集中", "午後"],
+      "entities": [],
+      "concepts": ["朝の予定を入れない", "作業リズム", "meeting schedule preference"]
+    },
+    {
+      "id": "b06",
+      "lang": "ru",
+      "type": "project",
+      "text": "Проект «Фракта» использует Postgres 16 и развёрнут в eu-central-1.",
+      "title": "Стек проекта «Фракта»",
+      "tags": ["фракта", "postgres", "deploy"],
+      "entities": ["Фракта", "Postgres 16", "eu-central-1"],
+      "concepts": ["база данных проекта", "регион развёртывания", "инфраструктура"]
+    },
+    {
+      "id": "b07",
+      "lang": "en",
+      "type": "person",
+      "text": "My sister Helena lives in Porto and works as a veterinarian.",
+      "title": "Sister Helena in Porto",
+      "tags": ["helena", "porto", "family"],
+      "entities": ["Helena", "Porto"],
+      "concepts": ["where my sister lives", "her profession", "family in Portugal"]
+    },
+    {
+      "id": "b08",
+      "lang": "pt",
+      "type": "project",
+      "text": "O deploy de produção usa a tag release-2026.10 e roda sempre às quintas.",
+      "title": "Rotina de deploy de produção",
+      "tags": ["deploy", "producao", "release"],
+      "entities": ["release-2026.10"],
+      "concepts": ["quando publicar", "processo de release", "janela de deploy"]
+    },
+    {
+      "id": "b09",
+      "lang": "pt",
+      "type": "preference",
+      "text": "Prefere respostas curtas, sem listas longas, e não quer emoji em código.",
+      "title": "Estilo de resposta preferido",
+      "tags": ["estilo", "resposta", "formato"],
+      "entities": [],
+      "concepts": ["como formatar a resposta", "brevidade", "sem enfeite"]
+    },
+    {
+      "id": "b10",
+      "lang": "en",
+      "type": "episodic",
+      "text": "Bought a used Bianchi bike in April for 480 euros; the frame is size 54.",
+      "title": "Used Bianchi bike purchase",
+      "tags": ["bianchi", "bike", "purchase"],
+      "entities": ["Bianchi"],
+      "concepts": ["how much the bike cost", "frame size", "second-hand purchase"]
+    },
+    {
+      "id": "b11",
+      "lang": "es",
+      "type": "preference",
+      "text": "Prefiere que le hables de tú y que no uses tecnicismos sin explicar.",
+      "title": "Trato informal y sin jerga",
+      "tags": ["trato", "estilo", "jerga"],
+      "entities": [],
+      "concepts": ["cómo dirigirse", "lenguaje claro", "tuteo"]
+    },
+    {
+      "id": "b12",
+      "lang": "ja",
+      "type": "project",
+      "text": "「オービット」のモバイル版は Expo で作られています。",
+      "title": "オービットのモバイル技術",
+      "tags": ["オービット", "expo", "モバイル"],
+      "entities": ["オービット", "Expo"],
+      "concepts": ["モバイルアプリの技術スタック", "react native"]
+    },
+    {
+      "id": "b13",
+      "lang": "pt",
+      "type": "health",
+      "text": "Tem rinite alérgica; piora em ambiente com ar-condicionado forte.",
+      "title": "Rinite e ar-condicionado",
+      "tags": ["rinite", "alergia", "ar-condicionado"],
+      "entities": [],
+      "concepts": ["espirros no escritório", "alergia respiratória", "ambiente climatizado"]
+    },
+    {
+      "id": "b14",
+      "lang": "en",
+      "type": "project",
+      "text": "The staging database is called orbit_staging and its host is db-staging.internal.",
+      "title": "Staging database endpoint",
+      "tags": ["staging", "database", "host"],
+      "entities": ["orbit_staging", "db-staging.internal"],
+      "concepts": ["where staging data lives", "connection host", "internal endpoint"]
+    },
+    {
+      "id": "b15",
+      "lang": "pt",
+      "type": "travel",
+      "text": "Nunca viaja em voo noturno; prefere sair de manhã cedo.",
+      "title": "Horário de voo preferido",
+      "tags": ["voo", "horario", "viagem"],
+      "entities": [],
+      "concepts": ["melhor horário para viajar", "evitar voo de madrugada"]
+    },
+    {
+      "id": "b16",
+      "lang": "ru",
+      "type": "preference",
+      "text": "Не любит, когда код форматируют без предупреждения.",
+      "title": "Форматирование без предупреждения",
+      "tags": ["код", "форматирование", "предпочтение"],
+      "entities": [],
+      "concepts": ["не менять стиль кода молча", "согласовать правки"]
+    }
+  ],
+  "cases": {
+    "columns": ["id", "split", "lang", "qtype", "text", "relevant", "expect", "reason"],
+    "cases": [
+      ["bc01", "blocked", "pt", "paraphrase", "Como você prefere formatar as respostas?", ["b09"], "inject", "A preferência de formato é a própria resposta; sem palavra de conteúdo em comum além de 'prefer'."],
+      ["bc02", "blocked", "pt", "cross", "Onde ficam guardadas as faturas do serviço de cobrança?", ["b02"], "inject", "Consulta em pt sobre memória em en; 'faturas'↔'invoices' sem sobreposição lexical."],
+      ["bc03", "blocked", "es", "indirect", "¿Cuándo sueles ir a ver a tu familia?", ["b04"], "inject", "Indireta: não cita Barcelona nem outubro."],
+      ["bc04", "blocked", "pt", "cross", "Em que período do dia você rende mais?", ["b05"], "inject", "pt → ja; nenhuma sobreposição lexical possível."],
+      ["bc05", "blocked", "ru", "exact", "Какая база данных в проекте «Фракта»?", ["b06"], "inject", "Correspondência lexical exata (Фракта, база данных)."],
+      ["bc06", "blocked", "pt", "cross", "Qual é a profissão da minha irmã?", ["b07"], "inject", "pt → en; 'irmã'↔'sister', 'profissão'↔'veterinarian'."],
+      ["bc07", "blocked", "pt", "paraphrase", "Como é feito o deploy de produção?", ["b08"], "inject", "Paráfrase com termo técnico compartilhado."],
+      ["bc08", "blocked", "en", "cross", "Why do I get a runny nose in air-conditioned rooms?", ["b13"], "inject", "en → pt; nenhuma palavra em comum."],
+      ["bc09", "blocked", "pt", "indirect", "Quando ficou decidido o lançamento do app mobile?", ["b03"], "inject", "Pergunta pela decisão registrada na memória episódica."],
+      ["bc10", "blocked", "ja", "paraphrase", "モバイル版は何で作られていますか？", ["b12"], "inject", "ja → ja, sem citar Expo."],
+      ["bc11", "blocked", "en", "indirect", "How much did the bike cost?", ["b10"], "inject", "Pergunta pelo valor; 'bike' é a única âncora."],
+      ["bc12", "blocked", "pt", "synonym", "O que você evita comer?", ["b01"], "inject", "Sinônimo/indireto: 'evita comer'↔'não come glúten'."],
+      ["bc13", "blocked", "es", "paraphrase", "¿Cómo prefieres que te hable?", ["b11"], "inject", "A preferência de trato é a resposta."],
+      ["bc14", "blocked", "en", "exact", "What is the host of the staging database?", ["b14"], "inject", "Identificador técnico exato."],
+      ["bc15", "blocked", "pt", "context", "Faz um resumo bem curto disso.", ["b09"], "pointer", "A preferência de formato pode ajudar, mas a resposta não depende dela."],
+      ["bc16", "blocked", "pt", "context", "Quinta é um bom dia para publicar?", ["b08"], "pointer", "A rotina de deploy informa a decisão, mas não é indispensável."],
+      ["bc17", "blocked", "pt", "context", "Vale a pena planejar férias em junho?", ["b03"], "pointer", "O adiamento para junho é tangencial ao planejamento."],
+      ["bc18", "blocked", "pt", "context", "Tem sobremesa sem trigo no cardápio?", ["b01"], "pointer", "A restrição ajuda a escolher, mas a pergunta é sobre o cardápio."],
+      ["bc19", "blocked", "pt", "context", "Escreve um e-mail formal para o cliente.", ["b11"], "pointer", "O tom preferido pode orientar, sem ser obrigatório."],
+      ["bc20", "blocked", "pt", "context", "Vale a pena usar Expo num projeto novo?", ["b12"], "pointer", "A memória mostra um uso real, mas a pergunta é geral."],
+      ["bc21", "blocked", "pt", "context", "Vou visitar o Porto no mês que vem.", ["b07"], "pointer", "A irmã mora lá; pode ajudar, não é necessário."],
+      ["bc22", "blocked", "pt", "context", "O escritório novo tem ar-condicionado central.", ["b13"], "pointer", "A rinite é contexto útil, não resposta."],
+      ["bc23", "blocked", "pt", "hardneg", "Como funciona o Cloudflare D1?", ["b02"], "none", "Tema vizinho: pergunta técnica geral, não precisa de memória pessoal."],
+      ["bc24", "blocked", "pt", "hardneg", "Qual a diferença entre Postgres 15 e 16?", ["b06"], "none", "Tema vizinho; nenhum fato pessoal é necessário."],
+      ["bc25", "blocked", "pt", "hardneg", "O que é doença celíaca?", ["b01"], "none", "Tema vizinho: definição médica, independente da restrição pessoal."],
+      ["bc26", "blocked", "pt", "hardneg", "Expo ou React Native CLI, qual é melhor em geral?", ["b12"], "none", "Tema vizinho; comparação genérica."],
+      ["bc27", "blocked", "pt", "offtopic", "Qual é a capital da Islândia?", ["b04"], "none", "Fora de assunto; controle negativo fácil."],
+      ["bc28", "blocked", "pt", "offtopic", "Quanto é 128 dividido por 4?", ["b14"], "none", "Fora de assunto; controle negativo fácil."],
+      ["bc29", "blocked", "pt", "hardneg", "Como tirar visto para o Japão?", ["b05"], "none", "Tema vizinho por idioma/geografia, sem fato pessoal."],
+      ["bc30", "blocked", "pt", "hardneg", "Quais são as boas práticas de deploy contínuo?", ["b08"], "none", "Tema vizinho; pergunta genérica de engenharia."],
+      ["bc31", "blocked", "pt", "hardneg", "Como funciona a rinite alérgica?", ["b13"], "none", "Tema vizinho; explicação médica geral."],
+      ["bc32", "blocked", "pt", "offtopic", "Escreve um haiku sobre o mar.", ["b15"], "none", "Criação sem relação com memória."],
+      ["bc33", "blocked", "es", "hardneg", "¿Cuál es la mejor época para visitar Barcelona?", ["b04"], "none", "Tema vizinho: turismo genérico, não a rotina pessoal."],
+      ["bc34", "blocked", "pt", "hardneg", "Como escolher o tamanho de um quadro de bicicleta?", ["b10"], "none", "Tema vizinho; guia genérico."],
+      ["bc35", "blocked", "pt", "paraphrase", "Vou marcar uma viagem; o que você sabe sobre como eu viajo?", ["b04", "b15"], "inject", "Duas memórias relevantes no mesmo tema (destino e horário)."]
+    ]
+  },
+  "dialogs": {
+    "columns": ["id", "split", "lang", "qtype", "text", "relevant", "expect", "reason", "context", "rewrite"],
+    "cases": [
+      [
+        "bd01",
+        "blocked",
+        "pt",
+        "context",
+        "E onde ficam as faturas?",
+        ["b02"],
+        "inject",
+        "Mensagem curta que só faz sentido com o turno anterior sobre o serviço de cobrança.",
+        [
+          { "role": "user", "text": "O serviço de cobrança está lento." },
+          { "role": "assistant", "text": "O gargalo parece estar nas consultas do banco." }
+        ],
+        "Onde o serviço de cobrança guarda as faturas?"
+      ],
+      [
+        "bd02",
+        "blocked",
+        "pt",
+        "context",
+        "E qual horário funciona melhor para mim?",
+        ["b15"],
+        "inject",
+        "Depende do turno anterior sobre marcar viagem.",
+        [
+          { "role": "user", "text": "Vou marcar a viagem para o Recife." },
+          { "role": "assistant", "text": "Prefere sair de manhã ou à noite?" }
+        ],
+        "Qual horário de voo combina com a minha preferência de viagem?"
+      ],
+      [
+        "bd03",
+        "blocked",
+        "en",
+        "context",
+        "And how much did I pay for it?",
+        ["b10"],
+        "inject",
+        "O pronome remete à bike comprada no turno anterior.",
+        [
+          { "role": "user", "text": "I picked up a used bike last week." },
+          { "role": "assistant", "text": "Nice — what brand is it?" }
+        ],
+        "How much did the used Bianchi bike cost?"
+      ]
+    ]
+  }
+}
