@@ -68,7 +68,7 @@ function screenRecording(): boolean {
 export function createEndCallTool() {
   return tool({
     description:
-      'End the spoken conversation and dismiss the overlay. Call it when the user clearly signs off or says it was nothing — however they phrase it, in any language — or asks to stop. Say ONE short goodbye first (it is spoken), then call this tool in the same turn: writing the goodbye alone ends nothing, the microphone keeps listening and the panel stays on screen. Do not use it when the user merely pauses or asks something else.',
+      'End the conversation: hangs up the call and closes the panel. Call it when the conversation is over or the user says goodbye.',
     inputSchema: z.object({}),
     execute: async () => {
       endCallEverywhere('agent')

@@ -36,10 +36,14 @@ describe('isCaptionWorthy', () => {
     expect(isCaptionWorthy('Captura de tela 2024.jpg')).toBe(false)
   })
 
-  it('recusa rótulo genérico, com ou sem número', () => {
-    for (const alt of ['image', 'img', 'Figura', 'figura 2', 'screenshot', 'Tela', 'print_1']) {
-      expect(isCaptionWorthy(alt), alt).toBe(false)
-    }
+  it('recusa alt que só repete o nome do arquivo', () => {
+    expect(isCaptionWorthy('image', 'image.png')).toBe(false)
+    expect(isCaptionWorthy('Figura 2', 'figura-2.png')).toBe(false)
+    expect(isCaptionWorthy('img', '/assets/img.jpg?x=1')).toBe(false)
+  })
+
+  it('aceita quando o alt descreve, mesmo tendo src', () => {
+    expect(isCaptionWorthy('Tela de seleção de projetos', 'tela.png')).toBe(true)
   })
 
   it('recusa vazio e espaço em branco', () => {

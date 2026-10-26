@@ -45,11 +45,12 @@ function seed() {
     msg('m3', 'user', 'troque a porta para 4000', T0 + 100),
     msg('m4', 'assistant', 'porta trocada', T0 + 110),
   ])
-  // Worker antigo, sem a marca origin: a primeira mensagem e a de revisão são do orquestrador.
+  // Worker antigo, sem a marca origin: a primeira mensagem é o prompt da tarefa.
+  // A revisão vem marcada ESTRUTURALMENTE — nunca pelo texto da mensagem.
   store.set('messages/w2', [
     msg('n1', 'user', 'faça a tela', T0),
     msg('n2', 'assistant', 'tela feita', T0 + 10),
-    msg('n3', 'user', '[Revisão 1] faltou o botão', T0 + 20),
+    msg('n3', 'user', 'faltou o botão', T0 + 20, 'orchestrator'),
     msg('n4', 'assistant', 'botão incluído', T0 + 30),
   ])
 }
@@ -68,7 +69,7 @@ describe('workers do orquestrador', () => {
     const notice = await buildWorkersNotice('orq', T0 + 50)
     expect(notice).toContain('workerId: w1')
     expect(notice).toContain('troque a porta para 4000')
-    // Revisão antiga sem marca não conta como mensagem do usuário
+    // Revisão do orquestrador não conta como mensagem do usuário
     expect(notice).not.toContain('faltou o botão')
     expect(await buildWorkersNotice('orq', T0 + 200)).not.toContain('⚠')
     expect(await buildWorkersNotice('ninguem', 0)).toBe('')

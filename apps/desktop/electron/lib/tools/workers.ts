@@ -44,13 +44,13 @@ function messageText(m: ChatMessage): string {
 }
 
 /**
- * A mensagem de usuário veio do orquestrador? Mensagens novas trazem `origin`;
- * nas antigas (antes da marca) a primeira é sempre o prompt da tarefa e as de
- * revisão começam com "[Revisão N]".
+ * A mensagem de usuário veio do orquestrador? Quem diz é a marca ESTRUTURAL
+ * (`origin`); nas conversas antigas, que não a têm, a primeira mensagem é o
+ * prompt da tarefa. Reconhecer o texto da mensagem ("[Revisão N]") prendia a
+ * regra a um formato escrito à mão num idioma.
  */
 function fromOrchestrator(m: ChatMessage, firstUserId: string | undefined): boolean {
-  if (m.origin === 'orchestrator') return true
-  return m.id === firstUserId || messageText(m).startsWith('[Revisão')
+  return m.origin === 'orchestrator' || m.id === firstUserId
 }
 
 interface WorkerDigest {

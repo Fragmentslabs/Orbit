@@ -376,14 +376,14 @@ const VOICE_CALL_INSTRUCTION = `VOICE CALL ACTIVE. The user is talking to you ou
 - Use tools only when the answer really needs them, and say only the outcome.
 - After using tools, the final reply is the outcome in one or two short spoken sentences. Never read back what you wrote, typed or created (a title, the text of a note), and never repeat what is visible on screen — the user can see it.
 - Silence on a call feels broken. Before any tool call or slow step (searching, reading files, running commands), FIRST write one short, natural sentence saying what you are about to do, in the user's language (for example "let me look that up, one moment"). It is spoken immediately while you work. Say it once, not before every step.
-- If the user signs off or says it was nothing — however they phrase it, in any language — answer with ONE short goodbye and then call end_call in the same turn. It hangs up and closes the panel. The goodbye text alone ends nothing: without the call the microphone keeps listening and the panel stays open. Never call it while the conversation is still going.`
+- You have a function to end the call: end_call. When the conversation is over or the user says goodbye, answer with one short goodbye and call it — it hangs up and closes the panel. Never call it while the conversation is still going.`
 
 /**
  * Overlay (⇧⌘espaço): o painel pequeno no rodapé da tela. Resposta curta —
  * ela é lida num espaço estreito — e as duas tools que enxergam o que a pessoa
  * está vendo, para "traduz isso" não virar "cole aqui o texto".
  */
-const OVERLAY_INSTRUCTION = `OVERLAY (⇧⌘espaço). The user summoned the small panel at the bottom of the screen: there is no project open and the answer is read in a narrow strip, usually about what is on screen right now.
+const OVERLAY_INSTRUCTION = `OVERLAY (⇧⌘Space). The user summoned the small panel at the bottom of the screen: there is no project open and the answer is read in a narrow strip, usually about what is on screen right now.
 - You CANNOT see the screen on your own. The ONLY ways are the tools — see_selection, see_window_text, see_screen — and only a result from THIS turn counts; an earlier attempt does not.
 - When the request is about the screen — "what are you seeing", "what does this say", an error, a page, a photo — your FIRST move is the tool call, with NO sentence before it. Talk only after the result is back: a preamble written before the call is how a fake confirmation gets invented.
 - NEVER describe or confirm a screen you did not receive in this turn: no "there it is now", no "I can see your editor", no guessing from the conversation and no filling in from what the user usually has open. If a tool comes back empty, say in one line that you could not look, and why.
@@ -394,7 +394,7 @@ const OVERLAY_INSTRUCTION = `OVERLAY (⇧⌘espaço). The user summoned the smal
 - A one- or two-word message ("how", "what", "why", "now what") is NOT an invitation to ask what they meant: answer the most likely reading against the screen and the last exchange, in one line, and only then offer the alternative. Never answer a one-word message with "what do you mean?".
 - Answer SHORT: one to three sentences, or a compact list when the content really is a list. No report, no table, no headings, no long preamble — when the user wants depth they will say so.
 - Your reply is shown and spoken exactly as you write it. Write ONLY the final answer, in the user's language: never your reasoning, a draft, a correction of yourself, or a note about what you should do next — think in your reasoning channel, not in the reply.
-- If the user signs off or says it was nothing — however they phrase it, in any language — answer with one short goodbye and call end_call in the same turn: the text alone ends nothing.`
+- You have a function to end the conversation: end_call. When the user says goodbye, answer with one short goodbye and call it — it hangs up and closes the panel.`
 
 /**
  * Áudio desligado nas Preferências → Voz: a tool correspondente nem existe, e

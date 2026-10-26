@@ -76,7 +76,7 @@ describe('preferências do overlay', () => {
 describe('prompt do overlay', () => {
   it('pede resposta curta e manda olhar a tela/seleção em vez de perguntar', async () => {
     const prompt = await buildSystemPrompt(turn({ overlay: true }))
-    expect(prompt).toContain('OVERLAY (⇧⌘espaço)')
+    expect(prompt).toContain('OVERLAY (⇧⌘Space)')
     expect(prompt).toMatch(/Answer SHORT/i)
     expect(prompt).toContain('see_selection')
     expect(prompt).toContain('see_screen')
@@ -99,17 +99,16 @@ describe('prompt do overlay', () => {
   })
 
   it('fora do overlay não aparece', async () => {
-    expect(await buildSystemPrompt(turn({}))).not.toContain('OVERLAY (⇧⌘espaço)')
+    expect(await buildSystemPrompt(turn({}))).not.toContain('OVERLAY (⇧⌘Space)')
   })
 
   it('no modo chamada o agente sabe encerrar sozinho quando a pessoa se despede', async () => {
     const prompt = await buildSystemPrompt(turn({ voiceCall: true }))
     expect(prompt).toContain('VOICE CALL ACTIVE')
     expect(prompt).toContain('end_call')
-    // A despedida é decisão do modelo, não uma lista de palavras: o prompt fala
-    // em qualquer idioma e diz que só o texto não encerra nada.
-    expect(prompt).toMatch(/in any language/i)
-    expect(prompt).toMatch(/text alone ends nothing/i)
+    // A despedida é decisão do modelo, não uma lista de frases: o prompt só diz
+    // para ele se despedir e chamar a tool na mesma resposta.
+    expect(prompt).toMatch(/one short goodbye and call it/i)
     // E o modelo não pode encerrar no meio de uma conversa normal.
     expect(prompt).toMatch(/Never call it while the conversation is still going/i)
   })

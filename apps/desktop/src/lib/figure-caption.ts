@@ -18,21 +18,38 @@ import type { Element, ElementContent, Root, RootContent } from "hast"
  *  arquivo, não uma descrição. */
 const LOOKS_LIKE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
 
-/**
- * Rótulo genérico, sozinho ou com um número atrás ("image", "figura 2").
- *
- * Ancorado nas duas pontas de propósito: "Tela" é genérico e não vira legenda,
- * mas "Tela de seleção de projetos" é uma descrição e vira.
- */
-const GENERIC_ALT =
-  /^(image|img|imagem|figure|figura|foto|print|screenshot|captura|tela|diagrama|diagram)[\s_-]*\d*$/i
+/** Caixa, acento e separador fora: sobra o que interessa para comparar. */
+function slug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+}
 
-/** O alt foi escrito para ser LIDO, ou é só um preenchimento? */
-export function isCaptionWorthy(alt: string): boolean {
+/** Último segmento do src, sem extensão e sem query. */
+function fileStem(src: string | undefined): string {
+  if (!src) return ""
+  const clean = src.split(/[?#]/)[0]
+  const base = clean.split("/").pop() ?? ""
+  return base.replace(/\.[^.]*$/, "")
+}
+
+/**
+ * O alt foi escrito para ser LIDO, ou é só um preenchimento?
+ *
+ * Sem lista de palavras de nenhum idioma: um alt genérico ("image", "figura 2")
+ * é o que repete o nome do arquivo, então quem decide é a comparação com o
+ * próprio `src` — regra que vale em qualquer língua. Um nome de arquivo com
+ * extensão também não vira legenda.
+ */
+export function isCaptionWorthy(alt: string, src?: string): boolean {
   const text = alt.trim()
   if (!text) return false
   if (LOOKS_LIKE_FILE.test(text)) return false
-  return !GENERIC_ALT.test(text)
+  const a = slug(text)
+  const f = slug(fileStem(src))
+  return !(a && f && a === f)
 }
 
 function isBlankText(node: ElementContent): boolean {
@@ -74,7 +91,8 @@ function convert(node: Root | Element): void {
     if (meaningful.length !== 1 || !isImage(meaningful[0])) return child
     const img = meaningful[0]
     const alt = typeof img.properties?.alt === "string" ? img.properties.alt : ""
-    return isCaptionWorthy(alt) ? toFigure(img, alt) : child
+    const src = typeof img.properties?.src === "string" ? img.properties.src : undefined
+    return isCaptionWorthy(alt, src) ? toFigure(img, alt) : child
   }) as RootContent[] & ElementContent[]
 }
 

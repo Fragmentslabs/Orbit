@@ -1072,13 +1072,15 @@ async function persistAudioTranscript(opts: {
   history: ChatMessage[]
   win: BrowserWindow
 }): Promise<void> {
+  // O que identifica a nota é a MARCA estrutural (`source: attachment` + o ref
+  // do áudio), não o texto: comparar o começo da mensagem com um prefixo
+  // escrito à mão prendia a regra a um idioma.
   const marker = `ref ${opts.audioId}]`
-  const isAudioNote = (text: string) => text.startsWith('[Audio attached:') || text.startsWith('[Áudio anexado:')
   for (let m = opts.history.length - 1; m >= 0; m--) {
     const msg = opts.history[m]
     if (msg.role !== 'user') continue
     const idx = msg.parts.findIndex(
-      (p) => p.type === 'text' && p.source === 'attachment' && isAudioNote(p.text) && p.text.includes(marker),
+      (p) => p.type === 'text' && p.source === 'attachment' && p.text.includes(marker),
     )
     if (idx < 0) continue
     const part = msg.parts[idx] as TextPart
