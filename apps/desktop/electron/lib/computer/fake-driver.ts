@@ -60,6 +60,8 @@ export interface FakeDriver extends ComputerDriver {
   selection: ElementResult['selection']
   /** A árvore muda depois de uma ação? (para o "nada mudou") */
   changeAfterAction: boolean
+  /** Mexe na árvore depois de N ações (um diálogo que abre, um botão que some) */
+  mutate?: (tree: TreeSnapshot, acted: number) => void
   restored: number[][]
 }
 
@@ -96,6 +98,7 @@ export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): 
       // No Windows o host manda a identidade da observação em cada nó.
       if (platform === 'win32') for (const n of tree.nodes) n.ref = `r:1:${n.id}`
       if (driver.changeAfterAction && acted > 0) tree.nodes[2].value = `Olá ${acted}`
+      driver.mutate?.(tree, acted)
       return tree
     },
     capture: async () => png,

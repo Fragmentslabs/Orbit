@@ -120,8 +120,9 @@ export interface AppSettings {
     /** Lado maior do screenshot enviado ao modelo */
     maxScreenshotEdge: number
     /**
-     * Modelo do subagente de Computer Use (computer_task). null = o modelo da
-     * conversa. Um modelo menor e mais rápido encurta cada passo do laço.
+     * Modelo do subagente de Computer Use (computer_task). null = o modelo
+     * auxiliar, se ele chama tools; senão o da conversa (ver computer-task.ts).
+     * Um modelo menor e mais rápido encurta cada passo do laço.
      */
     model: { providerId: string; modelId: string } | null
   }

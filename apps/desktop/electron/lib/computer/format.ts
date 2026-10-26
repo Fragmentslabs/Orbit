@@ -114,13 +114,35 @@ function meaningful(node: AxNode): boolean {
 
 export interface FormattedTree {
   lines: string[]
+  /** O índice do elemento de cada linha (lines[i] ↔ indices[i]) — com índices estáveis, não é a posição */
+  indices: number[]
   handles: Map<number, ElementHandle>
+  /** Identidade do elemento → índice: a próxima observação da mesma janela reaproveita */
+  keys: Map<string, number>
+  /** Índice → a linha sem recuo nem índice: é ela que o diff compara */
+  bodies: Map<number, string>
   focusedIndex: number | null
   /** URL da área web visível (navegadores) */
   url: string | null
 }
 
-export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): FormattedTree {
+/**
+ * Identidade de um elemento entre duas observações da mesma janela: papel,
+ * caminho e título. O valor fica de fora (um campo digitado é o mesmo campo);
+ * o título entra porque, depois de a tela mudar, outro botão pode ocupar o
+ * mesmo caminho — reaproveitar o índice ali faria um passo planejado contra o
+ * botão antigo clicar no novo.
+ */
+function elementKey(node: AxNode): string {
+  return `${node.role}|${node.path.join('.')}|${node.title ?? ''}`
+}
+
+/**
+ * `previous`: as chaves da observação anterior da MESMA janela. Quem continua
+ * na tela mantém o índice (o modelo pode seguir usando o que já leu, e o diff
+ * mostra só o que mudou); quem é novo ganha um índice acima de todos os antigos.
+ */
+export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry, previous?: Map<string, number>): FormattedTree {
   const children = new Map<number, AxNode[]>()
   // O papel cru fica para a ação conferir a identidade no vocabulário do host.
   const native = new Map(tree.nodes.map((n) => [n.id, n.role]))
@@ -134,17 +156,23 @@ export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): Formatte
   for (const list of children.values()) list.sort((a, b) => a.path[a.path.length - 1] - b.path[b.path.length - 1])
 
   const lines: string[] = []
+  const indices: number[] = []
   const handles = new Map<number, ElementHandle>()
+  const keys = new Map<string, number>()
+  const bodies = new Map<number, string>()
   let focusedIndex: number | null = null
   let url: string | null = null
-  let next = 0
+  let next = previous?.size ? Math.max(...previous.values()) + 1 : 0
 
   const visit = (node: AxNode, depth: number) => {
     if (node.role === 'AXWebArea' && node.url && !url) url = node.url
     const show = node.parent < 0 || meaningful(node)
     let childDepth = depth
     if (show) {
-      const index = next++
+      const key = elementKey(node)
+      const kept = previous?.get(key)
+      const index = kept !== undefined && !handles.has(kept) ? kept : next++
+      keys.set(key, index)
       handles.set(index, {
         index,
         path: node.path,
@@ -157,14 +185,36 @@ export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry): Formatte
         secure: node.secure,
       })
       if (tree.focusedId === node.id) focusedIndex = index
-      lines.push(`${'\t'.repeat(depth)}${index} ${describe(node, geometry)}`)
+      const body = describe(node, geometry)
+      bodies.set(index, body)
+      lines.push(`${'\t'.repeat(depth)}${index} ${body}`)
+      indices.push(index)
       childDepth = depth + 1
     }
     for (const child of children.get(node.id) ?? []) visit(child, childDepth)
   }
   const root = nodes.find((n) => n.parent < 0)
   if (root) visit(root, 0)
-  return { lines, handles, focusedIndex, url }
+  return { lines, indices, handles, keys, bodies, focusedIndex, url }
+}
+
+export interface TreeDiff {
+  added: number[]
+  changed: number[]
+  removed: number[]
+}
+
+export function diffTrees(before: Map<number, string>, after: Map<number, string>): TreeDiff {
+  const added: number[] = []
+  const changed: number[] = []
+  const removed: number[] = []
+  for (const [index, body] of after) {
+    const old = before.get(index)
+    if (old === undefined) added.push(index)
+    else if (old !== body) changed.push(index)
+  }
+  for (const index of before.keys()) if (!after.has(index)) removed.push(index)
+  return { added, changed, removed }
 }
 
 function describe(node: AxNode, geometry: ShotGeometry): string {

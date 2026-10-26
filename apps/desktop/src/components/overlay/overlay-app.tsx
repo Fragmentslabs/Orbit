@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, Check, Copy, Keyboard, X } from "lucide-react"
-import type { ChatMessage } from "@shared/chat"
+import { AudioLines, Check, Copy, Keyboard, ShieldAlert, X } from "lucide-react"
 import { OVERLAY_DEFAULTS, type OverlayContext, type OverlaySettings } from "@shared/overlay"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
+import { AskCard } from "@/src/components/ask-card"
+import { CompactInput } from "@/src/components/compact-input"
+import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { DictationWave } from "@/src/components/dictation-wave"
 import { useVoiceCallControl } from "@/src/components/voice-call"
+import { assistantView } from "@/src/lib/overlay-answer"
 import { chatApi, overlayApi } from "@/src/lib/ipc"
 import { readReasoningPref } from "@/src/stores/reasoning-prefs"
 import { readVisionModel, useProviderStore } from "@/src/stores/provider-store"
-import { useSessionStore } from "@/src/stores/session-store"
+import { useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
 
 /**
@@ -28,18 +31,7 @@ import { cn } from "@/lib/utils"
  */
 
 const SESSION_KEY = "orbit-overlay-session"
-
-/** Texto da última resposta do assistente (streaming incluído). */
-function assistantText(messages: ChatMessage[] | undefined, since: number): string {
-  if (!messages) return ""
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]
-    if (message.role !== "assistant" || message.summary) continue
-    if (since > 0 && message.createdAt < since) return ""
-    return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("")
-  }
-  return ""
-}
+const NO_ASKS: PendingAskUI[] = []
 
 function truncate(text: string, max: number): string {
   const clean = text.replace(/\s+/g, " ").trim()
@@ -185,7 +177,16 @@ export function OverlayApp() {
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
   const status = useSessionStore((s) => (sessionId ? s.status[sessionId] : undefined))
   const busy = status === "submitted" || status === "streaming" || status === "fallback" || status === "cancelling"
-  const answer = useMemo(() => assistantText(messages, askedAt), [messages, askedAt])
+  // Pedidos de aprovação/pergunta DESTA conversa: sem isto, o agente do atalho
+  // pedia permissão para agir num app e o pedido só existia numa notificação —
+  // a tarefa ficava parada e, no modo chamada, a voz em silêncio.
+  const asks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
+  // Permissão é a mais comum e a mais simples: fica no topo, numa linha. O resto
+  // (perguntas, subchats, lotes) segue no cartão completo.
+  const permissionAsks = useMemo(() => asks.filter((ask) => ask.kind === "permission" && !ask.batchId), [asks])
+  const otherAsks = useMemo(() => asks.filter((ask) => !(ask.kind === "permission" && !ask.batchId)), [asks])
+  const view = useMemo(() => assistantView(messages, askedAt, busy), [messages, askedAt, busy])
+  const answer = view.final
 
   // O main manda o contexto ao abrir (seleção já lida, modo e preferências).
   useEffect(() => {
@@ -305,7 +306,7 @@ export function OverlayApp() {
    * mostrar — a resposta chegando, um aviso ou um erro. A seleção sozinha não
    * abre nada (ela aparece como placeholder do campo e como contexto do turno).
    */
-  const showBody = Boolean(answer || errorText || notice || busy)
+  const showBody = Boolean(answer || view.progress || errorText || notice || busy)
 
   return (
     <div className="flex h-full w-full items-end justify-center p-2">
@@ -314,6 +315,9 @@ export function OverlayApp() {
         className="w-full overflow-hidden rounded-[18px] border border-border/70 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.8)]"
         style={{ backgroundColor: `color-mix(in oklab, var(--card) ${opacity}%, transparent)` }}
       >
+        {permissionAsks.map((ask) => (
+          <OverlayPermission key={ask.requestId} ask={ask} />
+        ))}
         {/* Cabeçalho: persona + pergunta OU escuta ao vivo */}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <div className="flex size-9 shrink-0 items-center justify-center">
@@ -355,18 +359,12 @@ export function OverlayApp() {
                 </span>
               </div>
             ) : (
-              <input
+              <CompactInput
                 ref={inputRef}
                 value={text}
-                onChange={(event) => setText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.shiftKey) return
-                  event.preventDefault()
-                  if (submit(text, false)) setText("")
-                }}
+                onChange={setText}
+                onSubmit={(value) => submit(value, false)}
                 placeholder={selection ? t("overlay.placeholderSelection") : t("overlay.placeholder")}
-                spellCheck={false}
-                className="w-full bg-transparent text-[13.5px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/70"
               />
             )}
           </div>
@@ -409,6 +407,19 @@ export function OverlayApp() {
           </button>
         </div>
 
+        {otherAsks.length > 0 && sessionId && (
+          <div className="flex flex-col gap-2 border-t border-border/70 px-3 py-2.5">
+            {otherAsks
+              .filter((ask) => !ask.batchId)
+              .map((ask) => (
+                <AskCard key={ask.requestId} ask={ask} sessionId={sessionId} />
+              ))}
+            {[...new Set(otherAsks.map((ask) => ask.batchId).filter(Boolean))].map((batchId) => (
+              <AskCardBatch key={batchId} items={otherAsks.filter((ask) => ask.batchId === batchId)} />
+            ))}
+          </div>
+        )}
+
         <div
           className={cn(
             "grid transition-[grid-template-rows] duration-200 ease-out",
@@ -439,7 +450,13 @@ export function OverlayApp() {
 
               {answer && (
                 <>
-                  <div className="max-h-[320px] select-text overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground">
+                  <div
+                    className={cn(
+                      "select-text overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground",
+                      // Falada, a resposta é curta; se passar disso, rola.
+                      call.active ? "max-h-[132px]" : "max-h-[320px]",
+                    )}
+                  >
                     {answer}
                   </div>
                   <div className="mt-2 flex items-center gap-3">
@@ -455,7 +472,12 @@ export function OverlayApp() {
                 </>
               )}
 
-              {!answer && busy && <p className="text-[12px] text-muted-foreground">{t("overlay.thinking")}</p>}
+              {!answer && busy && (
+                // Trabalhando: o que ele vai narrando, em cinza — não é a resposta.
+                <p className="line-clamp-3 select-text whitespace-pre-wrap text-[12px] leading-[1.5] text-muted-foreground">
+                  {view.progress || t("overlay.thinking")}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -479,4 +501,46 @@ function useAppSettingsModel() {
     return off
   }, [])
   return model
+}
+
+/**
+ * Pedido de permissão no painel do atalho: uma linha no topo, com o título do
+ * pedido e Permitir (o X nega). O painel é estreito e quem está falando com
+ * ele quer seguir — o detalhe completo (sempre neste chat, sempre) continua no
+ * cartão da conversa na janela principal.
+ */
+function OverlayPermission({ ask }: { ask: PendingAskUI }) {
+  const { t } = useTranslation()
+  const [sent, setSent] = useState(false)
+  const reply = (value: "allow" | "deny") => {
+    setSent(true)
+    void chatApi.askReply(ask.requestId, value)
+  }
+  const critical = ask.claim?.critical === true
+  return (
+    <div className="flex items-center gap-2 border-b border-border/70 py-1.5 pl-3 pr-1.5">
+      <ShieldAlert className={cn("size-3.5 shrink-0", critical ? "text-destructive" : "text-primary")} aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-[12px] text-foreground" title={ask.claim?.detail ?? ask.claim?.title}>
+        {ask.claim?.title ?? t("overlay.permissionFallback")}
+      </span>
+      <button
+        type="button"
+        disabled={sent}
+        onClick={() => reply("deny")}
+        aria-label={t("permissions.deny")}
+        title={t("permissions.deny")}
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+      >
+        <X className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={sent}
+        onClick={() => reply("allow")}
+        className="h-6 shrink-0 rounded-full bg-primary px-2.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
+      >
+        {t("overlay.allow")}
+      </button>
+    </div>
+  )
 }

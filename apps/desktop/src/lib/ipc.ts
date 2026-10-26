@@ -188,6 +188,10 @@ export const computerApi = {
   test: () => window.ipcRenderer.invoke("computer:test") as Promise<ComputerTestResult>,
   /** Último screenshot da conversa com o marcador da última ação (só em memória no main) */
   shot: (sessionId: string) => window.ipcRenderer.invoke("computer:shot", sessionId) as Promise<ComputerShot | null>,
+  /** Traz para a frente o app da miniatura (o botão do popover do chip) */
+  focusApp: (sessionId: string) => window.ipcRenderer.invoke("computer:focus-app", sessionId) as Promise<boolean>,
+  /** Resposta digitada no painel flutuante: entra na fila da conversa com as opções do último envio dela */
+  reply: (sessionId: string, text: string) => window.ipcRenderer.invoke("computer:reply", sessionId, text) as Promise<boolean>,
   /** Sessões controlando agora (para o chip depois de um reload) */
   activity: () => window.ipcRenderer.invoke("computer:activity") as Promise<ComputerActivity[]>,
   /** Para o controle (e o turno) de uma sessão — sem id, de todas */

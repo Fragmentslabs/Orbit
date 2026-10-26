@@ -99,12 +99,13 @@ import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, 
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
 import { loadTrustRules } from './lib/permission/trust-rules'
-import { abortSession, dispatchSend } from './lib/send-dispatch'
+import { abortSession, dispatchSend, lastSendInput } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
 import { shotView } from './lib/computer/shots'
 import {
   computerStatus,
   disposeComputerUse,
+  focusShotApp,
   getComputerActivity,
   requestAccessibility,
   requestScreenRecording,
@@ -183,7 +184,7 @@ import { searchSessions } from './lib/search-sessions'
 import { tocarSom, caminhoSom } from './lib/sound'
 import { setupAutoUpdater } from './lib/updater'
 import { destroyBrowserWindow } from './lib/tools'
-import type { SendMessageInput } from '@shared/chat'
+import type { QueuedMessage, SendMessageInput } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
@@ -3072,6 +3073,30 @@ app.whenReady().then(() => {
   ipcMain.handle('computer:test', () => testComputer())
   ipcMain.handle('computer:activity', () => getComputerActivity())
   ipcMain.handle('computer:shot', (_event, sessionId: string) => shotView(sessionId))
+  ipcMain.handle('computer:focus-app', (_event, sessionId: string) => focusShotApp(sessionId))
+  // Resposta digitada no painel flutuante do Computer Use: entra na fila da
+  // conversa com as opções do último envio dela. A fila mora no renderer da
+  // janela principal (é ele quem envia quando a sessão fica livre) — o mesmo
+  // caminho das mensagens que chegam do celular.
+  ipcMain.handle('computer:reply', (_event, sessionId: string, text: string) => {
+    const last = lastSendInput(sessionId)
+    const body = typeof text === 'string' ? text.trim() : ''
+    if (!last || !body) return false
+    const msg: QueuedMessage = {
+      id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      text: body,
+      options: { ...last.options, voiceCall: undefined },
+      mode: last.mode,
+      sessionId,
+      directory: last.directory,
+      extraDirectories: last.extraDirectories,
+      createdAt: Date.now(),
+    }
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (!target.isDestroyed()) target.webContents.send('companion:queue-op', { op: 'enqueue', sessionId, msg })
+    }
+    return true
+  })
   ipcMain.handle('computer:stop', (_event, sessionId?: string) => stopComputer(sessionId))
   ipcMain.handle('computer:request-accessibility', () => requestAccessibility())
   ipcMain.handle('computer:request-screen', () => requestScreenRecording())

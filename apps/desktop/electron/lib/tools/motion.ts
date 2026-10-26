@@ -304,14 +304,15 @@ export function createMotionTools(
 
     tools.motion_frame = tool({
       description:
-        'Looks at ONLY the instants you ask for in a composition and returns a contact sheet (time and frame number in each cell) — milliseconds, no video, no ffmpeg. ' +
-        'This is how you check your work WHILE writing it: the entrance, the payoff, the hold at the end. times in SECONDS from the start, 1–8 instants inside the declared duration. Use it BEFORE any render: the final render only runs once the user approved the composition.',
+        'Captures ONLY the instants you ask for in a composition as a contact sheet (time and frame number in each cell) — milliseconds, no video, no ffmpeg — and reports what loaded (fonts that failed, frame timing). times in SECONDS from the start, 1–8 instants inside the declared duration. ' +
+        'The sheet is saved for the user; it enters YOUR context only with see: true. Load it only for a doubt that is genuinely visual (an overlap, a centring, an element that may be off-frame) — once, not after every edit, and never to show yourself that you are done. Use it BEFORE any render: the final render only runs once the user approved the composition.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
         times: z.array(z.number().positive()).min(1).max(MAX_FRAME_TIMES),
+        see: z.boolean().optional().describe('Load the contact sheet into your context (default false). Images are slow and costly: only for a visual doubt'),
       }),
-      execute: async ({ name, id, times }, { toolCallId, abortSignal }) => {
+      execute: async ({ name, id, times, see }, { toolCallId, abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         const result = await captureMotionFrames({
@@ -333,11 +334,13 @@ export function createMotionTools(
           result.failedFonts.length
             ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`
             : '',
-          'Look at the moments you will be judged on (entrance, payoff, hold), edit the composition and look again — motion_render only after the user approves.',
+          see
+            ? 'Check the moments you will be judged on (entrance, payoff, hold) — motion_render only after the user approves.'
+            : `Contact sheet saved for the user: ${sheetFile}. It was NOT loaded into your context — pass see: true only if a doubt is visual. Ask the user to look at the Motion tab — motion_render only after they approve.`,
         ]
           .filter(Boolean)
           .join('\n')
-        if (scope.modelVision !== false) frameStash.set(toolCallId, { base64: result.image.toString('base64') })
+        if (see && scope.modelVision !== false) frameStash.set(toolCallId, { base64: result.image.toString('base64') })
         return text
       },
       toModelOutput: ({ toolCallId, output }) => {

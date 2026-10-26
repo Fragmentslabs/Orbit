@@ -6,6 +6,7 @@ import { createMacosDriver } from './drivers/macos'
 import { createWindowsDriver, disposeWindowsHost } from './drivers/windows'
 import { computerRegistry } from './registry'
 import { disposeComputerSessions, setComputerRestoreHandler } from './session'
+import { shotView } from './shots'
 import { ComputerError, type ComputerDriver } from './types'
 
 /**
@@ -162,10 +163,27 @@ export async function testComputer(): Promise<ComputerTestResult> {
   }
 }
 
+/**
+ * Traz para a frente o app que a miniatura da conversa mostra — o botão do
+ * popover do chip. Só um app que o agente já observou nesta máquina (a
+ * denylist já passou por ele); nada a ver com agir nele.
+ */
+export async function focusShotApp(sessionId: string): Promise<boolean> {
+  const shot = shotView(sessionId)
+  const target = shot ? computerRegistry.lastTargetFor(shot.app) : null
+  if (!target || !isComputerAvailable()) return false
+  try {
+    await getComputerDriver().act({ op: 'activate', pid: target.pid })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function disposeComputerUse(): Promise<void> {
   await disposeComputerSessions()
   disposeWindowsHost()
 }
 
 export { ComputerError } from './types'
-export { stopComputer, getComputerActivity, setComputerStopHandler, endActivity } from './session'
+export { stopComputer, getComputerActivity, setComputerStopHandler, endActivity, markOverlaySession } from './session'

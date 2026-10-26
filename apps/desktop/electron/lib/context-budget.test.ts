@@ -355,3 +355,51 @@ describe('trimTurnContext — teto de trabalho em lote', () => {
     expect(trimTurnContext(messages, 238_000)).toBe(messages)
   })
 })
+
+describe('trimTurnContext — observações vencidas do Computer Use', () => {
+  const full = (pid: number, n: number) =>
+    `App: TextEdit (com.apple.TextEdit, pid ${pid})\nWindow 99: "Doc"\nObservation obs_${n}\nTree (4 elements):\n<screen_content>\n0 window\n</screen_content>`
+  const diff = (pid: number, n: number) =>
+    `App: TextEdit (com.apple.TextEdit, pid ${pid})\nObservation obs_${n}\nTree: changes since obs_${n - 1} (3 other elements unchanged, same indices)`
+  const action = (summary: string, observation: string) => `${summary}\n\n${observation}`
+
+  it('o que vem antes da última árvore completa do app sai em lote, guardando o que a ação fez', () => {
+    const messages = [
+      ...toolPair('1', 'cu_observe', { app: 'TextEdit' }, full(10, 1)),
+      ...toolPair('2', 'cu_computer', { action: 'left_click' }, action('Pressed element 2 (button "Salvar").', diff(10, 2))),
+      ...toolPair('3', 'cu_computer', { action: 'type' }, action('Typed 3 character(s).', diff(10, 3))),
+      ...toolPair('4', 'cu_observe', { app: 'TextEdit' }, full(10, 4)),
+      ...toolPair('5', 'cu_computer', { action: 'key' }, action('Pressed return.', diff(10, 5))),
+    ]
+    const out = outputsOf(trimTurnContext(messages, 200_000))
+    expect(out[0]).toMatch(/^\[SYSTEM: tool output dropped — an older screen observation/)
+    expect(out[1]).toContain('What this call did: Pressed element 2 (button "Salvar").')
+    expect(out[2]).toContain('What this call did: Typed 3 character(s).')
+    // A árvore completa mais nova e o diff que se apoia nela ficam.
+    expect(out[3]).toBe(full(10, 4))
+    expect(out[4]).toContain('changes since obs_4')
+  })
+
+  it('abaixo do lote, nada muda (o cache de prefixo não é invalidado a cada passo)', () => {
+    const messages = [
+      ...toolPair('1', 'cu_observe', { app: 'TextEdit' }, full(10, 1)),
+      ...toolPair('2', 'cu_computer', { action: 'left_click' }, action('Pressed.', diff(10, 2))),
+      ...toolPair('3', 'cu_observe', { app: 'TextEdit' }, full(10, 3)),
+    ]
+    expect(trimTurnContext(messages, 200_000)).toBe(messages)
+  })
+
+  it('outro app não vence a observação deste', () => {
+    const messages = [
+      ...toolPair('1', 'cu_observe', { app: 'TextEdit' }, full(10, 1)),
+      ...toolPair('2', 'cu_observe', { app: 'Safari' }, full(20, 2)),
+      ...toolPair('3', 'cu_observe', { app: 'Safari' }, full(20, 3)),
+      ...toolPair('4', 'cu_observe', { app: 'Safari' }, full(20, 4)),
+      ...toolPair('5', 'cu_observe', { app: 'Safari' }, full(20, 5)),
+    ]
+    const out = outputsOf(trimTurnContext(messages, 200_000))
+    expect(out[0]).toBe(full(10, 1))
+    expect(out.slice(1, 4).every((o) => o.startsWith('[SYSTEM: tool output dropped'))).toBe(true)
+    expect(out[4]).toBe(full(20, 5))
+  })
+})

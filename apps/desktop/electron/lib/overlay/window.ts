@@ -1,4 +1,4 @@
-import { BrowserWindow, globalShortcut, screen, type WebContents } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, type WebContents } from 'electron'
 import {
   OVERLAY_SHORTCUT,
   type OverlayContext,
@@ -6,7 +6,9 @@ import {
   type OverlaySettings,
 } from '@shared/overlay'
 import { getAppSettings, onAppSettingsChange } from '../app-settings'
-import { readSelectedText } from './selection'
+import { getComputerDriver, isComputerAvailable } from '../computer'
+import { overlayOpenContext, setOverlayOpenContext } from './open-context'
+import { frontmostForeignWindow, readSelectedText } from './selection'
 
 /**
  * A janela do overlay (⇧⌘espaço): desce no rodapé da tela, por cima de tudo,
@@ -87,6 +89,16 @@ let lastSelection: { text: string; app: string | null; at: number } | null = nul
 
 export function lastOverlaySelection(): { text: string; app: string | null; at: number } | null {
   return lastSelection
+}
+
+/** Anota o app e a janela da frente na abertura (ver open-context.ts). */
+async function captureOpenContext(): Promise<void> {
+  const front = await frontmostForeignWindow().catch(() => null)
+  setOverlayOpenContext(
+    front
+      ? { app: front.app.name, bundleId: front.app.bundleId, pid: front.app.pid, windowTitle: front.window?.title ?? null, at: Date.now() }
+      : null,
+  )
 }
 
 export function setupOverlay(next: OverlayHost): void {
@@ -207,6 +219,7 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
   }
 
   anchorDisplay = targetDisplay()
+  orbitWasActive = BrowserWindow.getAllWindows().some((other) => other !== target && !other.isDestroyed() && other.isFocused())
   const settings = overlaySettings()
   const call = options?.call ?? (settings.openInCall && callReady())
 
@@ -235,6 +248,8 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
   target.setAlwaysOnTop(true, 'floating')
   target.webContents.send('overlay:open', context)
 
+  // Em paralelo com a seleção e fora do caminho do atalho: o painel já abriu.
+  void captureOpenContext().catch(() => undefined)
   void readSelectedText()
     .catch(() => null)
     .then((selection) => {
@@ -249,11 +264,37 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
     })
 }
 
+/**
+ * Uma janela do Orbit estava em uso quando o painel abriu? Se sim, é para lá
+ * que o foco volta ao fechar; se não, a pessoa estava em outro app.
+ */
+let orbitWasActive = false
+
+/**
+ * Fechar o painel devolve o foco ao app em que a pessoa estava. Em modo texto
+ * o painel tem o foco, e ao escondê-lo o macOS ativa a próxima janela do Orbit
+ * — a principal, que aparecia do nada por cima do que a pessoa fazia.
+ */
+function giveFocusBack(closing: BrowserWindow): void {
+  if (process.platform !== 'darwin' || orbitWasActive) return
+  const front = overlayOpenContext()
+  if (front && isComputerAvailable()) {
+    setImmediate(() => void getComputerDriver().act({ op: 'activate', pid: front.pid }).catch(() => undefined))
+    return
+  }
+  // Sem saber onde a pessoa estava: se só o painel estava à vista, esconder o
+  // app devolve o foco ao anterior; com a janela principal à vista, deixa.
+  const othersVisible = BrowserWindow.getAllWindows().some((other) => other !== closing && !other.isDestroyed() && other.isVisible())
+  if (!othersVisible) app.hide()
+}
+
 export function hideOverlay(): void {
   const target = getOverlayWindow()
   if (!target) return
+  const hadFocus = target.isFocused()
   target.webContents.send('overlay:event', { type: 'hangup', reason: 'dismissed' } satisfies OverlayEvent)
   target.hide()
+  if (hadFocus) giveFocusBack(target)
 }
 
 export function toggleOverlay(options?: { call?: boolean }): void {

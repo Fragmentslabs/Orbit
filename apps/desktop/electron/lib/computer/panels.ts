@@ -36,6 +36,16 @@ export function setupComputerPanels(next: PanelsLoader): void {
     // Saiu do painel: se o Orbit ganhou foco enquanto isso, agora esconde.
     if (!over) refresh()
   })
+  // O campo de resposta precisa de teclado, e a janela nasce sem foco (o
+  // teclado é do app que o agente controla). Ela recebe foco só enquanto o
+  // campo está em uso — é um NSPanel não ativador, então o Orbit não vem para
+  // a frente — e devolve ao sair dele.
+  ipcMain.on('computer-panels:keyboard', (event, wants: boolean) => {
+    if (!win || win.isDestroyed() || event.sender !== win.webContents) return
+    win.setFocusable(wants)
+    if (wants) win.focus()
+    else win.blur()
+  })
   // Foco entre janelas do Orbit: o blur chega antes do focus da próxima, então
   // a decisão espera um instante para não piscar ao trocar de janela.
   app.on('browser-window-focus', () => refresh())

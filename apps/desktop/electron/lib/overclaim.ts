@@ -109,3 +109,35 @@ export function isNoCorrectionReply(text: string): boolean {
   // não casa.
   return /^(confirmado|correto|ok)[\s:,-]*\s*(nada|nenhum[ao]?|sem)(\s+a corrigir|\s+altera[cç]|\s+arquivo|\s+mudança)/i.test(t)
 }
+
+/**
+ * A resposta fala da TELA como se tivesse olhado ou agido nela: "abri o
+ * TextEdit e escrevi", "estou vendo sua tela", "a captura chega ilegível". Só
+ * é gatilho num turno com as tools de tela à mão e NENHUMA chamada a elas —
+ * aí não há o que ter visto nem feito, e a frase é invenção (um modelo rápido
+ * em modo de voz fazia isso: confirmava a ação sem chamar tool nenhuma).
+ *
+ * Mais largo que `claimsCompletion` de propósito: a negação não salva ("não
+ * consigo ver, a captura não chega" sem ter capturado nada também é
+ * invenção), e o custo de um falso positivo é uma ida a mais que responde
+ * "Nada a corrigir.".
+ */
+const SCREEN_CLAIM =
+  /\b(abri|cliquei|digitei|escrevi|preenchi|enviei|apertei|pressionei|selecionei|naveguei|rolei|salvei|fechei|vejo|estou vendo|consigo ver|n[aã]o consigo ver|na sua tela|sua tela|a captura|o print|screenshot|opened|clicked|typed|filled|sent|pressed|selected|scrolled|saved|closed|i can see|i see|on your screen|your screen|the capture)\b/i
+
+export function claimsScreenWork(text: string): boolean {
+  return SCREEN_CLAIM.test(text)
+}
+
+/**
+ * A resposta anuncia que vai olhar a tela por imagem ("vou tentar pela
+ * imagem", "let me look at the screen"). Com a janela já lida em texto, o
+ * modelo ainda pode prometer a imagem e responder sem chamar a tool — o caso
+ * que repetia "pela imagem também não veio nada" sem nenhuma chamada.
+ */
+const IMAGE_LOOK_CLAIM =
+  /\b(pela imagem|tentar pela imagem|olhar a (tela|imagem)|ver pela imagem|pelo print|pela captura|via image|from the image|let me (look|try|check)|i'?ll (look|try|check))\b/i
+
+export function claimsImageLook(text: string): boolean {
+  return IMAGE_LOOK_CLAIM.test(text)
+}

@@ -171,7 +171,7 @@ export function createDocumentTools(sessionId: string) {
 export function createPdfViewTool(sessionId: string, ctx: ToolContext | null, modelVision: boolean) {
   return tool({
     description:
-      'Renders a page of a PDF as an image and looks at it. Use it when doc_read returns no text (a scanned PDF has no text layer, so reading it means SEEING it), when the question is about layout rather than wording, or to check a document you produced. Source: docId for an attached PDF, or filePath for one in the working folder.',
+      'Renders a page of a PDF as an image and looks at it. Use it only when text cannot answer: doc_read returns no text (a scanned PDF has no text layer, so reading it means SEEING it), or the question is about layout rather than wording. To check a document you produced, read it back as text (doc_read) — do not render pages to prove it is done. Source: docId for an attached PDF, or filePath for one in the working folder.',
     inputSchema: z.object({
       docId: z.string().optional().describe('Attached document id (from doc_list)'),
       filePath: z.string().optional().describe('PDF in the working folder (code mode)'),

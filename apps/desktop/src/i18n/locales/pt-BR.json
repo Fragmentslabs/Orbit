@@ -3195,6 +3195,8 @@
     }
   },
   "overlay": {
+    "allow": "Permitir",
+    "permissionFallback": "O Orbit quer agir",
     "sessionTitle": "Atalho",
     "placeholder": "Pergunte, traduza ou explique…",
     "placeholderSelection": "Pergunte sobre o trecho selecionado…",
@@ -3320,8 +3322,8 @@
     },
     "model": {
       "title": "Modelo do agente de computador",
-      "none": "O mesmo da conversa",
-      "hint": "Tarefas de várias ações em outros apps vão para um agente dedicado, com contexto curto. Um modelo menor e mais rápido (com visão) deixa cada passo mais rápido."
+      "none": "O auxiliar, ou o da conversa",
+      "hint": "Tarefas de várias ações em outros apps vão para um agente dedicado, com contexto curto. Sem modelo aqui, ele usa o modelo auxiliar (se chamar ferramentas) ou o da conversa — e só sobe para o da conversa quando trava. Ele lê a tela como texto, então visão não é obrigatória."
     }
   },
   "computer": {
@@ -3329,6 +3331,17 @@
       "controlling": "Controlando {{app}}",
       "stop": "Parar",
       "stopTitle": "Parar o controle do computador ({{shortcut}})"
+    },
+    "thumb": {
+      "openTitle": "Ver a tela do {{app}}",
+      "live": "ao vivo",
+      "pin": "Fixar acima da mensagem",
+      "unpin": "Desafixar",
+      "focus": "Trazer {{app}} à frente",
+      "noShot": "Ainda sem imagem — a próxima observação traz.",
+      "last": "Último: {{action}}",
+      "awaiting": "Aguardando sua aprovação para agir no {{app}}.",
+      "stalled": "As últimas ações não mudaram nada na tela."
     },
     "panels": {
       "chat": "Conversa",
@@ -3338,6 +3351,7 @@
         "apps": "Listar apps abertos",
         "observe": "Observar {{app}}",
         "query": "Buscar “{{text}}”",
+        "verify": "Conferir: {{question}}",
         "permissions": "Conferir permissões",
         "type": "Digitar “{{text}}”",
         "set_value": "Preencher com “{{text}}”",
@@ -3357,8 +3371,12 @@
         "task": "Tarefa no computador: {{goal}}",
         "batch": "{{count}} ações em sequência"
       },
+      "replyPlaceholder": "Mensagem para esta conversa — entra depois do passo atual",
+      "replySend": "Enviar",
+      "replyFailed": "Não deu para enviar: esta conversa não tem envio anterior de onde tirar as opções. Responda no Orbit.",
       "target": {
         "element": "no elemento {{index}}",
+        "find": "em “{{text}}”",
         "point": "em ({{x}}, {{y}})"
       },
       "shotAlt": "Última captura de {{app}}"

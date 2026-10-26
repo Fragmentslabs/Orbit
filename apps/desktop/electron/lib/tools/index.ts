@@ -44,7 +44,7 @@ import { createVerifyChangesTool } from './verify-changes'
 import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
 import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from '../app-settings'
-import { isComputerAvailable } from '../computer'
+import { isComputerAvailable, markOverlaySession } from '../computer'
 import { createComputerTools } from './computer'
 import { createComputerTaskTool } from './computer-task'
 import { createEndCallTool, createOverlayTools } from './overlay'
@@ -95,6 +95,7 @@ export function buildToolSet(
         sessionId: input.sessionId,
         modelVision: modelVision ?? ctx?.modelVision !== false,
         visionModel: input.visionModel,
+        conversation: { providerId: input.providerId, modelId: input.modelId },
       }),
     )
     // Subagente: o laço de várias ações roda com contexto curto (e o modelo
@@ -125,6 +126,8 @@ export function buildToolSet(
   // Só overlays expõem — no chat normal o custo de uma imagem por turno não se
   // justifica. `end_call` vale em qualquer conversa falada.
   if (input.options.overlay) {
+    // Controlando pelo atalho, quem mostra o status é o próprio painel (ver session.ts).
+    markOverlaySession(input.sessionId)
     Object.assign(
       tools,
       createOverlayTools({
@@ -132,6 +135,7 @@ export function buildToolSet(
         // só de texto com um print anexado quebra ou inventa.
         modelVision: modelVision ?? ctx?.modelVision ?? false,
         visionModel: input.visionModel,
+        sessionId: input.sessionId,
       }),
     )
   }

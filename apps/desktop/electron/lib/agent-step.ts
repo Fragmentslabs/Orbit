@@ -5,6 +5,7 @@ import { contextBudget, createTrimState, trimTurnContext, workingBudget } from '
 import { supportsAnthropicCache, withAnthropicCache } from './prompt-cache'
 import { modelRuntime } from './provider-npm'
 import { interleavedReasoningField, normalizeMessages } from './reasoning'
+import { hoistToolImages } from './tool-images'
 
 /**
  * O que todo tool loop faz antes de cada passo — o agente principal
@@ -70,7 +71,10 @@ export function agentPrepareStep(
 ): ({ messages }: { messages: ModelMessage[] }) => { messages?: ModelMessage[] } | Record<string, never> {
   const preparer = createStepPreparer(provider, modelId, options)
   return ({ messages }) => {
-    const prepared = preparer.prepare(messages)
+    // Imagem de tool (screenshot do subagente de Computer Use) vira mensagem
+    // de usuário — no openai-compatible ela chegaria como base64 em texto. O
+    // chat principal faz o mesmo no próprio prepareStep (ver tool-images.ts).
+    const prepared = hoistToolImages(preparer.prepare(messages)).messages
     return prepared === messages ? {} : { messages: prepared }
   }
 }

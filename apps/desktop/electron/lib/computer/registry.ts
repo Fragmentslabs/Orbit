@@ -41,6 +41,12 @@ export interface ObservationRecord {
   elements: Map<number, ElementHandle>
   /** Resumo da árvore — duas observações iguais seguidas = a ação não mudou nada */
   digest: string | null
+  /** Identidade → índice: a próxima observação da mesma janela mantém os índices */
+  keys?: Map<string, number>
+  /** Índice → linha: a base do diff. Ausente quando a árvore não foi lida inteira (cu_query) */
+  bodies?: Map<number, string>
+  /** Quantos diffs seguidos desde a última árvore completa (0 = esta é completa) */
+  diffChain?: number
 }
 
 /** O último app observado com um pid — o que o gate de permissões lê. */

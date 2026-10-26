@@ -105,6 +105,7 @@ const NATIVE_TOOLS = new Set([
   // Overlay: ler a tela e a seleção do app da frente é o que a pessoa pediu ao
   // abrir o painel; encerrar a chamada é o "tchau, Orbit". Nenhuma escreve.
   'see_screen',
+  'see_window_text',
   'see_selection',
   'end_call',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
@@ -250,6 +251,9 @@ const NATIVE_TOOLS = new Set([
   'cu_apps',
   'cu_observe',
   'cu_query',
+  // Conferir lê a árvore como o cu_observe e só manda o texto a um modelo
+  // auxiliar — nada na tela muda.
+  'cu_verify',
   'cu_permissions',
   // Delega a um subagente: as ações dele passam pelo gate uma a uma (por app).
   'computer_task',

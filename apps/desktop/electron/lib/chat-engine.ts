@@ -61,8 +61,10 @@ import {
   saveMedia,
 } from './media'
 import { assetUrl, mediaKind, thumbUrl, type MediaEntry } from '@shared/media'
+import { stripLeakedReasoning } from '@shared/leaked-reasoning'
 import sharp from 'sharp'
-import { claimsCompletion, isNoCorrectionReply } from './overclaim'
+import { claimsCompletion, claimsImageLook, claimsScreenWork, isNoCorrectionReply } from './overclaim'
+import { describeFrontScreen, prefetchedScreenBlock, readFrontWindowText, recentOverlayHistory, wantsScreen } from './overlay/turn-context'
 import {
   documentKindOf,
   pageLabel,
@@ -81,7 +83,8 @@ import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { isInitAborted, runProjectInit, type InitHooks, type InitResult } from './project-init'
 import { readJson, writeJson } from './storage'
-import { getAppSettings } from './app-settings'
+import { agentMayControlComputer, getAppSettings } from './app-settings'
+import { isComputerAvailable } from './computer'
 import { audioExt, audioIdFrom, isAudioFile, saveAudio } from './audio-store'
 import { isVideoFile, saveVideoAttachment, videoAttachmentExt, videoPathFromFileUrl } from './attachment-ref'
 import { imageRefLine, posterDataUrl, probeVideoAttachment, videoAttachmentNote } from './video/attachment-note'
@@ -160,6 +163,22 @@ const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO lis
  * afirma ter feito algo.
  */
 const MAX_OVERCLAIM_NUDGES = 1
+
+/**
+ * A tela não tem snapshot de filesystem que prove nada: o que prova é a tool
+ * chamada. Um turno que fala de ter olhado ou agido na tela sem chamar
+ * nenhuma destas inventou — visto num modelo rápido em modo de voz, que
+ * respondia "abri o TextEdit e escrevi oi" sem tool call nenhuma.
+ */
+const SCREEN_TOOL_PREFIXES = ['cu_', 'see_']
+const SCREEN_TOOL_NAMES = new Set(['computer_task'])
+function usedScreenTools(parts: MessagePart[]): boolean {
+  return parts.some(
+    (p) => p.type === 'tool' && (SCREEN_TOOL_NAMES.has(p.tool) || SCREEN_TOOL_PREFIXES.some((prefix) => p.tool.startsWith(prefix))),
+  )
+}
+
+const NO_SCREEN_TOOL_PROMPT = `[SYSTEM: automatic verification — you called NO screen tool in this turn (no see_screen, see_window_text, see_selection, cu_* or computer_task). Anything your reply says you saw on the screen, or did in an app (opened, clicked, typed, sent), did not happen, and anything it says about how a capture came out is a guess. Either do it now with the tools and answer from their results, or correct the claim in one short sentence. If your reply made no such claim, reply ONLY with the single line: Nada a corrigir. — nothing else.]`
 const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools (then end with your normal final answer), or correct the claim briefly in 1-2 sentences starting with "Correção:". Do not repeat the full answer and do not produce a new concluding text unless you actually changed files. If your reply made no false claim (e.g. it only described work from previous turns or answered a question), reply ONLY with the single line: Nada a corrigir. — nothing else.]`
 
 /**
@@ -1993,13 +2012,40 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }),
           )
         : ''
+    // Painel do atalho: pedido sobre a tela já chega com a janela lida em
+    // texto, e a conversa vai só com o fio recente (ver overlay/turn-context.ts).
+    const overlayScreen =
+      input.options.overlay && wantsScreen(input.text) ? await readFrontWindowText(input.sessionId).catch(() => null) : null
+    const goodWindowText = overlayScreen && 'text' in overlayScreen && !overlayScreen.poor ? overlayScreen.text : null
+    // Texto pobre (só moldura) ou janela ilegível: a imagem é o que sobra, e vai
+    // descrita por texto — o modelo do atalho não decide chamar a tool sozinho.
+    const screenDescription =
+      input.options.overlay && overlayScreen && !goodWindowText && input.visionModel
+        ? await describeFrontScreen(input.visionModel, input.text, input.language).catch(() => null)
+        : null
+    const prefetchedScreen = goodWindowText || screenDescription
+    const turnBlock = [
+      memoryBlock,
+      prefetchedScreen
+        ? prefetchedScreenBlock({
+            windowText: goodWindowText ?? (overlayScreen && 'text' in overlayScreen ? overlayScreen.text : null),
+            description: screenDescription,
+          })
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const modelHistory = input.options.overlay ? recentOverlayHistory(history.slice(0, -1)) : history.slice(0, -1)
     const initialMessages = normalizeMessages(
-      withMemoryBlock(toModelMessages(history.slice(0, -1), modelVision), memoryBlock),
+      withMemoryBlock(toModelMessages(modelHistory, modelVision), turnBlock),
       interleavedReasoningField(provider, primary.modelId),
     )
     let autoContinues = 0
+    const filterLeaks = input.options.overlay === true || input.options.voiceCall === true
+    const rawTexts = new Map<string, string>()
     let todoNudges = 0
     let overclaimNudges = 0
+    let screenNudges = 0
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
@@ -2009,7 +2055,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         model,
         system: await buildSystemPrompt(input, modelVision),
         messages:
-          autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0
+          autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0 && screenNudges === 0
             ? initialMessages
             : normalizeMessages(
                 [
@@ -2020,6 +2066,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                     content:
                       overclaimNudges > 0
                         ? NO_CHANGES_PROMPT
+                        : screenNudges > 0
+                        ? NO_SCREEN_TOOL_PROMPT
                         : todoNudges > 0
                         ? TODO_COMPLETION_PROMPT
                         : truncatedToolNames
@@ -2137,12 +2185,31 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               type: 'text',
               text: '',
               state: 'streaming',
-              source: overclaimNudges > 0 ? 'nudge' : todoNudges > 0 ? 'todo' : undefined,
+              source: overclaimNudges > 0 || screenNudges > 0 ? 'nudge' : todoNudges > 0 ? 'todo' : undefined,
             })
             break
           case 'text-delta': {
             const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'text') {
+              if (filterLeaks) {
+                // Painel do atalho e chamada falada: o texto vai para a tela e
+                // para a voz, então o raciocínio que o modelo escreve na
+                // resposta é cortado ANTES de sair (ver leaked-reasoning.ts).
+                const raw = (rawTexts.get(existing.id) ?? existing.text) + part.text
+                rawTexts.set(existing.id, raw)
+                const cleaned = stripLeakedReasoning(raw, input.language)
+                if (cleaned.startsWith(existing.text)) {
+                  const delta = cleaned.slice(existing.text.length)
+                  existing.text = cleaned
+                  if (delta) {
+                    emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: existing.id, kind: 'text', delta })
+                  }
+                } else {
+                  // Uma frase que já tinha saído virou pensamento: reemite o texto inteiro.
+                  upsertPart({ ...existing, text: cleaned })
+                }
+                break
+              }
               existing.text += part.text
               emit(win, {
                 type: 'part-delta',
@@ -2620,6 +2687,27 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           continue
         }
       }
+      // Tela: as tools existem neste turno, nenhuma foi chamada, e a resposta
+      // fala como se tivesse olhado ou agido — cobra uma vez, como acima.
+      if (
+        lastFinishReason === 'stop' &&
+        !controller.signal.aborted &&
+        screenNudges < MAX_OVERCLAIM_NUDGES &&
+        overclaimNudges === 0 &&
+        lastPartIsDoneText &&
+        (input.options.overlay === true || agentMayControlComputer(input, isComputerAvailable())) &&
+        !usedScreenTools(assistantMessage.parts) &&
+        // Com a tela já descrita, não há o que cobrar; com só o texto, cobra a
+        // promessa de olhar a imagem sem chamar a tool.
+        (!prefetchedScreen || (!screenDescription && claimsImageLook(partText(assistantMessage.parts, 'text')))) &&
+        claimsScreenWork(partText(assistantMessage.parts, 'text'))
+      ) {
+        console.warn('[overclaim] turno falou da tela sem chamar tool de tela', { sessionId })
+        screenNudges++
+        verification = null // o turno continua: o veredito atual não é o final
+        previousResponseMessages = await result.responseMessages
+        continue
+      }
       break
     }
 
@@ -2642,6 +2730,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Degraus da escada saem antes de a resposta ser gravada: o que fica é o
     // resultado, não o caminho até ele.
     await purgeDraftImages()
+    // Cobrança de tela que deu certo: depois do aviso o modelo olhou de fato
+    // (chamou uma tool de tela) e corrigiu. A correção é a resposta; o texto de
+    // antes do aviso foi dito sem olhar e sai da conversa — no painel do
+    // atalho ele ficava em cima da resposta certa.
+    if (screenNudges > 0 && usedScreenTools(assistantMessage.parts)) {
+      const correction = [...assistantMessage.parts]
+        .reverse()
+        .find((p): p is TextPart => p.type === 'text' && p.source === 'nudge')
+      if (correction && !isNoCorrectionReply(correction.text)) {
+        for (const part of assistantMessage.parts) {
+          if (part.type === 'text' && part !== correction && part.source !== 'internal') part.source = 'internal'
+        }
+        correction.source = undefined
+      }
+    }
     assistantMessage.completedAt = Date.now()
     // TODO não fechada ao final do turno → lembrete persistente para o
     // próximo turno (messageContextText reemite o aviso via todoReminder).
@@ -2672,7 +2775,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       if (lastNudgeText) {
         lastNudgeText.source = isNoCorrectionReply(lastNudgeText.text) ? 'internal' : undefined
       }
-    } else if (overclaimNudges > 0) {
+    } else if (overclaimNudges > 0 || screenNudges > 0) {
       const lastNudgeText = [...assistantMessage.parts]
         .reverse()
         .find((p): p is TextPart => p.type === 'text' && p.source === 'nudge')

@@ -24,8 +24,21 @@ import { readJson } from './storage'
 
 const LOOP_PADRAO = { maxIterations: 5 }
 
+/**
+ * O último envio de cada conversa. A resposta digitada nos painéis do Computer
+ * Use sai com as MESMAS opções (modo computador, permissões, raciocínio) —
+ * reconstruí-las fora do input da janela principal desligaria o controle no
+ * meio da tarefa.
+ */
+const lastInputs = new Map<string, SendMessageInput>()
+
+export function lastSendInput(sessionId: string): SendMessageInput | null {
+  return lastInputs.get(sessionId) ?? null
+}
+
 /** Aplica as regras do modo e entrega à engine correspondente. */
 export async function dispatchSend(win: BrowserWindow, input: SendMessageInput): Promise<void> {
+  lastInputs.set(input.sessionId, input)
   // Regra de ouro: workers não orquestram (sem recursão infinita).
   // Workers podem usar subagentes (limite de profundidade gerenciado pelo subagent tool).
   const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))

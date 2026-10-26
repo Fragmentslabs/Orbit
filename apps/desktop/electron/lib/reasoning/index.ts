@@ -69,6 +69,35 @@ export async function buildProviderOptions(
   return { [namespace]: merged as Record<string, JSONValue> }
 }
 
+/** Do mais barato para o mais caro: o primeiro que o modelo tiver. */
+const CHEAPEST_VARIANTS = ['none', 'minimal', 'low']
+
+/**
+ * providerOptions com o MENOR raciocínio que o modelo aceita — para laços de
+ * muitos passos curtos (o subagente de Computer Use), onde cada passo é "clicar
+ * no botão que acabei de ver" e o raciocínio do padrão do provedor é custo e
+ * espera sem ganho. undefined quando o modelo não raciocina ou não tem nível
+ * baixo (aí vale o padrão do provedor).
+ */
+export async function buildCheapestReasoningOptions(
+  providerId: string,
+  modelId: string,
+  sessionId: string,
+): Promise<Record<string, Record<string, JSONValue>> | undefined> {
+  const provider = await getProvider(providerId)
+  const found = provider && findCatalogModel({ [provider.id]: provider }, provider.id, modelId)
+  if (!provider || !found?.model.reasoning) return undefined
+  const runtime = modelRuntime(provider, found.model)
+  const modelInput = toModelInput(providerId, runtime.npm, found.model, runtime.api)
+  const variants = generateVariants(modelInput)
+  const variantId = CHEAPEST_VARIANTS.find((id) => id in variants)
+  if (!variantId) return undefined
+  const merged = mergeOptions(buildBaseOptions(modelInput, sessionId), variants[variantId])
+  if (Object.keys(merged).length === 0) return undefined
+  const namespace = SDK_NAMESPACES[modelInput.npm] ?? toCamelCase(providerId)
+  return { [namespace]: merged as Record<string, JSONValue> }
+}
+
 /**
  * Campo usado para reenviar o raciocínio na mensagem do assistente. Modelos DeepSeek servidos
  * pelo adaptador openai-compatible usam `reasoning_content`; o DeepSeek exige

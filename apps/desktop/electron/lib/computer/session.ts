@@ -5,6 +5,7 @@ import { tNow } from '../i18n'
 import { disposeComputerPanels, setComputerPanelsSession } from './panels'
 import { finishOrphanRecording, disposeRecordings } from './recording'
 import { forgetShots } from './shots'
+import { ComputerError } from './types'
 
 /**
  * Estado vivo do controle do computador: quem está controlando o quê, o
@@ -80,6 +81,35 @@ export function noteEnhanced(sessionId: string, pid: number): void {
   enhanced.set(pid, set)
 }
 
+/**
+ * Conversas do painel do atalho (⇧⌘espaço). Quem iniciou o controle é dono da
+ * interface: controlando por ele, o próprio painel mostra o status, a
+ * miniatura e as aprovações — os painéis flutuantes das bordas (feitos para o
+ * chat da janela principal) ficariam em cima dele contando a mesma coisa.
+ */
+const overlaySessions = new Set<string>()
+
+export function markOverlaySession(sessionId: string): void {
+  overlaySessions.add(sessionId)
+}
+
+/**
+ * Uma conversa controla por vez. Duas agindo juntas — o chat numa tarefa e o
+ * atalho em outra — clicavam uma por cima da outra, e cada uma lia a mudança
+ * da outra como resultado da própria ação. A segunda recebe um erro claro e
+ * decide com a pessoa (esperar ou parar a outra); a primeira nem fica sabendo.
+ */
+export function assertCanControl(sessionId: string): void {
+  for (const [id, other] of live) {
+    if (id === sessionId) continue
+    const where = overlaySessions.has(id) ? ' from the shortcut panel' : ''
+    throw new ComputerError(
+      'busy',
+      `Another Orbit conversation is controlling the computer right now${where} (in ${other.activity.app}). Only one conversation controls it at a time.`,
+    )
+  }
+}
+
 /** Registra atividade: liga indicador e atalho na primeira, renova o prazo nas seguintes. */
 export function noteActivity(sessionId: string, app: string, action: string | null): void {
   const now = Date.now()
@@ -95,8 +125,25 @@ export function noteActivity(sessionId: string, app: string, action: string | nu
   live.set(sessionId, { activity, timer: setTimeout(() => endActivity(sessionId), IDLE_MS) })
   ensureShortcut()
   showOverlay()
-  setComputerPanelsSession(sessionId)
+  if (!overlaySessions.has(sessionId)) setComputerPanelsSession(sessionId)
   broadcast({ type: 'active', activity })
+}
+
+/**
+ * Devolve as flags de acessibilidade que esta sessão ligou nos apps — sem
+ * encerrar o controle. A leitura da janela pelo atalho liga a árvore de um app
+ * Chromium/Electron só pelo tempo de ler, e não há atividade para fechá-la.
+ */
+export function releaseEnhanced(sessionId: string): void {
+  const pids: number[] = []
+  for (const [pid, sessions] of enhanced) {
+    sessions.delete(sessionId)
+    if (sessions.size === 0) {
+      enhanced.delete(pid)
+      pids.push(pid)
+    }
+  }
+  if (pids.length && restoreHandler) void restoreHandler(pids)
 }
 
 /** Encerra o controle de uma sessão (ocioso, Parar ou fim do turno). */
@@ -108,15 +155,7 @@ export function endActivity(sessionId: string): void {
   forgetShots(sessionId)
   // Gravação que o agente não parou: monta e guarda na galeria.
   void finishOrphanRecording(sessionId)
-  const pids: number[] = []
-  for (const [pid, sessions] of enhanced) {
-    sessions.delete(sessionId)
-    if (sessions.size === 0) {
-      enhanced.delete(pid)
-      pids.push(pid)
-    }
-  }
-  if (pids.length && restoreHandler) void restoreHandler(pids)
+  releaseEnhanced(sessionId)
   if (current) broadcast({ type: 'idle', sessionId })
   if (live.size === 0) {
     releaseShortcut()
@@ -126,7 +165,7 @@ export function endActivity(sessionId: string): void {
     showOverlay()
     // Os painéis seguem a sessão que agiu por último entre as que restam.
     const latest = [...live.values()].sort((a, b) => b.activity.lastAt - a.activity.lastAt)[0]
-    setComputerPanelsSession(latest.activity.sessionId)
+    setComputerPanelsSession(overlaySessions.has(latest.activity.sessionId) ? null : latest.activity.sessionId)
   }
 }
 

@@ -16,6 +16,10 @@ export function describeAction(part: ToolPart, t: TFunction): string {
       return t("computer.panels.do.observe", { app: app ?? "?" })
     case "cu_query":
       return t("computer.panels.do.query", { text: String(input.text ?? input.role ?? "") }) + suffix
+    case "cu_verify": {
+      const question = String(input.question ?? "").replace(/\s+/g, " ").trim()
+      return t("computer.panels.do.verify", { question: question.length > 60 ? `${question.slice(0, 59)}…` : question }) + suffix
+    }
     case "cu_permissions":
       return t("computer.panels.do.permissions")
     case "computer_task": {
@@ -26,10 +30,13 @@ export function describeAction(part: ToolPart, t: TFunction): string {
       return t("computer.panels.do.batch", { count: Array.isArray(input.steps) ? input.steps.length : 0 }) + suffix
     case "cu_computer": {
       const action = String(input.action ?? "")
+      const find = input.find && typeof input.find === "object" ? (input.find as { text?: unknown; role?: unknown }) : null
       const target =
         input.element !== undefined
           ? t("computer.panels.target.element", { index: String(input.element) })
-          : input.x !== undefined
+          : find
+            ? t("computer.panels.target.find", { text: String(find.text ?? find.role ?? "") })
+            : input.x !== undefined
             ? t("computer.panels.target.point", { x: String(input.x), y: String(input.y) })
             : ""
       if (action === "type" || action === "set_value" || (action === "select_text" && input.text)) {

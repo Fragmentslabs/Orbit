@@ -4,17 +4,23 @@ import { z } from 'zod'
 import { describeImage } from '../vision'
 import { captureScreenForOverlay, MAX_MODEL_IMAGE_BYTES } from '../overlay/capture'
 import { readSelectedText } from '../overlay/selection'
+import { readFrontWindowText } from '../overlay/turn-context'
 import { endCallEverywhere, lastOverlaySelection } from '../overlay/window'
 
 /**
- * Tools do overlay (⇧⌘espaço). O painel não tem o projeto à vista e a pergunta
- * costuma ser sobre o que está NA TELA ("traduz isso", "o que diz esse erro?")
- * — sem estas duas tools o agente responderia no escuro, ou pediria para a
- * pessoa copiar e colar.
+ * Overlay tools (⇧⌘Space). The panel has no project in sight and the question
+ * is usually about what is ON SCREEN ("translate this", "what does this error
+ * say?") — without these tools the agent would answer in the dark, or ask the
+ * person to copy and paste.
  *
- * As imagens entram no contexto pelo `toModelOutput`, no mesmo padrão do
- * Computer Use: o resultado da tool é texto (o que fica no histórico) e o
- * screenshot só é anexado no turno, nunca persistido.
+ * Text comes first: the selection and the window's accessibility tree answer
+ * most questions ("what does this error say", "summarise this page") in
+ * milliseconds and a few hundred tokens. The screenshot — slow, and a vision
+ * call on top when Vision mode is on — is for what text cannot carry.
+ *
+ * Images enter the context through `toModelOutput`, the same pattern as
+ * Computer Use: the tool result is text (what stays in the history) and the
+ * screenshot is only attached during the turn, never persisted.
  */
 
 export interface OverlayToolOptions {
@@ -22,6 +28,8 @@ export interface OverlayToolOptions {
   modelVision: boolean
   /** Modo Visão: descreve a imagem com outro modelo e manda só o texto. */
   visionModel?: { providerId: string; modelId: string }
+  /** Conversation the window reads are registered under (Computer Use's registry) */
+  sessionId: string
 }
 
 const MAX_SELECTION_CHARS = 20_000
@@ -71,9 +79,20 @@ export function createEndCallTool() {
 
 export function createOverlayTools(options: OverlayToolOptions): ToolSet {
   return {
+    see_window_text: tool({
+      description:
+        'Read the window the user is in (the app in front, behind the Orbit panel) as TEXT: every label, message, field value and button of its accessibility tree, no image. This is the first way to look — an error message, a dialog, a form, the visible text of a page or document. Fast and cheap. If it comes back nearly empty (some apps and browsers expose no text), then use see_screen.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const read = await readFrontWindowText(options.sessionId)
+        if (!('text' in read)) return `${read.unavailable} Use see_screen to look at it instead.`
+        return read.poor ? `This window exposes almost no text (only its frame) — use see_screen to look at it.\n${read.text}` : read.text
+      },
+    }),
+
     see_screen: tool({
       description:
-        'Look at the screen the user is on right now (the display under the mouse pointer; the Orbit overlay itself is left out of the shot). Use it when the answer depends on what is visible — an error, a page, a document, a photo. Each call costs an image, so do not call it on turns that do not need the screen. It goes through Vision mode (a vision model describes the shot); when Vision mode is off and the panel model can see images, the screenshot is attached to you instead. If neither is available it returns no image at all — then say you cannot see, never guess.',
+        'Look at the screen the user is on right now as an IMAGE (the display under the mouse pointer; the Orbit overlay itself is left out of the shot). Use it only when the answer depends on how something LOOKS — a photo, a chart, colors, layout, an app whose window has no readable text (see_window_text came back empty). For words on screen (an error, a page, a dialog) see_window_text is faster and cheaper. Each call costs an image, so never call it on turns that do not need the screen. It goes through Vision mode (a vision model describes the shot); when Vision mode is off and the panel model can see images, the screenshot is attached to you instead. If neither is available it returns no image at all — then say you cannot see, never guess.',
       inputSchema: z.object({}),
       execute: async (_args, { toolCallId }) => {
         const shot = await captureScreenForOverlay().catch(() => null)

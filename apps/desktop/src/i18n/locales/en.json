@@ -3195,6 +3195,8 @@
     }
   },
   "overlay": {
+    "allow": "Allow",
+    "permissionFallback": "Orbit wants to act",
     "sessionTitle": "Quick ask",
     "placeholder": "Ask, translate or explain…",
     "placeholderSelection": "Ask about the selected text…",
@@ -3320,8 +3322,8 @@
     },
     "model": {
       "title": "Computer agent model",
-      "none": "Same as the conversation",
-      "hint": "Multi-step tasks in other apps go to a dedicated agent with a short context. A smaller, faster model (with vision) makes each step quicker."
+      "none": "Auxiliary model, or the conversation's",
+      "hint": "Multi-step tasks in other apps go to a dedicated agent with a short context. Without a model here it uses the auxiliary model (when it supports tools), otherwise the conversation's — and moves up to the conversation's model only when it gets stuck. It reads screens as text, so vision is not required."
     }
   },
   "computer": {
@@ -3329,6 +3331,17 @@
       "controlling": "Controlling {{app}}",
       "stop": "Stop",
       "stopTitle": "Stop controlling the computer ({{shortcut}})"
+    },
+    "thumb": {
+      "openTitle": "See the {{app}} screen",
+      "live": "live",
+      "pin": "Pin above the message box",
+      "unpin": "Unpin",
+      "focus": "Bring {{app}} to the front",
+      "noShot": "No image yet — the next observation brings it.",
+      "last": "Last: {{action}}",
+      "awaiting": "Waiting for your approval to act in {{app}}.",
+      "stalled": "The last actions changed nothing on screen."
     },
     "panels": {
       "chat": "Conversation",
@@ -3338,6 +3351,7 @@
         "apps": "List open apps",
         "observe": "Observe {{app}}",
         "query": "Search “{{text}}”",
+        "verify": "Check: {{question}}",
         "permissions": "Check permissions",
         "type": "Type “{{text}}”",
         "set_value": "Fill with “{{text}}”",
@@ -3357,8 +3371,12 @@
         "task": "Computer task: {{goal}}",
         "batch": "{{count}} actions in a row"
       },
+      "replyPlaceholder": "Message this conversation — it goes in after the current step",
+      "replySend": "Send",
+      "replyFailed": "Could not send: this conversation has no earlier message to take the settings from. Reply in Orbit.",
       "target": {
         "element": "on element {{index}}",
+        "find": "on “{{text}}”",
         "point": "at ({{x}}, {{y}})"
       },
       "shotAlt": "Latest capture of {{app}}"

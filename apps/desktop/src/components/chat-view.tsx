@@ -35,6 +35,7 @@ import { CompactionSuggestionCard } from "@/src/components/compaction-suggestion
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
+import { ComputerThumbCard } from "@/src/components/computer-chip"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
 import {
@@ -1496,6 +1497,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           </button>
         </div>
       )}
+      <ComputerThumbCard sessionId={session?.id} />
       {viewMode === "chat" ? (
         <ChatInput
           onSubmit={handleChatSend}

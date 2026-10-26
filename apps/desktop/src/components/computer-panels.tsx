@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MonitorIcon, SquareIcon } from "lucide-react"
+import { ArrowUpIcon, MonitorIcon, SquareIcon } from "lucide-react"
 import type { ToolPart } from "@shared/chat"
-import type { ComputerActivity, ComputerShot } from "@shared/computer"
+import type { ComputerActivity } from "@shared/computer"
+import { CompactInput } from "@/src/components/compact-input"
+import { ComputerShotThumb } from "@/src/components/computer-thumb"
 import { ActionsFeed, FullscreenChatFeed } from "@/src/components/fullscreen-dock"
 import { describeAction } from "@/src/lib/computer-actions"
 import { chatApi, computerApi } from "@/src/lib/ipc"
@@ -76,6 +78,7 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
         pinned={chatPinned}
         onTogglePin={() => setChatPinned((v) => !v)}
         onHoverChange={(over) => setInteractive("chat", over)}
+        footer={<PanelReply sessionId={sessionId} />}
       />
       <ActionsFeed
         sessionId={sessionId}
@@ -106,59 +109,57 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
 const isComputerTool = (part: ToolPart) => part.tool.startsWith("cu_") || part.tool === "computer_task"
 
 /**
- * Miniatura do último screenshot da janela controlada, com o alvo da última
- * ação marcado: mostra ONDE o agente agiu mesmo com o app atrás de outras
- * janelas (o screenshot é da janela, não da tela). Vem da memória do main —
- * os screenshots do Computer Use não vão para a galeria.
+ * Falar com a conversa que está controlando sem voltar ao Orbit: o mesmo campo
+ * do atalho. A mensagem entra na fila da conversa, com as opções do último
+ * envio dela, e sai quando o passo atual termina — para mudar de rumo AGORA, o
+ * Parar das ações continua ali.
  */
-function ComputerShotThumb({ sessionId }: { sessionId: string }) {
+function PanelReply({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation()
-  const [shot, setShot] = useState<ComputerShot | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    const load = () =>
-      void computerApi.shot(sessionId).then((next) => {
-        if (alive) setShot(next)
-      })
-    load()
-    const off = computerApi.onEvent((event) => {
-      if (event.type === "shot" && event.sessionId === sessionId) load()
+  const [text, setText] = useState("")
+  const [failed, setFailed] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const send = (value: string) => {
+    const body = value.trim()
+    if (!body) return false
+    setFailed(false)
+    void computerApi.reply(sessionId, body).then((ok) => {
+      if (!ok) {
+        setFailed(true)
+        setText(body)
+      }
     })
-    return () => {
-      alive = false
-      off()
-    }
-  }, [sessionId])
-
-  if (!shot) return null
-  const pct = (value: number, total: number) => `${(value / total) * 100}%`
-  const marker = shot.marker
-  const isPoint = marker && marker.w < 4 && marker.h < 4
+    return true
+  }
   return (
-    <div className="border-b p-2">
-      <div className="relative overflow-hidden rounded-md border bg-muted" style={{ aspectRatio: `${shot.width} / ${shot.height}` }}>
-        <img src={shot.dataUrl} alt={t("computer.panels.shotAlt", { app: shot.app })} className="absolute inset-0 size-full object-cover" draggable={false} />
-        {marker &&
-          (isPoint ? (
-            <span
-              title={marker.label}
-              className="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/30 shadow"
-              style={{ left: pct(marker.x, shot.width), top: pct(marker.y, shot.height) }}
-            />
-          ) : (
-            <span
-              title={marker.label}
-              className="absolute rounded-sm border-2 border-primary bg-primary/15 shadow"
-              style={{
-                left: pct(marker.x, shot.width),
-                top: pct(marker.y, shot.height),
-                width: pct(Math.max(marker.w, 6), shot.width),
-                height: pct(Math.max(marker.h, 6), shot.height),
-              }}
-            />
-          ))}
-      </div>
+    <div className="flex flex-col gap-1">
+      <CompactInput
+        value={text}
+        onChange={setText}
+        onSubmit={send}
+        ref={inputRef}
+        onFocusChange={(focused) => {
+          window.ipcRenderer?.send("computer-panels:keyboard", focused)
+          // O clique chega antes de a janela aceitar foco: o campo é focado de
+          // novo assim que ela aceita.
+          if (focused && document.activeElement !== inputRef.current) requestAnimationFrame(() => inputRef.current?.focus())
+        }}
+        placeholder={t("computer.panels.replyPlaceholder")}
+        trailing={
+          <button
+            type="button"
+            onClick={() => {
+              if (send(text)) setText("")
+            }}
+            aria-label={t("computer.panels.replySend")}
+            title={t("computer.panels.replySend")}
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowUpIcon className="size-4" />
+          </button>
+        }
+      />
+      {failed && <p className="text-[11px] text-destructive">{t("computer.panels.replyFailed")}</p>}
     </div>
   )
 }

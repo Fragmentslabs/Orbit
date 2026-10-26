@@ -260,12 +260,15 @@ export function FullscreenChatFeed({
   sessionId: fixedSessionId,
   title,
   onHoverChange,
+  footer,
 }: {
   pinned: boolean
   onTogglePin: () => void
   sessionId?: string
   title?: string
   onHoverChange?: (over: boolean) => void
+  /** Embaixo da conversa, quando aberta (o input compacto dos painéis do Computer Use) */
+  footer?: ReactNode
 }) {
   const { t } = useTranslation()
   const activeSession = useActiveSession("code")
@@ -490,6 +493,7 @@ export function FullscreenChatFeed({
                 </div>
               )}
             </div>
+            {footer && <div className="shrink-0 border-t px-3 py-2">{footer}</div>}
           </div>
         )}
       </div>

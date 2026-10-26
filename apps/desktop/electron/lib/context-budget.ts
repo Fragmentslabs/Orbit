@@ -94,6 +94,23 @@ const WORKING_CONTEXT_CAP = 100_000
  */
 const BATCH_TARGET = 0.6
 
+/**
+ * Tools do Computer Use cujo resultado é uma observação da tela. Uma observação
+ * só vale até a próxima árvore COMPLETA do mesmo app: dali para trás os índices
+ * e o estado que ela mostra já não são verdade, e cada passo do laço a
+ * reenviava — com o screenshot, quando havia. Os diffs (tools/computer.ts) se
+ * apoiam na última árvore completa, então ela e o que vem depois ficam.
+ */
+const OBSERVATION_TOOLS = new Set(['cu_observe', 'cu_computer', 'cu_batch', 'cu_query'])
+const OBSERVATION_APP = /^App: .*\bpid (\d+)\)/m
+const FULL_TREE = /^Tree \(\d+ elements/m
+/**
+ * Observações vencidas saem juntas, não uma a cada passo: cada descarte muda
+ * o meio do contexto e invalida o cache de prefixo do provedor dali em diante.
+ */
+const STALE_OBSERVATION_BATCH = 3
+const MAX_KEPT_SUMMARY = 500
+
 /** O `read` sem `limit` mostra até isto (MAX_READ_LINES em tools/files.ts). */
 const READ_DEFAULT_LINES = 2000
 
@@ -214,6 +231,31 @@ interface ResultSlot {
   failed: boolean
   /** Saída de bash com o meio cortado (tools/shell.ts) — não cobre faixa nenhuma */
   partial: boolean
+  /** Observação do Computer Use: de qual app, se traz a árvore inteira e o que a ação fez antes dela */
+  observation: { pid: number; full: boolean; summary: string } | null
+}
+
+/** O texto de uma saída — numa com imagem, a parte de texto. */
+function outputText(output: Record<string, unknown>): string {
+  if (typeof output.value === 'string') return output.value
+  if (output.type === 'content' && Array.isArray(output.value)) {
+    return output.value
+      .map((item) => (isRecord(item) && item.type === 'text' && typeof item.text === 'string' ? item.text : ''))
+      .join('\n')
+  }
+  return ''
+}
+
+function observationOf(toolName: string, text: string): ResultSlot['observation'] {
+  if (!OBSERVATION_TOOLS.has(toolName)) return null
+  const app = OBSERVATION_APP.exec(text)
+  if (!app) return null
+  const summary = text.slice(0, app.index).trim()
+  return {
+    pid: Number(app[1]),
+    full: FULL_TREE.test(text),
+    summary: summary.length > MAX_KEPT_SUMMARY ? `${summary.slice(0, MAX_KEPT_SUMMARY)}…` : summary,
+  }
 }
 
 function collectCalls(messages: ModelMessage[]): Map<string, unknown> {
@@ -239,16 +281,18 @@ function collectResults(messages: ModelMessage[]): ResultSlot[] {
       if (isDropped(result)) return
       const output = isRecord(result.output) ? result.output : {}
       const text = typeof output.value === 'string' ? output.value : ''
+      const toolName = typeof result.toolName === 'string' ? result.toolName : ''
       slots.push({
         at: `${mi}:${pi}`,
         toolCallId: typeof result.toolCallId === 'string' ? result.toolCallId : '',
-        toolName: typeof result.toolName === 'string' ? result.toolName : '',
+        toolName,
         chars: outputChars(result.output),
         head: text.slice(0, 600),
         failed:
           (typeof output.type === 'string' && output.type.startsWith('error')) ||
           /\(exit code: [^)]*\)\s*$/.test(text.slice(-40)),
         partial: text.includes(OMITTED_MIDDLE_MARK),
+        observation: observationOf(toolName, outputText(output)),
       })
     })
   })
@@ -320,10 +364,14 @@ function supersededBy(older: ResultView, newer: ResultView, newerFailed: boolean
   return !newerFailed && newer.from <= older.from && newer.to >= older.to ? 'covered' : null
 }
 
-type DropReason = 'superseded' | 'covered' | 'overwritten' | 'age' | 'oversized'
+type DropReason = 'superseded' | 'covered' | 'overwritten' | 'age' | 'oversized' | 'staleObservation'
 
-function droppedText(toolName: string, chars: number, reason: DropReason): string {
+function droppedText(toolName: string, chars: number, reason: DropReason, summary = ''): string {
   const tool = toolName || 'tool'
+  if (reason === 'staleObservation') {
+    // O que a ação fez fica: sem isso o modelo perde o histórico do que já tentou.
+    return `${DROPPED_MARK} — an older screen observation of this app; a newer full one is further down and these indices are no longer valid.${summary ? ` What this call did: ${summary}` : ''}]`
+  }
   if (reason === 'oversized') {
     return `${DROPPED_MARK} — the \`${tool}\` result (${chars} chars) was too large to fit in the context window on its own. Call it again asking for a narrower result (smaller range, filter, limit).]`
   }
@@ -452,7 +500,7 @@ export function trimTurnContext(
   // fora dele, que é exatamente o erro que este módulo existe para evitar.
   const drop = (slot: ResultSlot, reason: DropReason) => {
     if (dropped.has(slot.at)) return
-    const stub = droppedText(slot.toolName, slot.chars, reason)
+    const stub = droppedText(slot.toolName, slot.chars, reason, slot.observation?.summary)
     dropped.set(slot.at, stub)
     options.state?.dropped.set(memoryKey(slot), reason)
     if (slot.toolCallId) droppedCallIds.add(slot.toolCallId)
@@ -466,6 +514,18 @@ export function trimTurnContext(
       if (reason) drop(slot, reason)
     }
   }
+
+  // Observações vencidas saem sem esperar o orçamento apertar: não são só
+  // grandes, são falsas (índices e estado de uma tela que já mudou).
+  const latestFull = new Map<number, number>()
+  results.forEach((slot, i) => {
+    if (slot.observation?.full) latestFull.set(slot.observation.pid, i)
+  })
+  const stale = results.filter((slot, i) => {
+    const obs = slot.observation
+    return obs !== null && i < (latestFull.get(obs.pid) ?? -1) && !dropped.has(slot.at)
+  })
+  if (stale.length >= STALE_OBSERVATION_BATCH) for (const slot of stale) drop(slot, 'staleObservation')
 
   const softBudget = options.softBudget ? Math.min(options.softBudget, budgetTokens) : budgetTokens
   if (used > softBudget * SUPERSEDE_THRESHOLD) {

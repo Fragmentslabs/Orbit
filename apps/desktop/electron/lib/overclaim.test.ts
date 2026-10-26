@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimsCompletion, isNoCorrectionReply } from './overclaim'
+import { claimsCompletion, claimsImageLook, claimsScreenWork, isNoCorrectionReply } from './overclaim'
 
 /**
  * Heurística de linguagem: falso positivo custa uma ida a mais ao modelo,
@@ -87,5 +87,29 @@ describe('isNoCorrectionReply', () => {
     'Revisei e realmente faltou aplicar a mudança.',
   ])('mantém visível a correção real: %s', (text) => {
     expect(isNoCorrectionReply(text)).toBe(false)
+  })
+})
+
+describe('claimsScreenWork', () => {
+  it('pega a ação ou a visão de tela afirmada sem tool', () => {
+    expect(claimsScreenWork('Abri o TextEdit e escrevi "oi" no documento novo.')).toBe(true)
+    expect(claimsScreenWork('Não consigo, não — a captura até é gerada, mas o conteúdo não chega legível.')).toBe(true)
+    expect(claimsScreenWork('I opened Safari and clicked Send.')).toBe(true)
+  })
+
+  it('conversa sem tela não dispara', () => {
+    expect(claimsScreenWork('Tchau, até a próxima.')).toBe(false)
+    expect(claimsScreenWork('O Qwen 3.5 9B compete com modelos bem maiores em visão.')).toBe(false)
+  })
+})
+
+describe('claimsImageLook', () => {
+  it('promessa de olhar pela imagem', () => {
+    expect(claimsImageLook('Só o contorno da janela, sem nada legível. Vou tentar pela imagem, um instante.')).toBe(true)
+    expect(claimsImageLook("Let me look at the screen image.")).toBe(true)
+  })
+
+  it('resposta que já fala do conteúdo não dispara', () => {
+    expect(claimsImageLook('Você está no TextEdit, com o arquivo aberto.')).toBe(false)
   })
 })

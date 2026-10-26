@@ -1,6 +1,6 @@
 import { clipboard } from 'electron'
 import { getComputerDriver, isComputerAvailable } from '../computer'
-import type { AppInfo } from '../computer/types'
+import type { AppInfo, WindowInfo } from '../computer/types'
 
 /**
  * Lê o texto selecionado no app que a pessoa está usando, para o overlay
@@ -39,6 +39,11 @@ function isOrbitApp(app: AppInfo): boolean {
 
 /** App em primeiro plano, ignorando o Orbit. `null` quando só existe o Orbit. */
 export async function frontmostForeignApp(): Promise<AppInfo | null> {
+  return (await frontmostForeignWindow())?.app ?? null
+}
+
+/** O app em primeiro plano (ignorando o Orbit) e a janela da frente dele, numa leitura só. */
+export async function frontmostForeignWindow(): Promise<{ app: AppInfo; window: WindowInfo | null } | null> {
   if (!isComputerAvailable() || process.platform !== 'darwin') return null
   try {
     const snapshot = await getComputerDriver().apps()
@@ -49,9 +54,10 @@ export async function frontmostForeignApp(): Promise<AppInfo | null> {
     for (const window of snapshot.windows) {
       const app = byPid.get(window.pid)
       if (!app || app.hidden || isOrbitApp(app)) continue
-      return app
+      return { app, window }
     }
-    return snapshot.apps.find((app) => app.active && !isOrbitApp(app)) ?? null
+    const app = snapshot.apps.find((a) => a.active && !isOrbitApp(a))
+    return app ? { app, window: null } : null
   } catch {
     return null
   }
