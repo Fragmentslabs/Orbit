@@ -923,6 +923,9 @@ function DocxOriginal({
             "[&_td]:border [&_td]:border-neutral-300 [&_td]:px-[0.5em] [&_td]:py-[0.3em] [&_td]:align-top",
             "[&_th]:border [&_th]:border-neutral-300 [&_th]:px-[0.5em] [&_th]:py-[0.3em] [&_th]:text-left",
             "[&_td_p]:mb-0 [&_th_p]:mb-0 [&_img]:max-w-full [&_a]:text-blue-700 [&_a]:underline",
+            "[&_header]:mb-[1.5em] [&_header]:border-b [&_header]:border-neutral-200 [&_header]:pb-[0.8em]",
+            "[&_footer]:mt-[1.5em] [&_footer]:border-t [&_footer]:border-neutral-200 [&_footer]:pt-[0.8em]",
+            "[&_header_p]:mb-0 [&_footer_p]:mb-0 [&_footer]:text-[0.85em] [&_footer]:text-neutral-600",
           )}
           style={{ fontSize: `${14 * escala}px`, maxWidth: `${48 * escala}rem` }}
           // Seguro por construção: o HTML sai do mammoth, que só escreve a

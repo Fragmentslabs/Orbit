@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import mammoth from 'mammoth'
+import { docxHeadFoot, withHeadFoot } from './docx-headfoot'
 import { sanitizeDocxHtml } from './docx-sanitize'
 import { sessionDocumentFile } from './session-documents'
 
@@ -28,7 +29,8 @@ export async function docxFileToHtml(filePath: string): Promise<{ html: string }
   try {
     const buffer = await fsp.readFile(filePath)
     const { value } = await mammoth.convertToHtml({ buffer })
-    return { html: sanitizeDocxHtml(value) }
+    // O mammoth só converte o corpo; cabeçalho e rodapé vêm à parte.
+    return { html: sanitizeDocxHtml(withHeadFoot(value, await docxHeadFoot(buffer))) }
   } catch {
     // Arquivo corrompido ou num formato que o mammoth não lê: o painel cai
     // para o modo Texto, que continua funcionando com o que foi extraído.
