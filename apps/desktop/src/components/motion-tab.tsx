@@ -1036,8 +1036,9 @@ export function MotionTab({
           instante à direita — os dois extremos são ações sobre o que se vê. */}
       <div className="flex shrink-0 items-center justify-between gap-2 px-2.5 py-1">
         <Button
-          variant={loop ? "secondary" : "ghost"}
+          variant="ghost"
           size="icon-sm"
+          className={cn(loop && "bg-primary/15 text-primary hover:bg-primary/20")}
           aria-pressed={loop}
           title={t("motion.loop")}
           aria-label={t("motion.loop")}

@@ -210,8 +210,9 @@ export function DesignPresenter({
           />
           <div className="mx-1 h-4 w-px bg-border" />
           <Button
-            variant={fit ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon-sm"
+            className={cn(fit && "bg-primary/15 text-primary hover:bg-primary/20")}
             aria-pressed={fit}
             title={t("design.present.fit")}
             aria-label={t("design.present.fit")}
@@ -220,8 +221,9 @@ export function DesignPresenter({
             <Expand className="size-3.5" />
           </Button>
           <Button
-            variant={!fit ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon-sm"
+            className={cn(!fit && "bg-primary/15 text-primary hover:bg-primary/20")}
             aria-pressed={!fit}
             title={t("design.present.real")}
             aria-label={t("design.present.real")}

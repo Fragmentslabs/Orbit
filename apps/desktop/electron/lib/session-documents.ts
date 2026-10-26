@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { extractDocument, type DocumentKind, type ExtractedDocument } from './documents'
+import { saveExport } from './export-dialog'
 import { documentKindOf } from './document-pages'
 import { pageThumb, textThumb } from './document-thumb'
 import { readJson } from './storage'
@@ -773,24 +774,24 @@ export async function exportSessionDocument(
   if (!found) return { ok: false, error: await t('sources.error.notFound') }
   const source = await sessionDocumentFile(sessionId, docId)
   const ext = source?.ext ?? 'txt'
-  const base = found.doc.filename.replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|]/g, '-')
+  const base = found.doc.filename.replace(/\.[a-z0-9]+$/i, '')
 
-  const result = await dialog.showSaveDialog({
-    defaultPath: `${base || (await t('sources.defaultFileName'))}.${ext}`,
+  const target = await saveExport(null, {
+    fileName: `${base || (await t('sources.defaultFileName'))}.${ext}`,
     filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
   })
-  if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+  if (!target) return { ok: false, canceled: true }
 
   try {
-    if (source) await fsp.copyFile(source.path, result.filePath)
+    if (source) await fsp.copyFile(source.path, target)
     else {
       await fsp.writeFile(
-        result.filePath,
+        target,
         found.extracted.pages.map((p) => p.text).join('\n\n'),
         'utf8',
       )
     }
-    return { ok: true, path: result.filePath }
+    return { ok: true, path: target }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }

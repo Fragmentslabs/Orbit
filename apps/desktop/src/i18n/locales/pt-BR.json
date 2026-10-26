@@ -3397,6 +3397,8 @@
     "retry": "Tentar de novo",
     "reload": "Recarregar",
     "toggleList": "Lista de slides",
+    "showList": "Mostrar a lista de slides",
+    "hideList": "Ocultar a lista de slides",
     "toggleNotes": "Notas do apresentador",
     "previous": "Slide anterior",
     "next": "Próximo slide",

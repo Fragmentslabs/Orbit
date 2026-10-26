@@ -638,19 +638,23 @@ export interface MotionRenderResult {
 }
 
 /**
- * Onde o render da peça nasceria se ninguém escolhesse: ao lado da composição.
+ * O NOME do arquivo de vídeo da peça, já com a extensão do formato pedido.
  *
- * É o ponto de partida do diálogo de salvar do main — a pessoa confirma ou
- * troca a pasta, mas abre já no lugar certo, com o nome e a extensão do formato
- * que ela pediu. `null` quando a composição não está mais registrada.
+ * É o nome da COMPOSIÇÃO — a mesma palavra que a pessoa lê na aba e no cartão da
+ * galeria. Um `render.mp4` fixo fazia o vídeo nascer anônimo: ou se renomeava à
+ * mão, ou depois não se sabia de que composição era. A PASTA não mora aqui: o
+ * diálogo de salvar do main (export-dialog) começa na última pasta que a pessoa
+ * usou, e não dentro do armazenamento interno da peça.
+ * `null` quando a composição não está mais registrada.
  */
-export async function suggestedMotionOutput(
+export async function motionOutputName(
   id: string,
   format?: MotionFormatInput,
 ): Promise<string | null> {
   const entry = await getMotion(id)
   if (!entry) return null
-  return path.join(entry.folder, `render${motionFormatExt(normalizeMotionFormat(format, false))}`)
+  const base = path.basename(entry.folder).replace(/[\\/:*?"<>|]/g, '-').trim() || 'render'
+  return `${base}${motionFormatExt(normalizeMotionFormat(format, false))}`
 }
 
 /**

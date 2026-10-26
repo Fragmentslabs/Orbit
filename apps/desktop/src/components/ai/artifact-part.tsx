@@ -365,20 +365,31 @@ function IconAction({
   label,
   onClick,
   disabled,
+  active,
 }: {
   icon: typeof RotateCw
   label: string
   onClick: () => void
   disabled?: boolean
+  /**
+   * Ligado AGORA (a lista aberta, as notas à mostra). Um ícone só um tom mais
+   * claro lia como hover; com fundo, o estado é evidente de relance e o botão
+   * fica igual ao ToggleButton do inspetor de design.
+   */
+  active?: boolean
 }) {
   return (
     <Button
       variant="ghost"
       size="icon"
-      className="size-6 text-muted-foreground"
+      className={cn(
+        "size-6",
+        active ? "bg-primary/15 text-primary hover:bg-primary/20" : "text-muted-foreground",
+      )}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      aria-pressed={active}
       title={label}
     >
       <Icon className="size-3.5" />

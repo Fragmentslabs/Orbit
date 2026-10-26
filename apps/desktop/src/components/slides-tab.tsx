@@ -16,42 +16,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { IconAction } from "@/src/components/ai/artifact-part"
+import { FloatingSidebar } from "@/src/components/fullscreen-dock"
 import { useSlidesDeck } from "@/src/components/slides/use-slides-deck"
 import { slidesApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
-
-/**
- * Botão de alternância da barra (lista, notas). O IconAction das outras abas
- * não tem estado ativo — aqui o ícone precisa dizer se o painel está aberto.
- */
-function ToggleAction({
-  icon: Icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: typeof List
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={cn("size-6", active ? "text-foreground" : "text-muted-foreground")}
-      onClick={onClick}
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-    >
-      <Icon className="size-3.5" />
-    </Button>
-  )
-}
 
 /**
  * O palco de um deck de slides na aba do painel direito.
@@ -61,10 +32,13 @@ function ToggleAction({
  * card do chat. Aqui ficam a moldura da aba e as rédeas que são de interface:
  * a lista, as notas do apresentador, o contador e a tela cheia.
  *
- * A lista mora no RODAPÉ, em fita horizontal, e não numa coluna à direita: o
- * painel é estreito, e uma sidebar de 208px comia justamente a largura de que o
- * 16:9 precisa. Deitada, a mesma informação custa ~44px de altura e o palco
- * respira.
+ * A lista muda de lugar conforme o espaço. No painel estreito ela é uma faixa
+ * no rodapé: uma coluna de 208px comeria justamente a largura de que o 16:9
+ * precisa, e deitada a mesma informação custa só altura, só enquanto aberta.
+ * Em TELA CHEIA, onde há espaço para os dois, ela vira a sidebar flutuante da
+ * direita — o MESMO componente da aba Design (FloatingSidebar): painel com a
+ * aparência da sidebar do app, botão ao lado para alternar e abertura por hover
+ * na borda quando está fechada.
  */
 export function SlidesTab({
   slidesId,
@@ -78,6 +52,14 @@ export function SlidesTab({
 }) {
   const { t } = useTranslation()
   const [showList, setShowList] = useState(true)
+  /**
+   * A lista da TELA CHEIA tem estado próprio, e nasce fechada: lá o deck está
+   * sendo apresentado, e abrir a sidebar por cima do palco (como a faixa do
+   * rodapé fica por padrão no painel estreito) cobriria justamente o slide.
+   * Fechada, ela abre no hover da borda ou pelo botão ao lado — o mesmo
+   * comportamento da FloatingSidebar do Design.
+   */
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   /** Impressão em andamento (uma janela do Chromium) e a falha dela. */
@@ -92,8 +74,8 @@ export function SlidesTab({
 
   /**
    * Baixar em PDF. Quem imprime é o main, sobre o próprio index.html — a aba só
-   * pede e mostra o resultado. O nome sugerido é o título do deck; o diálogo do
-   * sistema deixa mudar.
+   * pede e mostra o resultado. O nome sugerido é o nome do deck NO ORBIT (o
+   * mesmo da aba e da galeria); o diálogo do sistema deixa mudar.
    */
   const downloadPdf = useCallback(async () => {
     if (!slidesId || exporting) return
@@ -153,6 +135,41 @@ export function SlidesTab({
 
   const progress = total > 0 ? ((index + 1) / total) * 100 : 0
 
+  /**
+   * O índice em forma de lista. O MESMO conteúdo serve aos dois lugares — a
+   * faixa do rodapé no painel estreito e a sidebar flutuante da tela cheia —,
+   * então só a densidade muda: no rodapé cada linha custa altura do palco, e
+   * na sidebar há espaço para respirar. Miniaturas de verdade exigiriam um
+   * render por slide (o iframe é opaco); o título é o que se procura ao
+   * navegar.
+   */
+  const slideRows = (dense: boolean) =>
+    deck?.slides.map((slide, i) => (
+      <button
+        key={`${i}-${slide.title}`}
+        ref={i === index ? activeRowRef : undefined}
+        type="button"
+        onClick={() => go(i)}
+        title={slide.title}
+        className={cn(
+          "flex w-full items-center gap-2 text-left transition-colors",
+          dense ? "px-2.5 py-1.5 text-[11px]" : "rounded-md px-2.5 py-2 text-xs",
+          i === index ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/40",
+        )}
+      >
+        <span
+          className={cn(
+            "w-4 shrink-0 text-right tabular-nums opacity-60",
+            dense ? "text-[10px]" : "text-[11px]",
+          )}
+        >
+          {i + 1}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{slide.title}</span>
+        {slide.notes && <StickyNote className="size-2.5 shrink-0 opacity-50" />}
+      </button>
+    ))
+
   if (!slidesId || !entry) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-sidebar p-6 text-center">
@@ -180,8 +197,17 @@ export function SlidesTab({
           </Badge>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <ToggleAction icon={List} label={t("slides.toggleList")} active={showList} onClick={() => setShowList((v) => !v)} />
-          <ToggleAction
+          {/* Na tela cheia quem abre e fecha a lista é o botão da sidebar
+              flutuante, ao lado dela (mesmo desenho da aba Design). */}
+          {!fullscreen && (
+            <IconAction
+              icon={List}
+              label={t("slides.toggleList")}
+              active={showList}
+              onClick={() => setShowList((v) => !v)}
+            />
+          )}
+          <IconAction
             icon={StickyNote}
             label={t("slides.toggleNotes")}
             active={showNotes}
@@ -250,6 +276,25 @@ export function SlidesTab({
             </Button>
           </div>
         )}
+
+        {/* Tela cheia: a lista flutua à direita, por cima do palco, com a
+            aparência da sidebar do app. Fechada, encostar na borda abre; o
+            botão ao lado dela alterna e continua clicável para reabrir. */}
+        {fullscreen && (
+          <FloatingSidebar
+            side="right"
+            open={sidebarOpen}
+            onToggle={() => setSidebarOpen((value) => !value)}
+            openLabel={t("slides.showList")}
+            closeLabel={t("slides.hideList")}
+          >
+            <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-3 text-[11px] font-medium">
+              <List className="size-3" />
+              {t("slides.toggleList")}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-1">{slideRows(false)}</div>
+          </FloatingSidebar>
+        )}
       </div>
 
       {/* Notas do apresentador — o que DIZER neste slide, fora da tela. */}
@@ -267,35 +312,10 @@ export function SlidesTab({
         </div>
       )}
 
-      {/* A lista, em pé, no rodapé: o índice da apresentação empilhado acima do
-          transporte, com rolagem na vertical. Uma fita deitada (ou uma coluna à
-          direita) competia com o 16:9 do palco; aqui ela só custa altura, e só
-          enquanto está aberta. Miniaturas de verdade exigiriam um render por
-          slide (o iframe é opaco) — o título é o que se procura ao navegar. */}
-      {showList && !!deck?.slides.length && (
-        <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/60">
-          {deck.slides.map((slide, i) => (
-            <button
-              key={`${i}-${slide.title}`}
-              ref={i === index ? activeRowRef : undefined}
-              type="button"
-              onClick={() => go(i)}
-              title={slide.title}
-              className={cn(
-                "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] transition-colors",
-                i === index
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/40",
-              )}
-            >
-              <span className="w-4 shrink-0 text-right text-[10px] tabular-nums opacity-60">
-                {i + 1}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{slide.title}</span>
-              {slide.notes && <StickyNote className="size-2.5 shrink-0 opacity-50" />}
-            </button>
-          ))}
-        </div>
+      {/* Painel estreito: a lista é uma faixa no rodapé, empilhada acima do
+          transporte. Em tela cheia ela sai daqui e vira a sidebar flutuante. */}
+      {!fullscreen && showList && !!deck?.slides.length && (
+        <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/60">{slideRows(true)}</div>
       )}
 
       {/* Transporte: anterior, contador, próximo — e a barra de progresso

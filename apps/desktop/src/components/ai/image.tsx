@@ -125,7 +125,11 @@ export function ImageLightbox({
 
   const save = async () => {
     setBusy(true)
-    const result = await mediaApi.exportImage(src, alt || t("images.assistantImage"))
+    // O arquivo baixado leva o nome da mídia NO ORBIT: a legenda, quando existe,
+    // senão o nome do arquivo na galeria. Um rótulo genérico não serve para
+    // reencontrar a imagem depois.
+    const fileName = src.startsWith("orbit-media://") ? src.slice("orbit-media://".length) : ""
+    const result = await mediaApi.exportImage(src, alt || fileName || t("images.assistantImage"))
       .catch(() => ({ ok: false as const }))
     setBusy(false)
     if (result.ok) flash("saved")

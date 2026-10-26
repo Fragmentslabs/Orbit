@@ -20,10 +20,10 @@ import {
   motionAudioUrl,
   motionIdForName,
   motionIdForPath,
+  motionOutputName,
   registerMotionProtocol,
   registeredMotionUrl,
   renderRegisteredMotion,
-  suggestedMotionOutput,
   type MotionRenderRequest,
 } from './lib/video/motion-store'
 import { measureMotionLayers } from './lib/video/motion-layers'
@@ -67,6 +67,7 @@ import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog, ensureCustomProvidersSeeded, onCatalogRefreshed } from './lib/catalog'
+import { saveExport } from './lib/export-dialog'
 import { checkWritePath } from './lib/file-write-guard'
 import {
   invalidateIndex,
@@ -2247,18 +2248,14 @@ app.whenReady().then(() => {
     if (!deck) return { ok: false as const, error: 'Deck não encontrado.' }
     const pdf = await renderSlidesPdf(id)
     if (!pdf) return { ok: false as const, error: 'Não foi possível gerar o PDF deste deck.' }
-    const name =
-      (suggestedName ?? path.basename(deck.folder))
-        .replace(/[\\/:*?"<>|]/g, '-')
-        .replace(/\.pdf$/i, '')
-        .trim() || 'deck'
-    const result = await dialog.showSaveDialog({
-      defaultPath: `${name}.pdf`,
+    const name = (suggestedName ?? path.basename(deck.folder)).replace(/\.pdf$/i, '').trim() || 'deck'
+    const target = await saveExport(null, {
+      fileName: `${name}.pdf`,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.writeFile(result.filePath, pdf)
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(target, pdf)
+    return { ok: true as const, path: target }
   })
 
   // Fontes do seletor do inspetor de design: a biblioteca do Orbit (com o CSS
@@ -2309,33 +2306,33 @@ app.whenReady().then(() => {
   ipcMain.handle('motion:render', async (event, input: { id: string } & MotionRenderRequest) => {
     const { id, ...req } = input
     // O render da aba é um pedido da PESSOA, não do agente: o arquivo nasce onde
-    // ela disser. Sem este diálogo o vídeo caía sempre na pasta da peça, com um
-    // nome fixo, e achá-lo depois virava caça ao tesouro. O caminho escolhido
-    // entra por `saveAs` e por isso NÃO passa pelo resolveSafePath — é a única
-    // saída do render que pode cair fora das pastas do projeto, e é justamente
-    // porque houve uma escolha explícita num diálogo do sistema.
-    const suggested = await suggestedMotionOutput(id, req.format)
-    if (!suggested) {
+    // ela disser, já com o nome da composição. Sem este diálogo o vídeo caía
+    // sempre na pasta interna da peça, com um nome fixo, e achá-lo depois virava
+    // caça ao tesouro. O caminho escolhido entra por `saveAs` e por isso NÃO passa
+    // pelo resolveSafePath — é a única saída do render que pode cair fora das
+    // pastas do projeto, e é justamente porque houve uma escolha explícita num
+    // diálogo do sistema.
+    const fileName = await motionOutputName(id, req.format)
+    if (!fileName) {
       // Composição desconhecida: sem diálogo, para o erro real subir ("unknown
       // motion composition") em vez de a pessoa escolher um arquivo em vão.
       return renderRegisteredMotion(id, req, (frame, total) => {
         if (!event.sender.isDestroyed()) event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
       })
     }
-    const ext = path.extname(suggested).replace(/^\./, '') || 'mp4'
+    const ext = path.extname(fileName).replace(/^\./, '') || 'mp4'
     const labels: Record<string, string> = {
       mov: 'QuickTime (ProRes 4444, com alfa)',
       webm: 'WebM (VP9, com alfa)',
     }
-    const options = {
-      title: 'Salvar o vídeo',
-      defaultPath: suggested,
-      filters: [{ name: labels[ext] ?? 'Vídeo MP4 (H.264)', extensions: [ext] }],
-    }
     const win = BrowserWindow.fromWebContents(event.sender)
-    const picked = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-    if (picked.canceled || !picked.filePath) return { canceled: true }
-    return renderRegisteredMotion(id, { ...req, saveAs: picked.filePath }, (frame, total) => {
+    const picked = await saveExport(win, {
+      title: 'Salvar o vídeo',
+      fileName,
+      filters: [{ name: labels[ext] ?? 'Vídeo MP4 (H.264)', extensions: [ext] }],
+    })
+    if (!picked) return { canceled: true }
+    return renderRegisteredMotion(id, { ...req, saveAs: picked }, (frame, total) => {
       if (!event.sender.isDestroyed()) {
         event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
       }
@@ -2622,13 +2619,13 @@ app.whenReady().then(() => {
     if (!source) {
       return { ok: false as const, error: `Não foi possível gerar o ${format.toUpperCase()} deste documento.` }
     }
-    const result = await dialog.showSaveDialog({
-      defaultPath: documentFileName(entry?.name ?? 'documento', format),
+    const target = await saveExport(null, {
+      fileName: documentFileName(entry?.name ?? 'documento', format),
       filters: [{ name: format.toUpperCase(), extensions: [format] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.copyFile(source, result.filePath)
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.copyFile(source, target)
+    return { ok: true as const, path: target }
   })
 
   /**
@@ -2680,28 +2677,32 @@ app.whenReady().then(() => {
     const audio = id ? await readAudio(id) : null
     if (!id || !audio) return { ok: false as const, error: 'audio not found' }
     const ext = id.split('.').pop() ?? 'wav'
-    const base = (suggestedName || audio.name || 'audio').replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
-    const result = await dialog.showSaveDialog({
-      defaultPath: `${base}.${ext}`,
+    const base = (suggestedName || audio.name || 'audio').replace(/\.[a-z0-9]+$/i, '').slice(0, 60)
+    const target = await saveExport(null, {
+      fileName: `${base}.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.writeFile(result.filePath, audio.buffer)
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(target, audio.buffer)
+    return { ok: true as const, path: target }
   })
 
   ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
     const bytes = await bytesOfImageRef(ref)
     if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
     const ext = bytes.ext || extensionOf(bytes.contentType)
-    const base = (suggestedName || 'imagem').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
-    const result = await dialog.showSaveDialog({
-      defaultPath: base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`,
+    // Sem nome sugerido o arquivo sai com o nome da MÍDIA no acervo — o id do
+    // item é o nome do arquivo na galeria. "imagem.png" não dizia de qual
+    // imagem se tratava depois de baixada.
+    const fromRef = ref.startsWith('orbit-media://') ? decodeURIComponent(ref.slice('orbit-media://'.length)) : ''
+    const base = (suggestedName || path.parse(fromRef).name || 'imagem').slice(0, 60)
+    const target = await saveExport(null, {
+      fileName: base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.writeFile(result.filePath, bytes.buffer)
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(target, bytes.buffer)
+    return { ok: true as const, path: target }
   })
 
   /**
@@ -2736,14 +2737,14 @@ app.whenReady().then(() => {
   ipcMain.handle('artifact:export', async (_event, id: string) => {
     const artifact = await readArtifact(id)
     if (!artifact) return { ok: false as const, error: 'Artefato não encontrado' }
-    const suggested = `${(artifact.entry.name || 'artefato').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)}.html`
-    const result = await dialog.showSaveDialog({
-      defaultPath: suggested,
+    const suggested = `${(artifact.entry.name || 'artefato').slice(0, 60)}.html`
+    const target = await saveExport(null, {
+      fileName: suggested,
       filters: [{ name: 'HTML', extensions: ['html'] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.writeFile(result.filePath, artifact.html, 'utf8')
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(target, artifact.html, 'utf8')
+    return { ok: true as const, path: target }
   })
 
   /**
@@ -2762,13 +2763,13 @@ app.whenReady().then(() => {
       if (!diagram) return { ok: false as const, error: 'render' }
       data = format === 'svg' ? diagram.svg : diagram.png
     }
-    const result = await dialog.showSaveDialog({
-      defaultPath: `diagrama.${format}`,
+    const target = await saveExport(null, {
+      fileName: `diagrama.${format}`,
       filters: [{ name: format.toUpperCase(), extensions: [format] }],
     })
-    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
-    await fs.writeFile(result.filePath, data)
-    return { ok: true as const, path: result.filePath }
+    if (!target) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(target, data)
+    return { ok: true as const, path: target }
   })
 
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
@@ -2967,14 +2968,14 @@ app.whenReady().then(() => {
 
     const buffer = await zip.generateAsync({ type: 'nodebuffer' })
 
-    const result = await dialog.showSaveDialog(win, {
+    const target = await saveExport(win, {
       title: 'Exportar dados do Orbit',
-      defaultPath: `orbit-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+      fileName: `orbit-backup-${new Date().toISOString().slice(0, 10)}.zip`,
       filters: [{ name: 'Arquivo ZIP', extensions: ['zip'] }],
     })
-    if (result.canceled || !result.filePath) return { cancelled: true }
-    await fs.writeFile(result.filePath, buffer)
-    return { cancelled: false, filePath: result.filePath }
+    if (!target) return { cancelled: true }
+    await fs.writeFile(target, buffer)
+    return { cancelled: false, filePath: target }
   })
 
   ipcMain.handle('import:data', async () => {

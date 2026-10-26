@@ -1380,8 +1380,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <Button
-            variant={tool === "select" ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon-sm"
+            className={cn(tool === "select" && "bg-primary/15 text-primary hover:bg-primary/20")}
             aria-pressed={tool === "select"}
             title={t("design.tools.select")}
             aria-label={t("design.tools.select")}
@@ -1393,8 +1394,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             <MousePointer2 className="size-3.5" />
           </Button>
           <Button
-            variant={tool === "hand" ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon-sm"
+            className={cn(tool === "hand" && "bg-primary/15 text-primary hover:bg-primary/20")}
             aria-pressed={tool === "hand"}
             title={t("design.tools.hand")}
             aria-label={t("design.tools.hand")}

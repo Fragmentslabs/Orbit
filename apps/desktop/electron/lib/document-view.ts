@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises'
-import { dialog } from 'electron'
 import { extractDocument } from './documents'
+import { saveExport } from './export-dialog'
 import { documentFilePath, ensureDocumentRender, getMediaEntry } from './media'
 import { docxFileToHtml, renderSessionDocx } from './docx-view'
 import { printFile, rasterizePdf, type PdfOutlineItem, type PdfTextItem } from './pdf-raster'
@@ -161,15 +161,15 @@ export async function viewExport(
   const file = await mediaFile(id)
   if (!file) return { ok: false, error: 'Documento não encontrado.' }
   const entry = await getMediaEntry(id)
-  const base = (entry?.name || 'documento').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
-  const result = await dialog.showSaveDialog({
-    defaultPath: `${base}.${file.ext}`,
+  const base = (entry?.name || 'documento').slice(0, 60)
+  const target = await saveExport(null, {
+    fileName: `${base}.${file.ext}`,
     filters: [{ name: file.ext.toUpperCase(), extensions: [file.ext] }],
   })
-  if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+  if (!target) return { ok: false, canceled: true }
   try {
-    await fsp.copyFile(file.path, result.filePath)
-    return { ok: true, path: result.filePath }
+    await fsp.copyFile(file.path, target)
+    return { ok: true, path: target }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
