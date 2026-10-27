@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut, screen, type WebContents } from 'electron'
+import { floatAboveFullScreen } from '../float-above-fullscreen'
 import {
   OVERLAY_SHORTCUT,
   type OverlayContext,
@@ -164,7 +165,7 @@ function createWindow(): Promise<BrowserWindow> {
   win = created
 
   created.setAlwaysOnTop(true, 'floating')
-  created.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  floatAboveFullScreen(created)
   created.setMenuBarVisibility(false)
   // A pessoa vê o painel; a captura de tela não. É o que permite o `see_screen`
   // tirar o print com o painel na frente SEM esconder a janela — antes ela
@@ -271,15 +272,16 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
 let orbitWasActive = false
 
 /**
- * Fechar o painel devolve o foco ao app em que a pessoa estava. Em modo texto
- * o painel tem o foco, e ao escondê-lo o macOS ativa a próxima janela do Orbit
- * — a principal, que aparecia do nada por cima do que a pessoa fazia.
+ * Fechar o painel não pode deixar o macOS escolher quem ativa: ao esconder a
+ * janela com foco, ele traz a principal do Orbit para a frente e só depois a
+ * pessoa volta ao app de antes — um flash. Por isso o foco é devolvido ao app
+ * em que ela estava ANTES de o painel sumir.
  */
-function giveFocusBack(closing: BrowserWindow): void {
+async function giveFocusBack(closing: BrowserWindow): Promise<void> {
   if (process.platform !== 'darwin' || orbitWasActive) return
   const front = overlayOpenContext()
   if (front && isComputerAvailable()) {
-    setImmediate(() => void getComputerDriver().act({ op: 'activate', pid: front.pid }).catch(() => undefined))
+    await getComputerDriver().act({ op: 'activate', pid: front.pid }).catch(() => undefined)
     return
   }
   // Sem saber onde a pessoa estava: se só o painel estava à vista, esconder o
@@ -293,8 +295,13 @@ export function hideOverlay(): void {
   if (!target) return
   const hadFocus = target.isFocused()
   target.webContents.send('overlay:event', { type: 'hangup', reason: 'dismissed' } satisfies OverlayEvent)
-  target.hide()
-  if (hadFocus) giveFocusBack(target)
+  if (!hadFocus) {
+    target.hide()
+    return
+  }
+  void giveFocusBack(target).finally(() => {
+    if (!target.isDestroyed()) target.hide()
+  })
 }
 
 export function toggleOverlay(options?: { call?: boolean }): void {

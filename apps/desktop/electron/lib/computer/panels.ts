@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
+import { floatAboveFullScreen } from '../float-above-fullscreen'
 
 /**
  * Painéis flutuantes do Computer Use: enquanto o agente controla outro app e
@@ -109,7 +110,7 @@ function show(id: string): void {
   })
   // Abaixo da faixa "Orbit está controlando" (screen-saver), acima dos apps.
   win.setAlwaysOnTop(true, 'floating')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  floatAboveFullScreen(win)
   win.setIgnoreMouseEvents(true, { forward: true })
   win.once('ready-to-show', () => {
     if (win && !win.isDestroyed() && sessionId) win.showInactive()

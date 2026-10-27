@@ -1,4 +1,5 @@
 import { BrowserWindow, globalShortcut, screen } from 'electron'
+import { floatAboveFullScreen } from '../float-above-fullscreen'
 import { computerStopShortcut, type ComputerActivity, type ComputerEvent } from '@shared/computer'
 import { getAppSettings } from '../app-settings'
 import { tNow } from '../i18n'
@@ -258,7 +259,7 @@ function showOverlay(): void {
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
     })
     overlay.setAlwaysOnTop(true, 'screen-saver')
-    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    floatAboveFullScreen(overlay)
     // O botão é um link: a navegação nunca acontece, vira o Parar.
     overlay.webContents.on('will-navigate', (event, url) => {
       event.preventDefault()
