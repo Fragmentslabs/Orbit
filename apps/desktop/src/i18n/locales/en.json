@@ -2941,7 +2941,8 @@
     "keepMine": "Keep mine",
     "useAsSource": "Use as a source in this conversation",
     "isSource": "Already a source in this conversation",
-    "kindFile": "Document"
+    "kindFile": "Document",
+    "pageBreak": "Page break"
   },
   "sources": {
     "title": "Sources",
@@ -2976,6 +2977,7 @@
     "viewerMissing": "Source {{id}} is not in this conversation any more — it was removed, or moved to another area. Look for the file in the Sources tab.",
     "movedFrom": "was {{id}}",
     "pageOf": "page {{page}} of {{total}}",
+    "blockOf": "block {{page}} of {{total}}",
     "openInPanel": "Open in the panel",
     "modeOriginal": "Original",
     "modeText": "Text",
@@ -2984,6 +2986,8 @@
     "truncatedView": "Showing {{shown}} of {{total}} pages — the document is too large to scroll in one go. Use Original to see the rest.",
     "outline": "Outline",
     "noOutline": "No outline — pages",
+    "pagesLabel": "Pages",
+    "blocksLabel": "Blocks",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "print": "Print",

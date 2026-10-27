@@ -13,6 +13,7 @@ import {
   Search,
   X,
 } from "lucide-react"
+import { splitDocxPages } from "@shared/page-breaks"
 import { docsApi, documentApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
 import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selection"
@@ -53,6 +54,13 @@ const ZOOM_MAX = 3
 const ZOOM_STEP = 0.25
 /** Escala de referência, exibida como 100% no controle de zoom. */
 const ZOOM_BASE = 1.5
+/**
+ * A partir desta largura a aba comporta a coluna do sumário (208px) sem esmagar
+ * a página — sobram ~470px de leitura. Abaixo disso o sumário desce para o
+ * rodapé, em chips. O painel direito é redimensionável, então quem decide é a
+ * largura RECEBIDA pela aba, e não a da janela.
+ */
+const OUTLINE_SIDE_MIN = 680
 
 interface Match {
   page: number
@@ -150,13 +158,44 @@ export function SourceViewer({
   citadoRef.current = page !== undefined && fromLine !== undefined
   const anchorRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
+  /**
+   * Largura que a aba recebeu AGORA — é ela que decide se o sumário fica em
+   * coluna, ao lado da página, ou deitado no rodapé, em chips. O painel direito
+   * é redimensionável, então nenhum breakpoint de janela responde por ele.
+   *
+   * Ref de callback, e não efeito com ref: o componente sai antes de desenhar
+   * enquanto não há fonte, e um efeito de montagem nunca mediria o elemento que
+   * aparece depois.
+   */
+  const [width, setWidth] = useState(0)
+  const observerRef = useRef<ResizeObserver | null>(null)
+  const rootRef = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect()
+    observerRef.current = null
+    if (!el) return
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth))
+    observer.observe(el)
+    observerRef.current = observer
+    setWidth(el.clientWidth)
+  }, [])
+
+  /**
+   * A sessão que acompanha o pedido ao main. Um documento da GALERIA
+   * (`doc_xxx.md`) se lê pelo próprio id — o main nem usa a sessão nesse
+   * caminho —, então o painel sem conversa ativa (a aba de Mídia aberta na tela
+   * inicial, por exemplo) consegue abrir o documento. Só fonte de conversa
+   * (`docN`/`srcN`) precisa da sessão, e essa sempre chega com uma. Antes o
+   * visualizador exigia as duas coisas e desistia com "clique numa citação"
+   * antes de pedir o arquivo: o documento existia e nunca era lido.
+   */
+  const viewSession = sessionId ?? ""
 
   useEffect(() => {
     let alive = true
-    if (!sessionId || !docId) return
+    if (!docId) return
     setLoading(true)
     setOutline([])
-    void docsApi.text(sessionId, docId).then((result) => {
+    void docsApi.text(viewSession, docId).then((result) => {
       if (!alive) return
       setData(result)
       setLoading(false)
@@ -173,7 +212,7 @@ export function SourceViewer({
   return () => {
       alive = false
     }
-  }, [sessionId, docId])
+  }, [viewSession, docId])
 
   /**
    * Citação: a busca já entra preenchida com o trecho citado. É o mesmo
@@ -255,7 +294,7 @@ export function SourceViewer({
       ?.scrollIntoView({ block: "start" })
   }, [mode, focus])
 
-  if (!sessionId || !docId) {
+  if (!docId) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
         {t("sources.viewerEmpty")}
@@ -284,8 +323,8 @@ export function SourceViewer({
     setErro(null)
     const result =
       action === "print"
-        ? await docsApi.print(sessionId, docId)
-        : await docsApi.export(sessionId, docId)
+        ? await docsApi.print(viewSession, docId)
+        : await docsApi.export(viewSession, docId)
     // Cancelar no diálogo não é erro: o usuário desistiu.
     if (!result.ok && !("canceled" in result && result.canceled)) {
       setErro(result.error ?? t("sources.actionFailed"))
@@ -298,12 +337,12 @@ export function SourceViewer({
 
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <div ref={rootRef} className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2">
         <button
           type="button"
           onClick={() => setOutlineOpen((open) => !open)}
-          className={cn(iconButton, outlineOpen && "bg-accent text-foreground")}
+          className={cn(iconButton, outlineOpen && "bg-primary/15 text-primary")}
           title={t("sources.outline")}
         >
           <List className="size-3.5" />
@@ -373,7 +412,7 @@ export function SourceViewer({
         <button
           type="button"
           onClick={() => setFindOpen((open) => !open)}
-          className={cn(iconButton, findOpen && "bg-accent text-foreground")}
+          className={cn(iconButton, findOpen && "bg-primary/15 text-primary")}
           title={t("sources.find")}
         >
           <Search className="size-3.5" />
@@ -492,11 +531,16 @@ export function SourceViewer({
       )}
 
       <div className="flex min-h-0 flex-1">
-        {outlineOpen && (
+        {/* Com espaço, o sumário é a coluna da esquerda. Estreito, ele sai
+            daqui e vira o rodapé logo abaixo do conteúdo — ver o fim deste
+            retorno. */}
+        {outlineOpen && width >= OUTLINE_SIDE_MIN && (
           <OutlinePanel
             outline={outline}
             total={data?.totalPages ?? 0}
             onGo={(n) => setFocus({ page: n, nonce: Date.now() })}
+            layout="side"
+            unit={data?.originalKind === "docx" ? "block" : "page"}
           />
         )}
 
@@ -515,7 +559,7 @@ export function SourceViewer({
           </div>
         ) : mode === "original" && data.originalKind === "docx" ? (
           <DocxOriginal
-            sessionId={sessionId}
+            sessionId={viewSession}
             docId={docId}
             zoom={zoom}
             docName={data.filename || docId}
@@ -523,7 +567,7 @@ export function SourceViewer({
           />
         ) : mode === "original" ? (
           <OriginalPages
-            sessionId={sessionId}
+            sessionId={viewSession}
             docId={docId}
             total={data.totalPages}
             focus={focus ?? (citedPage ? { page: citedPage, nonce: 0 } : null)}
@@ -592,6 +636,21 @@ export function SourceViewer({
           </div>
         )}
       </div>
+
+      {/* Aba estreita: o sumário desce para o rodapé, em chips, e devolve à
+          página a largura que uma coluna de 208px levaria. É o mesmo desenho da
+          aba de Slides — a lista muda de lugar conforme o espaço, sem botão a
+          mais. `width === 0` é a primeira pintura, antes de medir: não desenha
+          nada para não piscar na posição errada. */}
+      {outlineOpen && width > 0 && width < OUTLINE_SIDE_MIN && (
+        <OutlinePanel
+          outline={outline}
+          total={data?.totalPages ?? 0}
+          onGo={(n) => setFocus({ page: n, nonce: Date.now() })}
+          layout="strip"
+          unit={data?.originalKind === "docx" ? "block" : "page"}
+        />
+      )}
     </div>
   )
 }
@@ -622,18 +681,73 @@ function Marked({ text, term }: { text: string; term: string }) {
  * Sumário do documento. Quando o PDF não traz um (a maioria dos digitalizados
  * e dos gerados por impressora não traz), cai na lista de páginas — o painel
  * continua servindo para pular, que é para o que se abre um sumário.
+ *
+ * Duas formas: coluna à esquerda quando a aba é larga, faixa deitada no rodapé
+ * quando é estreita. Não é preferência guardada — é a largura que decide, então
+ * arrastar o divisor do painel troca a forma na hora.
  */
 function OutlinePanel({
   outline,
   total,
   onGo,
+  layout,
+  unit,
 }: {
   outline: OutlineItem[]
   total: number
   onGo: (page: number) => void
+  /**
+   * "side" = coluna à esquerda; "strip" = faixa deitada no rodapé, para quando a
+   * aba é estreita. O MESMO conteúdo em duas formas — quem escolhe é a largura.
+   */
+  layout: "side" | "strip"
+  /**
+   * O que a lista numera. Um PDF tem páginas dentro do arquivo; um .docx tem
+   * blocos — a paginação dele é do editor, e escrever "página" ali prometeria
+   * uma coisa que o arquivo não guarda.
+   */
+  unit: "page" | "block"
 }) {
   const { t } = useTranslation()
   const entries = outline.filter((item) => item.page !== null)
+  const label = (page: number) =>
+    t(unit === "block" ? "sources.blockOf" : "sources.pageOf", { page, total })
+
+  if (layout === "strip") {
+    return (
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border/60 px-3 py-1.5">
+        <span className="shrink-0 pr-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+          {entries.length > 0
+            ? t("sources.outline")
+            : t(unit === "block" ? "sources.blocksLabel" : "sources.pagesLabel")}
+        </span>
+        {entries.length > 0
+          ? entries.map((item, i) => (
+              <button
+                key={`${item.title}-${i}`}
+                type="button"
+                onClick={() => onGo(item.page as number)}
+                className="flex shrink-0 cursor-pointer items-baseline gap-1.5 rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <span className="max-w-44 truncate">{item.title || "—"}</span>
+                <span className="tabular-nums opacity-60">{item.page}</span>
+              </button>
+            ))
+          : Array.from({ length: total }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onGo(n)}
+                title={label(n)}
+                className="min-w-7 shrink-0 cursor-pointer rounded-full border border-border/60 px-2 py-0.5 text-center text-[11px] tabular-nums text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {n}
+              </button>
+            ))}
+      </div>
+    )
+  }
+
   return (
     <div className="w-52 shrink-0 overflow-auto border-r border-border/60 py-2">
       {entries.length > 0 ? (
@@ -665,7 +779,7 @@ function OutlinePanel({
                   onClick={() => onGo(n)}
                   className="w-full cursor-pointer px-3 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
-                  {t("sources.pageOf", { page: n, total })}
+                  {label(n)}
                 </button>
               </li>
             ))}
@@ -890,6 +1004,13 @@ function DocxOriginal({
 
   const escala = zoom / ZOOM_BASE
 
+  /**
+   * Uma folha por quebra explícita. O .docx não guarda paginação — só as
+   * quebras que o autor forçou —, então é isso que separa uma página da outra;
+   * o resto do conteúdo continua corrido, como no Word.
+   */
+  const folhas = useMemo(() => (html === null ? [] : splitDocxPages(html)), [html])
+
   return (
     <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
       {/* O trecho selecionado é reencontrado nas linhas extraídas, as mesmas
@@ -911,27 +1032,30 @@ function DocxOriginal({
       {failed ? (
         <p className="p-6 text-center text-xs text-muted-foreground">{t("sources.docxUnavailable")}</p>
       ) : html === null ? null : (
-        <article
-          className={cn(
-            "mx-auto bg-white px-[3em] py-[2.5em] leading-relaxed text-neutral-900 shadow-sm",
-            "[&_h1]:mb-[0.5em] [&_h1]:mt-[0.8em] [&_h1]:text-[1.6em] [&_h1]:font-bold",
-            "[&_h2]:mb-[0.5em] [&_h2]:mt-[0.8em] [&_h2]:text-[1.35em] [&_h2]:font-bold",
-            "[&_h3]:mb-[0.4em] [&_h3]:mt-[0.7em] [&_h3]:text-[1.15em] [&_h3]:font-semibold",
-            "[&_p]:mb-[0.6em] [&_strong]:font-semibold [&_em]:italic [&_u]:underline",
-            "[&_ul]:mb-[0.6em] [&_ul]:list-disc [&_ul]:pl-[1.5em] [&_ol]:mb-[0.6em] [&_ol]:list-decimal [&_ol]:pl-[1.5em]",
-            "[&_table]:my-[0.8em] [&_table]:w-full [&_table]:border-collapse",
-            "[&_td]:border [&_td]:border-neutral-300 [&_td]:px-[0.5em] [&_td]:py-[0.3em] [&_td]:align-top",
-            "[&_th]:border [&_th]:border-neutral-300 [&_th]:px-[0.5em] [&_th]:py-[0.3em] [&_th]:text-left",
-            "[&_td_p]:mb-0 [&_th_p]:mb-0 [&_img]:max-w-full [&_a]:text-blue-700 [&_a]:underline",
-            "[&_header]:mb-[1.5em] [&_header]:border-b [&_header]:border-neutral-200 [&_header]:pb-[0.8em]",
-            "[&_footer]:mt-[1.5em] [&_footer]:border-t [&_footer]:border-neutral-200 [&_footer]:pt-[0.8em]",
-            "[&_header_p]:mb-0 [&_footer_p]:mb-0 [&_footer]:text-[0.85em] [&_footer]:text-neutral-600",
-          )}
-          style={{ fontSize: `${14 * escala}px`, maxWidth: `${48 * escala}rem` }}
-          // Seguro por construção: o HTML sai do mammoth, que só escreve a
-          // estrutura do documento, e passa pelo sanitizeDocxHtml no main.
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        folhas.map((folha, i) => (
+          <article
+            key={i}
+            className={cn(
+              "mx-auto mb-4 bg-white px-[3em] py-[2.5em] leading-relaxed text-neutral-900 shadow-sm last:mb-0",
+              "[&_h1]:mb-[0.5em] [&_h1]:mt-[0.8em] [&_h1]:text-[1.6em] [&_h1]:font-bold",
+              "[&_h2]:mb-[0.5em] [&_h2]:mt-[0.8em] [&_h2]:text-[1.35em] [&_h2]:font-bold",
+              "[&_h3]:mb-[0.4em] [&_h3]:mt-[0.7em] [&_h3]:text-[1.15em] [&_h3]:font-semibold",
+              "[&_p]:mb-[0.6em] [&_strong]:font-semibold [&_em]:italic [&_u]:underline",
+              "[&_ul]:mb-[0.6em] [&_ul]:list-disc [&_ul]:pl-[1.5em] [&_ol]:mb-[0.6em] [&_ol]:list-decimal [&_ol]:pl-[1.5em]",
+              "[&_table]:my-[0.8em] [&_table]:w-full [&_table]:border-collapse",
+              "[&_td]:border [&_td]:border-neutral-300 [&_td]:px-[0.5em] [&_td]:py-[0.3em] [&_td]:align-top",
+              "[&_th]:border [&_th]:border-neutral-300 [&_th]:px-[0.5em] [&_th]:py-[0.3em] [&_th]:text-left",
+              "[&_td_p]:mb-0 [&_th_p]:mb-0 [&_img]:max-w-full [&_a]:text-blue-700 [&_a]:underline",
+              "[&_header]:mb-[1.5em] [&_header]:border-b [&_header]:border-neutral-200 [&_header]:pb-[0.8em]",
+              "[&_footer]:mt-[1.5em] [&_footer]:border-t [&_footer]:border-neutral-200 [&_footer]:pt-[0.8em]",
+              "[&_header_p]:mb-0 [&_footer_p]:mb-0 [&_footer]:text-[0.85em] [&_footer]:text-neutral-600",
+            )}
+            style={{ fontSize: `${14 * escala}px`, maxWidth: `${48 * escala}rem` }}
+            // Seguro por construção: o HTML sai do mammoth, que só escreve a
+            // estrutura do documento, e passa pelo sanitizeDocxHtml no main.
+            dangerouslySetInnerHTML={{ __html: folha }}
+          />
+        ))
       )}
     </div>
   )

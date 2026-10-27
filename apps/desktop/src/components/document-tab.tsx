@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { EyeIcon, PenLineIcon, X } from "lucide-react"
+import { splitOnPageBreaks } from "@shared/page-breaks"
 import { DocumentDownloadMenu, DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { MessageResponse } from "@/src/components/ai/message"
 import { QuoteSelection } from "@/src/components/quote-selection"
@@ -42,6 +43,8 @@ export function DocumentTab({
 }) {
   const { t } = useTranslation()
   const [markdown, setMarkdown] = useState<string | null>(null)
+  /** O documento em páginas: o `\pagebreak` é instrução, não texto. */
+  const paginas = useMemo(() => splitOnPageBreaks(markdown ?? ""), [markdown])
   /** Área de leitura — é dela que sai a seleção citável. */
   const readRef = useRef<HTMLDivElement>(null)
   const [missing, setMissing] = useState(false)
@@ -293,7 +296,22 @@ export function DocumentTab({
               readAloud
             />
           )}
-          <MessageResponse>{markdown}</MessageResponse>
+          {/* O `\pagebreak` é instrução do renderizador, não conteúdo: aqui ele
+              aparece como a separação entre as páginas, igual ao PDF e ao .docx. */}
+          {paginas.map((pagina, i) => (
+            <Fragment key={i}>
+              {i > 0 && (
+                <div className="my-5 flex items-center gap-3" aria-hidden>
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    {t("documents.pageBreak")}
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              <MessageResponse>{pagina}</MessageResponse>
+            </Fragment>
+          ))}
         </div>
       )}
     </div>

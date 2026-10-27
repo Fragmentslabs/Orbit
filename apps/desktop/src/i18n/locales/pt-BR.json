@@ -2941,7 +2941,8 @@
     "keepMine": "Manter a minha",
     "useAsSource": "Usar como fonte desta conversa",
     "isSource": "Já é fonte desta conversa",
-    "kindFile": "Documento"
+    "kindFile": "Documento",
+    "pageBreak": "Quebra de página"
   },
   "sources": {
     "title": "Fontes",
@@ -2976,6 +2977,7 @@
     "viewerMissing": "A fonte {{id}} não está mais nesta conversa — foi removida, ou movida para outra área. Procure o arquivo na aba Fontes.",
     "movedFrom": "era {{id}}",
     "pageOf": "página {{page}} de {{total}}",
+    "blockOf": "bloco {{page}} de {{total}}",
     "openInPanel": "Abrir no painel",
     "modeOriginal": "Original",
     "modeText": "Texto",
@@ -2984,6 +2986,8 @@
     "truncatedView": "Mostrando {{shown}} de {{total}} páginas — o documento é grande demais para rolar inteiro de uma vez. Use o Original para ver o resto.",
     "outline": "Sumário",
     "noOutline": "Sem sumário — páginas",
+    "pagesLabel": "Páginas",
+    "blocksLabel": "Blocos",
     "zoomIn": "Aproximar",
     "zoomOut": "Afastar",
     "print": "Imprimir",
