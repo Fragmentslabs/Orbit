@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import "@xterm/xterm/css/xterm.css"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { terminalTheme } from "@/src/lib/terminal-theme"
 
 interface ManagedTerminalTabProps {
   ptyId: string
@@ -30,9 +31,32 @@ const terminalSessions = new Map<
   { term: Terminal; fitAddon: FitAddon; host: HTMLDivElement; sessionId?: string }
 >()
 
+/**
+ * O tema do app vira classe no <html> ([theme-provider.tsx]). O xterm vive fora
+ * do React, então ninguém o avisa da troca: um observer só, no módulo, repinta
+ * todas as sessões abertas. Trocar `options.theme` recolore sem recriar o
+ * terminal — buffer, scrollback e listeners continuam de pé.
+ */
+function prefersDark() {
+  return document.documentElement.classList.contains("dark")
+}
+
+let themeObserver: MutationObserver | undefined
+
+function watchTheme() {
+  if (themeObserver) return
+  themeObserver = new MutationObserver(() => {
+    const theme = terminalTheme(prefersDark())
+    for (const { term } of terminalSessions.values()) term.options.theme = theme
+  })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+}
+
 function getTerminalSession(ptyId: string) {
   const existing = terminalSessions.get(ptyId)
   if (existing) return existing
+
+  watchTheme()
 
   const term = new Terminal({
     cols: 80,
@@ -45,29 +69,7 @@ function getTerminalSession(ptyId: string) {
     fontWeight: "normal",
     lineHeight: 1.2,
     scrollback: 5000,
-    theme: {
-      background: "#00000000",
-      foreground: "#cccccc",
-      cursor: "#cccccc",
-      cursorAccent: "#00000000",
-      selectionBackground: "#264f78",
-      black: "#1e1e1e",
-      red: "#f14c4c",
-      green: "#4ec994",
-      yellow: "#cdcb70",
-      blue: "#569cd6",
-      magenta: "#c586c0",
-      cyan: "#4ec9b0",
-      white: "#d4d4d4",
-      brightBlack: "#808080",
-      brightRed: "#f14c4c",
-      brightGreen: "#4ec994",
-      brightYellow: "#cdcb70",
-      brightBlue: "#569cd6",
-      brightMagenta: "#c586c0",
-      brightCyan: "#4ec9b0",
-      brightWhite: "#ffffff",
-    },
+    theme: terminalTheme(prefersDark()),
     allowTransparency: true,
     convertEol: false,
   })
@@ -181,8 +183,13 @@ export function ManagedTerminalTab({ ptyId, sessionId }: ManagedTerminalTabProps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ptyId])
 
+  // Superfície do terminal: `--muted` no claro (o xterm é transparente) e a
+  // sidebar no escuro, como sempre foi.
   return (
-    <div className="flex-1 min-h-0 relative bg-sidebar" onClick={() => getTerminalSession(ptyId).term.focus()}>
+    <div
+      className="flex-1 min-h-0 relative bg-muted dark:bg-sidebar"
+      onClick={() => getTerminalSession(ptyId).term.focus()}
+    >
       <div ref={containerRef} className="absolute inset-0" />
     </div>
   )
