@@ -102,7 +102,11 @@ function useTabMeta(): Record<TabType, TabMeta> {
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
   const { t } = useTranslation()
-  const { folders, setFolders } = useWorkspace()
+  // As pastas da aba nascem como as da tela (o chat novo começaria igual ao do
+  // painel principal), mas mudam só aqui: o rascunho de uma aba não é uma
+  // associação de pasta do chat que está aberto na janela.
+  const { folders: foldersDaTela } = useWorkspace()
+  const [folders, setFolders] = useState<string[]>(foldersDaTela)
   const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
     if (folders.length > 0) {
       // Espelha o painel principal: novo chat com pasta vira sessão de código
@@ -137,7 +141,6 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
 function ChatTabHeader({ sessionId }: { sessionId?: string }) {
   const session = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined))
   const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories)
-  const setFolders = useWorkspace().setFolders
   const folders = useMemo(() => {
     if (!session?.directory) return []
     return [session.directory, ...(session.extraDirectories ?? [])]
@@ -158,10 +161,10 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
 
   const isCode = session.mode === "code" && !!session.directory
 
+  // A associação é da sessão da aba — o workspace é o da janela principal e
+  // não pode passar a apontar para as pastas daqui.
   const handleFoldersChange = (next: string[]) => {
     setSessionDirectories(session.id, next[0], next.slice(1))
-    // Mantém o workspace sincronizado (o input do painel envia com as pastas do workspace)
-    setFolders(next)
   }
 
   return (

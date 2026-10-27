@@ -88,7 +88,7 @@ function markWorkerConfigPrompted() {
   localStorage.setItem(WORKER_CONFIG_PROMPTED_KEY, "1")
 }
 
-export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, onProviderBlocked, showFolders = true }: {
+export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, onProviderBlocked, showFolders = true, folders: foldersProp, onFoldersChange: onFoldersChangeProp }: {
   onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
@@ -99,6 +99,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   onProviderBlocked?: () => void
   /** Mostra o seletor de pastas/repositórios acima do input (some em visões como a tela cheia do browser) */
   showFolders?: boolean
+  /** Pastas do chat quando NÃO são as do workspace (aba do painel: as da própria sessão) */
+  folders?: string[]
+  onFoldersChange?: (folders: string[]) => void
 }) {
   const { t } = useTranslation()
   // Chave da mensagem respondida: o chat de código não tem rascunho por
@@ -137,7 +140,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const brainContext = useCodeContext()
   const permissionMode = usePermissionPrefs((s) => s.mode)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
-  const { folders, setFolders } = useWorkspace()
+  const { folders: foldersDoWorkspace, setFolders: setFoldersDoWorkspace } = useWorkspace()
+  // Uma aba do painel passa as pastas da própria sessão; no resto, o workspace
+  // é a fonte (é ele que o envio grava na sessão).
+  const folders = foldersProp ?? foldersDoWorkspace
+  const setFolders = onFoldersChangeProp ?? setFoldersDoWorkspace
 
   // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
   useEffect(() => {

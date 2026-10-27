@@ -55,6 +55,7 @@ import { messageBody, messageText, visibleMessageText } from "@/src/lib/message-
 import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
+import { mesmasPastas, pastasDaSessao } from "@/src/lib/session-folders"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { pastasAposTroca, useWorktreeStore } from "@/src/stores/worktree-store"
 import { useProviderStore, useNoProviderConnected, useProvidersLoading } from "@/src/stores/provider-store"
@@ -649,6 +650,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   )
   const session = sessionId ? explicitSession : activeSession
   const viewMode = session?.mode ?? mode
+  // Campos da sessão lidos fora de efeitos: a identidade do objeto muda a cada
+  // atualização do store, e dependências por objeto disparariam à toa.
+  const pastaDaSessao = session?.directory
+  const extrasDaSessao = session?.extraDirectories
   const messages = useSessionStore((s) =>
     session ? s.messages[session.id] ?? NO_MESSAGES : NO_MESSAGES,
   )
@@ -702,10 +707,15 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   // da troca de chat, segue a troca de pasta da MESMA sessão feita fora da
   // tela — o agente mudando o chat de worktree (worktree_switch/create).
   // Sem isso, o próximo envio gravaria de volta a pasta antiga.
+  //
+  // O chat de uma aba do painel fica de fora: ele tem as pastas DELE (o header
+  // da aba já as persiste) e o workspace é o da janela principal — escrever
+  // nele trocaria as pastas do chat que está na tela, e o envio seguinte
+  // gravaria essa troca na sessão errada.
   const prevSessionId = useRef(session?.id)
   const prevDirectory = useRef(session?.directory)
   useEffect(() => {
-    if (viewMode !== "code" || !session?.directory) return
+    if (embedded || viewMode !== "code" || !session?.directory) return
     const trocouChat = session.id !== prevSessionId.current
     const trocouPasta = !trocouChat && session.directory !== prevDirectory.current
     prevSessionId.current = session.id
@@ -728,7 +738,33 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     }
     // folders entra só para a troca ler as extras atuais; mudar só as pastas
     // não dispara nada (nem chat nem pasta principal da sessão mudaram).
-  }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
+  }, [embedded, session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
+
+  // Associar (ou remover) uma pasta vale na hora, e não só no próximo envio.
+  //
+  // A sessão em disco só era atualizada ao enviar, então a associação vivia
+  // apenas no workspace (localStorage): fechar o app — ou abrir outro chat, que
+  // restaura o workspace a partir da sessão — desfazia o que a pessoa tinha
+  // acabado de associar. Aqui a lista vai para a sessão no mesmo clique, que é o
+  // que faz a pasta ficar "até ser removida".
+  //
+  // A referência guarda a lista (e o chat) do render anterior. Trocar de chat
+  // também troca a lista — e essa lista é da sessão nova, não uma associação
+  // feita agora —, então só conta como mudança quando o chat já estava na tela.
+  const sessionIdDoChat = session?.id
+  const foldersPrevia = useRef({ folders, sessionId: sessionIdDoChat })
+  useEffect(() => {
+    const anterior = foldersPrevia.current
+    foldersPrevia.current = { folders, sessionId: sessionIdDoChat }
+    if (anterior.sessionId !== sessionIdDoChat) return
+    const mudou = anterior.folders !== folders
+    if (!mudou || embedded || viewMode !== "code" || !sessionIdDoChat) return
+    const lista = folders.filter(Boolean)
+    if (lista.length === 0) return
+    const daSessao = pastasDaSessao({ directory: pastaDaSessao, extraDirectories: extrasDaSessao })
+    if (mesmasPastas(daSessao, lista)) return
+    useSessionStore.getState().setSessionDirectories(sessionIdDoChat, lista[0], lista.slice(1))
+  }, [folders, embedded, viewMode, sessionIdDoChat, pastaDaSessao, extrasDaSessao])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   // Sessão cujo histórico ainda não chegou do disco conta como conversa: sem
@@ -742,8 +778,32 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
    *  disputa espaço com nada. São escolhas separadas — ver PersonaVisibility. */
   const personaInChat = showsPersonaInChat(personaVisibility)
   const personaOnWelcome = showsPersonaOnWelcome(personaVisibility)
+  // Pastas que ESTE chat usa. Numa aba do painel são as da sessão da aba: o
+  // workspace é o da janela principal, e usá-lo aqui mandaria o turno para a
+  // pasta do chat que está na tela.
+  const pastasDoChat = useMemo(
+    () =>
+      embedded && pastaDaSessao
+        ? pastasDaSessao({ directory: pastaDaSessao, extraDirectories: extrasDaSessao })
+        : folders,
+    [embedded, folders, pastaDaSessao, extrasDaSessao],
+  )
+
+  const handleFoldersChange = useCallback(
+    (next: string[]) => {
+      if (!embedded) {
+        setFolders(next)
+        return
+      }
+      // Aba do painel: a associação é da sessão da aba, e só dela.
+      if (!session?.id || next.length === 0) return
+      useSessionStore.getState().setSessionDirectories(session.id, next[0], next.slice(1))
+    },
+    [embedded, session?.id, setFolders],
+  )
+
   // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
-  const initDirectory = session?.directory ?? (viewMode === "code" ? folders[0] : undefined)
+  const initDirectory = session?.directory ?? (viewMode === "code" ? pastasDoChat[0] : undefined)
 
   const prevHasChat = useRef(hasChat)
   const isBusyRef = useRef(isBusy)
@@ -1503,6 +1563,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           hasMessages={hasChat}
           sessionId={session?.id}
           onProviderBlocked={() => setProviderHintVisible(true)}
+          folders={pastasDoChat}
+          onFoldersChange={handleFoldersChange}
         />
       )}
     </div>
