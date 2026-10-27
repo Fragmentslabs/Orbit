@@ -927,7 +927,14 @@ export function FileBrowser({
       // relida.
       reloadTree();
       onRefreshChanges();
-      await Promise.all([loadGitStatus(), loadNumstat()]);
+      // Branch, `*` de sujo e ↑↓ do rodapé/cabeçalhos vivem no cache por pasta
+      // do branch-store: sem esta leitura o botão atualizava a árvore e as
+      // alterações, mas deixava o retrato do repositório como estava antes.
+      await Promise.all([
+        loadGitStatus(),
+        loadNumstat(),
+        ...repoSections.map((target) => refreshInfo(target.path)),
+      ]);
       // O botão é o único "atualizar" do painel e vale para as três abas: no
       // histórico, o que há para atualizar é o log.
       setCommitsReload((n) => n + 1);
@@ -936,10 +943,12 @@ export function FileBrowser({
     }
   }, [
     repo,
+    repoSections,
     refreshing,
     reloadTree,
     loadGitStatus,
     loadNumstat,
+    refreshInfo,
     onRefreshChanges,
   ]);
 
@@ -961,6 +970,9 @@ export function FileBrowser({
     if (result.ok) {
       // O pull pode trazer arquivos para qualquer pasta aberta.
       reloadTree();
+      // E o que ele trouxe também muda o diff empilhado: sem isto ele só se
+      // renovava no refresh manual ou ao remontar o painel.
+      onRefreshChanges();
       void loadGitStatus();
       void loadNumstat();
       setCommitsReload((n) => n + 1);
@@ -973,6 +985,7 @@ export function FileBrowser({
     syncBusyDir,
     pullChanges,
     reloadTree,
+    onRefreshChanges,
     loadGitStatus,
     loadNumstat,
     syncErrorMessage,
@@ -984,7 +997,8 @@ export function FileBrowser({
     setSyncStatus(null);
     const result = await pushChanges(repo);
     if (result.ok) {
-      void loadGitStatus();
+      // Um push só mexe na referência remota: a árvore e o status local ficam
+      // como estavam. O que muda é o selo local/remoto das commits.
       setCommitsReload((n) => n + 1);
       setSyncStatus({
         kind: "info",
@@ -1001,7 +1015,7 @@ export function FileBrowser({
       return;
     }
     setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
-  }, [repo, syncBusyDir, pushChanges, loadGitStatus, syncErrorMessage, t]);
+  }, [repo, syncBusyDir, pushChanges, syncErrorMessage, t]);
 
   useEffect(() => {
     if (!commitsOpen || !repo) return;
