@@ -22,8 +22,10 @@ import type {
 import { folderKey, normalizeFolderName, parseMessageReply, StorageKeys } from "@shared/chat"
 import { planArchivedCleanup, setArchivedState } from "@shared/archive"
 import { planAutoFolder } from "@/src/lib/auto-folder"
+import { firstSessionOfFolder, workspaceOfFolder } from "@/src/lib/folder-workspace"
 import {
   relocateAutoFolderEntry,
+  relocateFolderWorkspace,
   relocateSessionFolders,
   relocatedFolderName,
 } from "@/src/lib/relocate"
@@ -196,6 +198,11 @@ interface SessionState {
    *  chats soltos (modo código, com diretório) para a pasta do projeto —
    *  corrige pastas duplicadas quando o mapa automático foi perdido. */
   organizeSidebar: () => void
+  /** Pastas de trabalho com que o chat novo do "+" de uma pasta deve nascer:
+   *  as do chat mais recente dela ou, com a pasta vazia, as do projeto que o
+   *  mapa automático ainda aponta. `undefined` = pasta sem projeto conhecido
+   *  (pasta criada à mão e nunca usada), e aí o workspace fica como está. */
+  folderWorkspace: (folderId: string) => string[] | undefined
 
   /** A pasta mudou de lugar no disco: reaponta tudo que apontava para o
    *  caminho antigo. As pastas do workspace vivem no WorkspaceProvider, então
@@ -397,6 +404,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return { sessions: mergedSessions, folders: [...folderById.values()] }
     })
 
+    // Pastas de antes da memória de workspace (ou cujo primeiro chat já foi
+    // apagado) ganham a dela nesta primeira carga: do chat MAIS ANTIGO que
+    // restar e, sem nenhum, do mapa automático — que ainda sabe a que projeto
+    // a pasta pertence. É o que faz o "+" de uma pasta vazia abrir certo.
+    const mapaDePastas = loadAutoFolderMap()
+    for (const folder of get().folders) {
+      if (folder.mode !== "code" || folder.workspace?.length) continue
+      const doMapa = Object.entries(mapaDePastas).find(([, id]) => id === folder.id)?.[0]
+      aprenderWorkspaceDaPasta(
+        folder.id,
+        workspaceDaSessao(firstSessionOfFolder(folder.id, get().sessions)) ?? (doMapa ? [doMapa] : undefined),
+      )
+    }
+
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
     setupArchivedCleanup(get, set)
 
@@ -461,6 +482,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       session.folderId = folderId
     }
+
+    // A pasta aprende com ESTE chat a que workspace ela pertence. É a memória
+    // que sobrevive quando os chats dela forem apagados: o "+" de uma pasta
+    // vazia volta ao mesmo repositório em vez de herdar o da tela.
+    aprenderWorkspaceDaPasta(session.folderId, workspaceDaSessao(session))
 
     await storage.write(StorageKeys.session(session.id), session)
     set((state) => ({
@@ -791,6 +817,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   moveToFolder: (id, folderId) => {
     set((state) => updateSessionIn(state, id, { folderId }))
+    // Arrastar um chat de código para uma pasta vazia também associa a pasta ao
+    // projeto dele — a mesma memória que o chat criado pelo "+" deixaria.
+    aprenderWorkspaceDaPasta(folderId, workspaceDaSessao(get().sessions.find((s) => s.id === id)))
     emitSessionEvent(id)
   },
 
@@ -1019,6 +1048,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     emitChatEvent({ type: "folders", folders: get().folders })
   },
 
+  folderWorkspace: (folderId) => {
+    const folder = get().folders.find((f) => f.id === folderId)
+    if (!folder) return undefined
+    // O mapa automático é a última pista de uma pasta VAZIA: os chats que
+    // davam o diretório a ela foram apagados, mas o projeto continua mapeado.
+    return workspaceOfFolder({
+      folder,
+      sessions: get().sessions,
+      autoFolderMap: loadAutoFolderMap(),
+    })
+  },
+
   organizeSidebar: () => {
     const { sessions, folders } = get()
 
@@ -1114,6 +1155,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }))
       for (const sid of moves.keys()) emitSessionEvent(sid)
     }
+
+    // Pasta que ganhou chats agora e nunca guardou o workspace: aprende com o
+    // MAIS ANTIGO deles — o primeiro a associá-la a um repositório.
+    for (const folderId of new Set(moves.values())) {
+      aprenderWorkspaceDaPasta(folderId, workspaceDaSessao(firstSessionOfFolder(folderId, get().sessions)))
+    }
   },
 
   relocateFolder: (oldPath, newPath) => {
@@ -1137,6 +1184,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     const nextMap = relocateAutoFolderEntry(autoFolderMap, oldPath, newPath)
     if (nextMap) persistAutoFolderMap(nextMap)
+
+    // A memória de repositório acompanha a relocalização — em QUALQUER pasta
+    // que apontasse para o caminho antigo, não só na que o mapa conhece.
+    let folders: FolderInfo[] | null = null
+    for (const f of get().folders) {
+      const workspace = relocateFolderWorkspace(f.workspace, oldPath, newPath)
+      if (!workspace) continue
+      folders = (folders ?? get().folders).map((x) => (x.id === f.id ? { ...x, workspace } : x))
+    }
+    if (folders) {
+      set({ folders })
+      persistFolders(folders)
+      emitChatEvent({ type: "folders", folders })
+    }
 
     // O nome da pasta acompanha o projeto — mas só quando ainda é o derivado do
     // caminho antigo. Nome escolhido à mão não se toca.
@@ -1835,4 +1896,31 @@ export function useActiveSession(mode: SessionMode) {
 
 export function useSessionStatus(sessionId: string | null | undefined): ChatStatus {
   return useSessionStore((state) => (sessionId ? state.status[sessionId] ?? "idle" : "idle"))
+}
+
+/** O workspace que a sessão ENSINA a uma pasta: o repositório principal — um
+ *  chat aberto num worktree pertence à pasta do PROJETO, e é para o principal
+ *  que o mapa automático aponta — mais as pastas extras. */
+function workspaceDaSessao(session: SessionInfo | undefined): string[] | undefined {
+  if (!session || session.mode !== "code" || !session.directory) return undefined
+  return [principalConhecido(session.directory), ...(session.extraDirectories ?? [])]
+}
+
+/**
+ * A pasta guarda o workspace do PRIMEIRO chat que entrou nela e não troca mais.
+ * Os chats dizem onde ela está sendo usada AGORA (e é o mais recente que o "+"
+ * segue); esta memória é o que sobra quando todos eles forem apagados — sem
+ * ela, o "+" de uma pasta vazia herdava o repositório do último chat da tela.
+ */
+function aprenderWorkspaceDaPasta(
+  folderId: string | null | undefined,
+  workspace: string[] | undefined,
+): void {
+  if (!folderId || !workspace?.length) return
+  const { folders } = useSessionStore.getState()
+  if (!folders.some((f) => f.id === folderId && !f.workspace?.length)) return
+  const next = folders.map((f) => (f.id === folderId ? { ...f, workspace } : f))
+  useSessionStore.setState({ folders: next })
+  persistFolders(next)
+  emitChatEvent({ type: "folders", folders: next })
 }

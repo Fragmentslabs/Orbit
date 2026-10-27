@@ -152,6 +152,12 @@ export interface FolderInfo {
    *  chats (arquivados junto). Chats removidos de uma pasta arquivada caem
    *  para os recentes, sem desarquivar. */
   archived: boolean
+  /** Workspace do projeto, gravado pelo PRIMEIRO chat que entrou na pasta
+   *  (repositório principal + extras). Os chats dizem onde a pasta está sendo
+   *  usada AGORA; este campo é a memória dela: com a pasta vazia (todos os
+   *  chats apagados), o "+" volta ao mesmo repositório em vez de herdar o
+   *  workspace da tela. Só nasce em pasta de código. */
+  workspace?: string[]
   createdAt: number
 }
 

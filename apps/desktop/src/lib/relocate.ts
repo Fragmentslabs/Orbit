@@ -109,6 +109,21 @@ export function relocateAutoFolderEntry(
 }
 
 /**
+ * A memória de workspace da pasta (`FolderInfo.workspace`) acompanha o projeto
+ * relocalizado, na posição em que o caminho estava. `null` quando ela não
+ * referencia o caminho — igual ao `relocateSessionFolders`, para a operação
+ * tocar só em quem tem a ver.
+ */
+export function relocateFolderWorkspace(
+  workspace: string[] | undefined,
+  oldPath: string,
+  newPath: string,
+): string[] | null {
+  if (!workspace?.includes(oldPath)) return null
+  return workspace.map((path) => (path === oldPath ? newPath : path))
+}
+
+/**
  * O nome da pasta na sidebar acompanha o projeto: se ele ainda é o derivado do
  * caminho antigo ("meu-app" → "Meu App"), deixá-lo como está faz a pasta mentir
  * sobre o que há dentro depois de relocalizada. Nome editado à mão é decisão da

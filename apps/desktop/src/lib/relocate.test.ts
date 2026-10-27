@@ -5,6 +5,7 @@ import {
   folderBaseName,
   missingFolders,
   relocateAutoFolderEntry,
+  relocateFolderWorkspace,
   relocateSessionFolders,
   relocatedFolderName,
   sessionFolderPaths,
@@ -126,5 +127,19 @@ describe("relocatedFolderName", () => {
 
   it("não devolve nada quando o nome não mudaria", () => {
     expect(relocatedFolderName("Meu App", "/x/meu-app", "/y/meu-app")).toBeNull()
+  })
+})
+
+describe("relocateFolderWorkspace", () => {
+  it("troca o caminho antigo pelo novo, na posição em que estava", () => {
+    expect(relocateFolderWorkspace(["/old/app", "/api"], "/old/app", "/new/app")).toEqual([
+      "/new/app",
+      "/api",
+    ])
+  })
+
+  it("null quando a memória não referencia o caminho (não se mexe no que não tem a ver)", () => {
+    expect(relocateFolderWorkspace(["/api"], "/old/app", "/new/app")).toBeNull()
+    expect(relocateFolderWorkspace(undefined, "/old/app", "/new/app")).toBeNull()
   })
 })

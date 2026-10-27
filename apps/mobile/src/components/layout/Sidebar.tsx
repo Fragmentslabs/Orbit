@@ -339,9 +339,11 @@ export function Sidebar() {
     router.push('/(main)')
   }, [closeSidebar, router])
 
-  /** "+" da pasta: chat novo já apontando para a pasta (e para o diretório do
-   *  chat mais recente dela), como no desktop. A sessão só nasce no 1º envio —
-   *  o pendingFolder guarda o destino até lá. */
+  /** "+" da pasta: chat novo já apontando para a pasta e para o workspace do
+   *  chat mais recente dela — ou, com a pasta VAZIA, para a memória da pasta
+   *  (`folder.workspace`, gravada pelo primeiro chat que entrou nela), como no
+   *  desktop. A sessão só nasce no 1º envio — o pendingFolder guarda o destino
+   *  até lá. */
   const handleNewChatInFolder = useCallback((folder: FolderInfo) => {
     const maisRecente = sessions
       .filter((s) => s.folderId === folder.id)
@@ -349,12 +351,10 @@ export function Sidebar() {
         (melhor, s) => (melhor && s.updatedAt <= melhor.updatedAt ? melhor : s),
         undefined,
       )
-    if (maisRecente?.directory) {
-      useDraftFolders.getState().setFolders([
-        maisRecente.directory,
-        ...(maisRecente.extraDirectories ?? []),
-      ])
-    }
+    const pastas = maisRecente?.directory
+      ? [maisRecente.directory, ...(maisRecente.extraDirectories ?? [])]
+      : folder.workspace
+    if (pastas?.length) useDraftFolders.getState().setFolders(pastas)
     useDraftFolders.getState().setPendingFolder(folder.id)
     if (folder.mode !== mode) setMode(folder.mode)
     closeSidebar()

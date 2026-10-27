@@ -1073,16 +1073,13 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
               // é clicável fora do chat, ex.: na página Esteira) e a sessão só é
               // criada ao enviar a 1ª mensagem.
               setView("chat")
-              const mostRecent = sessions
-                .filter((s) => s.folderId === folder.id)
-                .reduce<SessionInfo | undefined>(
-                  (best, s) => (best && s.updatedAt <= best.updatedAt ? best : s),
-                  undefined,
-                )
-              if (mostRecent?.directory) {
-                setFolders([mostRecent.directory, ...(mostRecent.extraDirectories ?? [])])
-              }
               const store = useSessionStore.getState()
+              // As pastas vêm da PRÓPRIA pasta (o chat mais recente dela ou o
+              // projeto que o mapa automático ainda aponta). Ler o workspace
+              // aqui fazia o "+" de uma pasta vazia herdar o repositório do
+              // último chat aberto — outro projeto.
+              const pastas = store.folderWorkspace(folder.id)
+              if (pastas) setFolders(pastas)
               void store.selectSession(mode, null)
               store.setPendingFolder(folder.id)
             }}
