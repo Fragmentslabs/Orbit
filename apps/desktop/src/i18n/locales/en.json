@@ -591,8 +591,6 @@
     "account": {
       "localAssistant": "Local assistant",
       "byFragmentsLabs": "by Fragments Labs",
-      "myAccount": "My Account",
-      "profile": "Profile",
       "settings": "Settings",
       "changeTheme": "Change theme",
       "light": "Light",

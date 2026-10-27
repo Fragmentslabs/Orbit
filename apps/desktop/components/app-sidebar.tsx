@@ -35,7 +35,6 @@ import {
   Sun,
   Terminal,
   Trash2,
-  User,
   Wand2,
   X,
 } from "lucide-react"
@@ -79,7 +78,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -1443,11 +1441,6 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
         className="w-56"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("sidebar.account.myAccount")}</DropdownMenuLabel>
-          <DropdownMenuItem>
-            <User className="size-4" />
-            {t("sidebar.account.profile")}
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenSettings}>
             <Settings className="size-4" />
             {t("sidebar.account.settings")}
