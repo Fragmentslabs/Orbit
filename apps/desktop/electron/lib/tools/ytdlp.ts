@@ -5,8 +5,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { getAppSettings } from '../app-settings'
-import { saveAudio } from '../audio-store'
-import { saveDocument } from '../media'
+import { AUDIO_SCHEME, audioFilePath } from '../audio-store'
+import { registerAudioMedia, saveDocument } from '../media'
 import { probeMedia } from '../video/ffmpeg'
 import { registerVideo } from '../video/store'
 import { addVideoToGallery } from '../video/video-gallery'
@@ -38,8 +38,8 @@ import { resolveWritePath, type ToolContext } from './context'
  *
  *  - decidir por QUAL transcrição: a legenda que o site já tem (segundos,
  *    sem modelo nenhum) antes de baixar o áudio e passar pelo motor de ditado;
- *  - entregar o resultado no lugar certo para o modo da conversa — player e
- *    galeria no chat, arquivo sob `downloads/` no código;
+ *  - entregar o resultado no lugar certo: o acervo do próprio app e a aba
+ *    Mídia, ou a pasta do projeto quando o pedido diz onde salvar;
  *  - relatar números medidos (duração, tamanho, resolução, idioma da legenda),
  *    nunca o que o modelo de vídeo promete.
  *
@@ -63,7 +63,11 @@ function extOf(file: string): string {
   return path.extname(file).slice(1).toLowerCase()
 }
 
-function chatDir(sessionId: string): string {
+/**
+ * Onde o app guarda o que baixa. Fica no armazenamento dele, nunca na pasta do
+ * projeto — e é isso que faz do arquivo um item do acervo, listável na aba.
+ */
+function downloadsDir(sessionId: string): string {
   if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
   return path.join(app.getPath('userData'), 'orbit-data', 'ytdlp', sessionId)
 }
@@ -80,9 +84,21 @@ function assertLink(url: string): void {
   }
 }
 
+/**
+ * Onde os arquivos caem.
+ *
+ * Sem `outputDir`: o acervo do próprio app (`orbit-data/ytdlp/<sessão>`), nos
+ * DOIS modos. Nada é inventado dentro do projeto do usuário, e o arquivo — por
+ * ser do app — entra na aba Mídia, onde a pessoa o encontra e o apaga.
+ *
+ * `outputDir` explícito é outra coisa: o arquivo vai para a pasta do projeto,
+ * passa a ser do usuário e a galeria NÃO o lista — excluir um item de lá
+ * apagaria um arquivo dele.
+ */
 function outputDirFor(ctx: ToolContext | null, sessionId: string, wanted?: string): string {
-  if (!ctx) return chatDir(sessionId)
-  return resolveWritePath(ctx, wanted?.trim() || 'downloads')
+  const explicit = wanted?.trim()
+  if (ctx && explicit) return resolveWritePath(ctx, explicit)
+  return downloadsDir(sessionId)
 }
 
 async function pruneStale(outDir: string): Promise<void> {
@@ -174,7 +190,12 @@ async function factOf(file: string): Promise<FileFact> {
 
 /** Caminho como o usuário o lê: relativo à pasta de trabalho no código. */
 function shownPath(file: string, ctx: ToolContext | null): string {
-  return ctx ? path.relative(ctx.directory, file) || file : path.basename(file)
+  if (!ctx) return path.basename(file)
+  const rel = path.relative(ctx.directory, file)
+  // Fora das pastas de trabalho (a pasta escolhida para o download, o
+  // armazenamento do app para o transcript) o relativo vira uma escada de
+  // "../": ali o caminho absoluto é o que a pessoa reconhece.
+  return !rel || rel.startsWith('..') || path.isAbsolute(rel) ? file : rel
 }
 
 function describeFacts(facts: FileFact[], ctx: ToolContext | null): string[] {
@@ -226,10 +247,14 @@ export function createYtdlpTools(
 ) {
   const sessionId = scope.sessionId
 
-  /** Vídeo entregue na conversa: galeria no chat, registro do player no código. */
-  const publishVideo = async (file: string): Promise<string | null> => {
+  /**
+   * Vídeo entregue: toca na conversa e, quando o arquivo é do app, entra na aba
+   * Mídia. Arquivo que a pessoa mandou salvar na pasta do projeto fica FORA da
+   * aba — a galeria só lista o que ela mesma apaga.
+   */
+  const publishVideo = async (file: string, owned: boolean): Promise<string | null> => {
     if (!scope.canShow) return null
-    if (ctx) {
+    if (!owned) {
       const { url } = await registerVideo(file, sessionId)
       return url
     }
@@ -237,18 +262,29 @@ export function createYtdlpTools(
     return entry.videoUrl ?? null
   }
 
-  /** Áudio entregue na conversa: uma cópia no acervo (a que toca na resposta). */
-  const publishAudio = async (file: string): Promise<string | null> => {
-    if (!scope.canShow || ctx) return null
-    const bytes = await fs.readFile(file)
-    const saved = await saveAudio(bytes, extOf(file), {
+  /**
+   * Áudio entregue: uma cópia na pasta de áudio do acervo (a que toca na aba).
+   * Cópia de arquivo, não de bytes — um podcast de duas horas não passa pela
+   * memória. Fora do acervo (arquivo do projeto) não entra na aba.
+   */
+  const publishAudio = async (file: string, owned: boolean): Promise<string | null> => {
+    if (!scope.canShow || !owned) return null
+    const id = `aud_${Date.now().toString(36)}${randomBytes(4).toString('hex')}.${extOf(file)}`
+    const dest = audioFilePath(id)
+    await fs.mkdir(path.dirname(dest), { recursive: true })
+    await fs.copyFile(file, dest)
+    const size = (await fs.stat(dest)).size
+    await registerAudioMedia({
+      id,
+      path: dest,
+      size,
       sessionId,
       name: path.basename(file, path.extname(file)),
       source: 'chat',
     })
-    // A cópia do acervo é a que vale; o arquivo baixado só existia para ela.
+    // A cópia do acervo é a que vale; a baixada só existia para ela.
     await fs.rm(file, { force: true })
-    return saved.url
+    return `${AUDIO_SCHEME}://${id}`
   }
 
   /**
@@ -269,7 +305,7 @@ export function createYtdlpTools(
       'quality caps the resolution (default 1080 — "best" keeps the largest, which can be a very large file). ' +
       'playlist: true downloads every entry (playlistItems "1-10" limits it). maxBytes makes yt-dlp skip anything above the ceiling. ' +
       'cookiesFromBrowser reads the cookies of a browser the user is logged into — only for private, age-restricted or subscriber-only pages. ' +
-      'In code mode the files land in downloads/ under the working folder (or outputDir) and the result lists them; in chat the media appears in your reply and in the chat media. ' +
+      "In code mode the files stay in Orbit's own storage and show up in the Media tab (pass outputDir to write them into the project instead); in chat the media appears in your reply and in the chat media. " +
       'The result reports the measured size, resolution and duration of every file — relay those numbers instead of promising qualities. ' +
       'Downloading may violate a site\'s terms or copyright; it is the user\'s call and their responsibility. ' +
       'For what is SAID in the media, call ytdlp_transcript instead of downloading the video first.',
@@ -296,14 +332,20 @@ export function createYtdlpTools(
             outputDir: z
               .string()
               .optional()
-              .describe('Folder for the files, relative to the working folder. Default downloads/.'),
+              .describe(
+                "Folder for the files, relative to the working folder. Omit it and they stay in Orbit's storage, listed in the Media tab.",
+              ),
           }
         : {}),
     }),
     execute: async (input, { abortSignal }) => {
       assertLink(input.url)
       const kind = input.kind ?? 'video'
-      const outDir = outputDirFor(ctx, sessionId, (input as { outputDir?: string }).outputDir)
+      const wanted = (input as { outputDir?: string }).outputDir?.trim()
+      const outDir = outputDirFor(ctx, sessionId, wanted)
+      // Sem caminho declarado o arquivo é do app (entra na aba Mídia); com
+      // caminho, é arquivo do projeto — toca, mas não entra na aba.
+      const owned = !wanted
       await fs.mkdir(outDir, { recursive: true })
       await pruneStale(outDir)
       const tmp = await makeTmp(outDir)
@@ -337,18 +379,18 @@ export function createYtdlpTools(
       const videos = facts.filter((fact) => fact.kind === 'video')
       const audios = facts.filter((fact) => fact.kind === 'audio')
 
-      // Chat: TODA mídia entra na galeria (senão o que não aparece fica preso
-      // no storage do app, sem o usuário alcançar); a resposta mostra a
-      // primeira de cada tipo. No código o arquivo é do usuário e fica onde
-      // está — só o primeiro vídeo é registrado para tocar.
+      // Arquivo do app: TODA mídia entra na galeria (senão o que foi baixado
+      // fica preso no storage, sem o usuário alcançar pela aba), e a resposta
+      // mostra a primeira de cada tipo. Arquivo do projeto: só registra para
+      // tocar — a galeria não lista o que não é dela.
       let videoUrl: string | null = null
       let audioUrl: string | null = null
       for (const fact of videos) {
-        const url = await publishVideo(fact.path)
+        const url = await publishVideo(fact.path, owned)
         if (!videoUrl) videoUrl = url
       }
       for (const fact of audios) {
-        const url = await publishAudio(fact.path)
+        const url = await publishAudio(fact.path, owned)
         if (!audioUrl) audioUrl = url
       }
 
@@ -363,6 +405,7 @@ export function createYtdlpTools(
       if (!facts.length && moved.length) lines.push(`${moved.length} file(s): ${moved.map((file) => shownPath(file, ctx)).join(', ')}.`)
       if (ctx) {
         lines.push(`Folder: ${shownPath(outDir, ctx)}.`)
+        if (owned) lines.push('The media is in the Media tab of the side panel too.')
         if (facts.some((fact) => fact.size > 500 * 1024 * 1024)) {
           lines.push('Note: this is a large file — say how big it is instead of leaving the user to discover it.')
         }
@@ -480,14 +523,19 @@ export function createYtdlpTools(
               savePath: z
                 .string()
                 .optional()
-                .describe('Where to write the transcript (Markdown), relative to the working folder. Default downloads/<title>.transcript.md.'),
+                .describe(
+                  "Where to write the transcript (Markdown), relative to the working folder. Omit it and the text stays in Orbit's own storage, never in the project.",
+                ),
             }
           : {}),
       }),
       execute: async (input, { abortSignal }) => {
         assertLink(input.url)
         const mode = input.mode ?? 'auto'
-        const outDir = outputDirFor(ctx, sessionId, undefined)
+        // Temporários e o texto final ficam na pasta interna da sessão: um
+        // transcript não inventa pasta dentro do projeto. Para ter o arquivo no
+        // repositório, o agente passa savePath — aí a escolha está declarada.
+        const outDir = downloadsDir(sessionId)
         await fs.mkdir(outDir, { recursive: true })
         await pruneStale(outDir)
         const tmp = await makeTmp(outDir)
