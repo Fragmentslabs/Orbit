@@ -316,6 +316,18 @@ export interface FilePart {
    * própria na galeria.
    */
   mediaId?: string
+  /**
+   * O conteúdo deste anexo vale só no TURNO EM QUE CHEGOU (visão nativa).
+   *
+   * A part continua na mensagem — a bolha mostra a imagem —, mas o modelo
+   * deixa de recebê-la nos turnos seguintes: o histórico fica com a linha de
+   * referência em texto, e o agente volta à imagem por ela quando precisar
+   * (describe_image/image_edit). Sem isto, uma foto colada era reenviada em
+   * TODO turno, para sempre — o anexo mais caro da conversa era justamente o
+   * mais antigo. Só é marcado quando existe a referência estável: sem ela,
+   * perder a imagem seria pior que pagar por ela.
+   */
+  turnOnly?: boolean
 }
 
 /** MIME marcador de um elemento selecionado no browser do painel (modo
@@ -655,6 +667,25 @@ export type MessagePart =
   | AgentPart
   | ArtifactPart
   | DocumentPart
+
+/**
+ * As parts de arquivo que vão AO MODELO numa mensagem do usuário.
+ *
+ * No chat, o modelo nunca recebe os bytes de um anexo: ele recebe um texto —
+ * o trecho de abertura do documento, a nota da imagem/áudio/vídeo, ou a linha
+ * de referência da galeria. O que chega como part de arquivo é só quando ele
+ * precisa MESMO dos pixels (visão nativa), e mesmo aí só no primeiro turno de
+ * um anexo `turnOnly` — depois disso, o indicador é o texto.
+ *
+ * Chip é decoração da UI (o conteúdo já está na TextPart irmã), e `url` vazio
+ * é o resquício dos chips gravados antes da flag existir.
+ */
+export function modelFileParts(parts: MessagePart[], isCurrentTurn: boolean): FilePart[] {
+  return parts.filter(
+    (p): p is FilePart =>
+      p.type === "file" && !p.chip && p.url !== "" && (isCurrentTurn || !p.turnOnly),
+  )
+}
 
 export interface TokenUsage {
   /** Soma de todos os steps do turno (tool loop) — reflete custo/billing, NÃO

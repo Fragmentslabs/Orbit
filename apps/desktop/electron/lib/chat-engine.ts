@@ -21,6 +21,7 @@ import {
   DOCUMENT_QUOTE_MIME,
   formatMotionQuoteText,
   formatDesignQuoteText,
+  modelFileParts,
   StorageKeys,
   type QuotePayload,
 } from '@shared/chat'
@@ -705,7 +706,17 @@ async function preprocessMediaRefAttachment(
       ]
     }
     if (deps.modelVision && dataUrl && media) {
-      const withData: FilePart = { ...file, mime: media.contentType, url: dataUrl }
+      // Visão nativa: o modelo vê os pixels NO TURNO EM QUE A IMAGEM CHEGA.
+      // Nos seguintes fica só a linha de referência — a imagem já está na
+      // galeria, com id, e o agente volta a ela com describe_image/image_edit
+      // se precisar. O `refLine` vazio desarma a marca: sem referência, perder
+      // a imagem seria pior que pagar por ela em todo turno.
+      const withData: FilePart = {
+        ...file,
+        mime: media.contentType,
+        url: dataUrl,
+        ...(refLine ? { turnOnly: true } : {}),
+      }
       return refLine
         ? [withData, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
         : [withData]
@@ -920,13 +931,36 @@ async function preprocessAttachment(
     }
   }
 
+  // Texto anexado (.md, .txt, .json, código, o texto colado no composer):
+  // MESMO caminho do PDF — vira documento da conversa, e a mensagem leva só o
+  // trecho de abertura. Antes o arquivo inteiro era despejado numa TextPart,
+  // que o toModelMessages reenvia a cada turno: um .md de 200 KB ficava no
+  // contexto para sempre, enquanto o PDF ao lado já era paginado. Conteúdo
+  // pequeno continua vindo inteiro (ver INLINE_DOC_CHARS em
+  // documentAttachmentPreview) — o que muda é que ele passa a existir também
+  // na aba Fontes, alcançável depois do turno em que chegou.
   if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(filename)) {
     const text = decodeDataUrlText(file.url)
     if (text != null) {
-      return [
-        attachmentChip(file),
-        { id: newId('prt'), type: 'text', text: `[File attached: ${filename || 'unnamed'}]\n\n${text}`, state: 'done', source: 'attachment' },
-      ]
+      try {
+        const { doc, pages } = await saveSessionDocument(
+          deps.sessionId ?? 'sem-sessao',
+          Buffer.from(text, 'utf8'),
+          filename || 'texto',
+          'text',
+        )
+        return [
+          attachmentChip(file, undefined, doc.id),
+          { id: newId('prt'), type: 'text', text: documentAttachmentPreview(doc, pages), state: 'done', source: 'attachment' },
+        ]
+      } catch {
+        // Sem documento (disco indisponível) o texto ainda pode viajar: é o
+        // comportamento de antes, e perder o anexo seria pior.
+        return [
+          attachmentChip(file),
+          { id: newId('prt'), type: 'text', text: `[File attached: ${filename || 'unnamed'}]\n\n${text}`, state: 'done', source: 'attachment' },
+        ]
+      }
     }
   }
 
@@ -998,9 +1032,13 @@ async function preprocessAttachment(
       ]
     }
     if (deps.modelVision) {
+      // Mesma regra do anexo por referência: os pixels valem neste turno; nos
+      // seguintes, o indicador é a linha de referência da galeria (ver
+      // FilePart.turnOnly e modelFileParts).
+      const firstLook: FilePart = refLine ? { ...file, turnOnly: true } : file
       return refLine
-        ? [file, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
-        : [file]
+        ? [firstLook, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
+        : [firstLook]
     }
     const filename = file.filename ?? ''
     return [
@@ -1129,7 +1167,12 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     pending = []
     return notes
   }
-  for (const message of window) {
+  // O turno corrente é a ÚLTIMA mensagem de usuário: é só nele que um anexo
+  // `turnOnly` (imagem de visão nativa) ainda vai como arquivo — nos turnos
+  // seguintes ele já foi visto, e o que continua valendo é a linha de
+  // referência em texto (ver modelFileParts em @shared/chat).
+  const currentTurn = window.map((m) => m.role).lastIndexOf('user')
+  for (const [index, message] of window.entries()) {
     if (message.role === 'assistant') {
       const notes = engineAnnotations(message)
       if (notes) pending.push(notes)
@@ -1159,10 +1202,9 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     // Chips (flag `chip`) são só decoração da UI — o conteúdo real já está no
     // TextPart irmão extraído em preprocessAttachment; incluí-los aqui
     // duplicaria uma nota vazia no lugar do texto já extraído. O `url !== ''`
-    // cobre chips antigos persistidos antes da flag existir.
-    const files = message.parts.filter(
-      (p): p is FilePart => p.type === 'file' && !p.chip && p.url !== '',
-    )
+    // cobre chips antigos persistidos antes da flag existir, e `turnOnly` para
+    // de reenviar a imagem depois do turno em que ela chegou.
+    const files = modelFileParts(message.parts, index === currentTurn)
     if (message.role === 'user' && files.length > 0) {
       const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
       if (text.trim()) content.push({ type: 'text', text })

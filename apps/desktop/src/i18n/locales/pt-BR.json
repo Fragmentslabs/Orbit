@@ -1058,6 +1058,7 @@
     "errorAccept": "Nenhum arquivo corresponde aos tipos aceitos.",
     "errorMaxFileSize": "Todos os arquivos excedem o tamanho máximo.",
     "errorMaxFiles": "Arquivos demais. Alguns não foram adicionados.",
+    "pastedTextName": "Texto colado ({{size}}).txt",
     "errorPastedVideo": "\"{{name}}\" é um vídeo sem arquivo no disco (colado) e grande demais para anexar. Salve o vídeo e anexe o arquivo."
   },
   "webPreview": {

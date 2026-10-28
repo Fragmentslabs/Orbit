@@ -4,6 +4,7 @@ import type { FileUIPart } from "ai"
 import { useTranslation } from "react-i18next"
 import {
   CornerDownLeftIcon,
+  FileTextIcon,
   ImageIcon,
   Loader2Icon,
   MicIcon,
@@ -86,7 +87,65 @@ import {
  * que é uma REFERÊNCIA à galeria (arrastado da aba Mídia): nesse caso `url` é só
  * o preview e os bytes nunca passam pelo renderer.
  */
-export type PromptInputFile = FileUIPart & { id: string; mediaId?: string }
+export type PromptInputFile = FileUIPart & {
+  id: string
+  mediaId?: string
+  /**
+   * Texto de origem quando o anexo nasceu de um PASTE grande (ver
+   * PASTE_AS_SOURCE_CHARS). Vive só no composer, para a prévia do hover: a
+   * mensagem leva o arquivo, não este campo (toFileParts não o repassa).
+   */
+  pastedText?: string
+}
+
+/**
+ * A partir daqui, texto colado no campo vira ANEXO em vez de entrar no texto.
+ *
+ * Um paste desse tamanho é material, não frase: como anexo ele vira fonte da
+ * conversa no envio — o main guarda o texto e a mensagem leva só o trecho de
+ * abertura (ver preprocessAttachment) —, em vez de ficar no histórico sendo
+ * reenviado ao modelo a cada turno. O corte é baixo o bastante para pegar um
+ * documento colado e alto o bastante para não transformar três linhas num
+ * anexo.
+ */
+export const PASTE_AS_SOURCE_CHARS = 1500
+
+/** Quanto do texto aparece na prévia do hover (o resto está na fonte). */
+const PASTED_PREVIEW_CHARS = 1200
+
+/** Texto de origem de cada arquivo sintético de paste, pelo próprio `File`. */
+const pastedTexts = new WeakMap<File, string>()
+
+/** "1,4 KB" — para o nome do anexo (o tamanho em BYTES, não em caracteres:
+ *  um texto em português ocupa mais bytes do que a contagem de letras sugere). */
+function pastedSize(text: string): string {
+  const bytes = new TextEncoder().encode(text).length
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  return `${kb.toLocaleString(i18n.language, { maximumFractionDigits: kb < 10 ? 1 : 0 })} KB`
+}
+
+/** O `File` que representa um texto colado — o nome vira o título da fonte.
+ *  `.txt` de propósito: `.md` cai no caminho de skill do engine (frontmatter),
+ *  e um texto colado não é uma skill. */
+function pastedTextFile(text: string): File {
+  return new File([text], i18n.t("attachments.pastedTextName", { size: pastedSize(text) }), {
+    type: "text/plain",
+  })
+}
+
+/** Um anexo do composer a partir de um arquivo escolhido, arrastado ou colado. */
+function fileAttachment(file: File): PromptInputFile {
+  const pasted = pastedTexts.get(file)
+  return {
+    id: nanoid(),
+    type: "file" as const,
+    url: objectUrlFor(file),
+    mediaType: file.type,
+    filename: file.name,
+    ...(pasted !== undefined ? { pastedText: pasted } : {}),
+  }
+}
 
 /** O que o tile da aba Mídia manda no drop — a identidade do item, nunca bytes. */
 export interface MediaAttachmentRef {
@@ -218,17 +277,7 @@ export function PromptInputProvider({
       return
     }
 
-    setAttachmentFiles(prev =>
-      prev.concat(
-        incoming.map(file => ({
-          id: nanoid(),
-          type: "file" as const,
-          url: objectUrlFor(file),
-          mediaType: file.type,
-          filename: file.name,
-        })),
-      ),
-    )
+    setAttachmentFiles(prev => prev.concat(incoming.map(fileAttachment)))
   }, [])
 
   const addMedia = useCallback((ref: MediaAttachmentRef) => {
@@ -380,6 +429,10 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                               src={data.url}
                               width={20}
                             />
+                          ) : data.pastedText !== undefined ? (
+                            <div className="flex size-5 items-center justify-center text-muted-foreground">
+                              <FileTextIcon className="size-3" />
+                            </div>
                           ) : (
                             <div className="flex size-5 items-center justify-center text-muted-foreground">
                               <PaperclipIcon className="size-3" />
@@ -423,6 +476,13 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
               )}
             </div>
           </div>
+          {/* Paste grande: o chip guarda o texto, e o hover mostra o começo —
+              o resto continua na fonte, depois do envio. */}
+          {data.pastedText !== undefined && (
+            <pre className="max-h-40 w-72 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-2 font-mono text-[11px] leading-snug text-muted-foreground">
+              {data.pastedText.slice(0, PASTED_PREVIEW_CHARS)}
+            </pre>
+          )}
         </div>
       </PromptInputHoverCardContent>
       </PromptInputHoverCard>
@@ -596,16 +656,7 @@ export const PromptInput = ({
             message: t("attachments.errorMaxFiles"),
           })
         }
-        const next: PromptInputFile[] = []
-        for (const file of capped) {
-          next.push({
-            id: nanoid(),
-            type: "file",
-            url: objectUrlFor(file),
-            mediaType: file.type,
-            filename: file.name,
-          })
-        }
+        const next: PromptInputFile[] = capped.map(fileAttachment)
         return prev.concat(next)
       })
     },
@@ -1014,6 +1065,19 @@ export const PromptInputTextarea = ({
     if (files.length > 0) {
       event.preventDefault()
       attachments.add(files)
+      return
+    }
+
+    // Texto colado GRANDE vira anexo, não texto: o campo é para a mensagem, e
+    // um documento inteiro ali seria reenviado ao modelo em todo turno. Vira
+    // um chip como qualquer arquivo — e, no envio, uma fonte da conversa
+    // (preprocessAttachment guarda o texto e manda só a abertura ao modelo).
+    const text = event.clipboardData?.getData("text/plain") ?? ""
+    if (text.trim().length >= PASTE_AS_SOURCE_CHARS) {
+      event.preventDefault()
+      const file = pastedTextFile(text)
+      pastedTexts.set(file, text)
+      attachments.add([file])
     }
   }
 
