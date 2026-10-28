@@ -1574,8 +1574,14 @@ export function FileBrowser({
               </ScrollArea>
             )}
           </TabsContent>
+          {/* `flex`, e não um bloco: a busca é um flex item que precisa de
+              altura DEFINIDA para o `flex-1` valer. Como bloco, a altura dela
+              virava automática, o `h-full` do ScrollArea resolvia contra `auto`
+              e a árvore era cortada pelo `overflow-hidden` da aba, sem rolar —
+              o que só aparecia quando o conteúdo passava da altura do painel
+              (uma pasta a mais bastava). */}
           <TabsContent
-            className="min-h-0 min-w-0 flex-1 overflow-hidden"
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             value="files"
           >
             {/* A busca é o topo do índice, e a árvore é o estado dela sem
@@ -1592,7 +1598,10 @@ export function FileBrowser({
               onHighlightQuery={onHighlightQuery}
               onReplaced={onReplaced}
             >
-              <ScrollArea className="h-full">
+              {/* Flex item (`flex-1`) em vez de `h-full`: a altura vem da
+                  corrente de flex da aba, e não de uma porcentagem que depende
+                  de o pai ter altura própria — o mesmo padrão do histórico. */}
+              <ScrollArea className="min-h-0 flex-1">
                 <FileTree
                   className="rounded-none border-0 bg-transparent mr-2 "
                   expanded={expandedPaths}
