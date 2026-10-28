@@ -26,6 +26,7 @@
 import fs from "fs"
 import path from "path"
 import { loadTextToSpeech, loadVoiceStyle } from "./helper.js"
+import { splitForStreaming } from "./split.mjs"
 
 // ------------------------------------------------------------------ argumentos
 function arg(nome, padrao) {
@@ -148,33 +149,6 @@ function floatToPcm16(samples) {
     buf.writeInt16LE(Math.floor(s * 32767), i * 2)
   }
   return buf
-}
-
-/**
- * Divide o texto em pedaços para a síntese em fluxo.
- *
- * Só corta em FIM DE FRASE — o `call()` do motor insere 0,3 s de silêncio entre
- * os pedaços, então um corte no meio de uma frase criaria uma pausa onde a fala
- * não tem uma. O `maxChars` é um ALVO, não um limite rígido.
- */
-function splitForStreaming(text, maxChars = MAX_CHARS) {
-  const clean = String(text).replace(/\s+/g, " ").trim()
-  if (!clean) return []
-  const sentences = clean.match(/[^.!?…]+[.!?…]+[»”’")\]]*(?=\s|$)|[^.!?…]+$/g) || [clean]
-  const pieces = []
-  let current = ""
-  for (const raw of sentences) {
-    const sentence = raw.trim()
-    if (!sentence) continue
-    if (!current) current = sentence
-    else if (current.length + 1 + sentence.length <= maxChars) current += " " + sentence
-    else {
-      pieces.push(current)
-      current = sentence
-    }
-  }
-  if (current) pieces.push(current)
-  return pieces
 }
 
 // -------------------------------------------------------------- estado do motor

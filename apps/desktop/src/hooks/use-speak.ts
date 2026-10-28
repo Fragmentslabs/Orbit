@@ -34,8 +34,16 @@ const CHANNEL = {
 /** Folga entre pedaços que chegam atrasados e o agendamento em si. */
 const SCHEDULE_LEAD_SECONDS = 0.02
 
-/** Quanto esperar, depois do fim previsto do áudio agendado, por um `done`. */
-const DONE_GRACE_SECONDS = 5
+/**
+ * Quanto esperar, depois do fim previsto do áudio agendado, por um `done`.
+ *
+ * O motor local pode levar MAIS que o tempo real para sintetizar a frase
+ * seguinte (RTF > 1 em máquinas sem aceleração). Cinco segundos cortavam a
+ * continuação no meio: o primeiro pedaço tocava, o segundo ainda estava sendo
+ * gerado, e a rede de segurança encerrava a fala. É uma rede para um `done`
+ * perdido, não um limite de latência — o motor já tem o próprio timeout.
+ */
+const DONE_GRACE_SECONDS = 60
 
 /** Preferências de voz (bloco `voice.tts` do AppSettings) já resolvidas. */
 export interface TtsPrefs {
@@ -545,9 +553,10 @@ export function useSpeak() {
   }, [finish, getPlayer])
 
   /**
-   * Rede de segurança para um `done` que nunca chega: dispara pouco depois do
-   * fim do áudio já agendado, e é re-armada a cada pedaço (o prazo acompanha a
-   * fila, então um bloco final longo não é cortado por ela).
+   * Rede de segurança para um `done` que nunca chega: dispara depois do fim do
+   * áudio já agendado com uma folga larga, e é re-armada a cada pedaço (o prazo
+   * acompanha a fila). A folga larga é de propósito: enquanto o motor sintetiza
+   * a próxima frase, o silêncio é esperado e não pode virar corte.
    */
   const armGuard = useCallback(() => {
     // Fala contínua aberta: o agente pode demorar a mandar a próxima frase, e
