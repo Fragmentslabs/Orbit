@@ -818,6 +818,10 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
             >
               {isSelected && <Check className="size-3 text-primary" />}
             </button>
+          ) : inCallHere ? (
+            // Chamada nesta conversa: o telefone TOMA o lugar do balão de chat
+            // em vez de somar mais um ícone na linha.
+            <Phone aria-label={t("voice.call.inCall")} className="size-4 shrink-0 text-primary" />
           ) : (
             <Icon className="size-4 shrink-0" />
           )}
@@ -840,16 +844,6 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           )}
           {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
             <span className="size-2 shrink-0 rounded-full bg-primary" />
-          )}
-          {inCallHere && (
-            <span
-              role="img"
-              aria-label={t("voice.call.inCall")}
-              title={t("voice.call.inCall")}
-              className="flex size-3.5 shrink-0 items-center justify-center text-primary"
-            >
-              <Phone aria-hidden className="size-3" />
-            </span>
           )}
           {trailing}
         </div>
