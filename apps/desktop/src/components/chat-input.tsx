@@ -169,26 +169,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     computer: computer.active || undefined,
   }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers, computer.active])
 
-  /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
-   *  `voiceCall` para o agente responder curto e falado. */
-  const submitVoice = useCallback(
-    (text: string): boolean => {
-      if (noProvider) {
-        onProviderBlocked?.()
-        return false
-      }
-      const options = { ...buildOptions(), voiceCall: true }
-      if (busy) {
-        if (!sessionId) return false
-        enqueueForSend(sessionId, text, options, mode, { files: [] })
-        return true
-      }
-      void onSubmit(text, options)
-      return true
-    },
-    [noProvider, onProviderBlocked, buildOptions, busy, sessionId, enqueueForSend, mode, onSubmit],
-  )
-  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. */
+  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. O
+   *  estado de ocupado é lido do store no instante da fala — a chamada pode
+   *  estar rodando com o composer do dono desmontado, então nada aqui pode
+   *  depender do chat que estiver aberto. */
   const submitVoiceTo = useCallback(
     (targetSessionId: string, text: string): boolean => {
       if (noProvider) {
@@ -196,10 +180,21 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         return false
       }
       const options = { ...buildOptions(), voiceCall: true }
+      const statusNow = useSessionStore.getState().status[targetSessionId]
+      const busyNow = statusNow === "submitted" || statusNow === "streaming" || statusNow === "cancelling" || statusNow === "fallback"
+      if (busyNow) {
+        enqueueForSend(targetSessionId, text, options, "chat", { files: [] })
+        return true
+      }
       void sendMessage("chat", text, { options, sessionId: targetSessionId, files: [] })
       return true
     },
-    [noProvider, onProviderBlocked, buildOptions, sendMessage],
+    [noProvider, onProviderBlocked, buildOptions, enqueueForSend, sendMessage],
+  )
+  /** O submit da chamada DESTE composer, preso à sessão dele. */
+  const submitVoiceToSession = useCallback(
+    (text: string): boolean => (sessionId ? submitVoiceTo(sessionId, text) : false),
+    [sessionId, submitVoiceTo],
   )
   /** Chat novo: cria a sessão dona da chamada antes de ligar. */
   const createCallSession = useCallback(async () => {
@@ -213,15 +208,15 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const voiceCall = useHostedVoiceCallControl({
     sessionId,
     mode: "chat",
-    submit: submitVoice,
+    submit: submitVoiceToSession,
     createCallSession,
   })
   // O composer da sessão da chamada mantém o host com o submit mais recente
   // (pastas/modos/fila mudam). A chamada em si nunca muda de destinatário.
   const registerVoiceSubmit = voiceCall.registerSubmit
   useEffect(() => {
-    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoice)
-  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoice])
+    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoiceToSession)
+  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoiceToSession])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {

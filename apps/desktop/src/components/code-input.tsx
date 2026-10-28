@@ -228,28 +228,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     const [directory, ...extraDirectories] = folders
     return { directory, extraDirectories }
   }, [folders])
-  /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
-   *  `voiceCall` para o agente responder curto e falado. */
-  const submitVoice = useCallback(
-    (text: string): boolean => {
-      if (noProvider) {
-        onProviderBlocked?.()
-        return false
-      }
-      if (folders.length === 0) return false
-      const options = { ...buildOptions(), voiceCall: true }
-      const { directory, extraDirectories } = getDirs()
-      if (busy) {
-        if (!sessionId) return false
-        enqueueForSend(sessionId, text, options, mode, { directory, extraDirectories, files: [] })
-        return true
-      }
-      void onSubmit(text, options, directory, extraDirectories)
-      return true
-    },
-    [noProvider, onProviderBlocked, folders.length, buildOptions, getDirs, busy, sessionId, enqueueForSend, mode, onSubmit],
-  )
-  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. */
+  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. O
+   *  estado de ocupado é lido do store no instante da fala — a chamada pode
+   *  estar rodando com o composer do dono desmontado, então nada aqui pode
+   *  depender do chat que estiver aberto. */
   const submitVoiceTo = useCallback(
     (targetSessionId: string, text: string): boolean => {
       if (noProvider) {
@@ -257,11 +239,23 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         return false
       }
       const { directory, extraDirectories } = getDirs()
+      if (!directory) return false
       const options = { ...buildOptions(), voiceCall: true }
+      const statusNow = useSessionStore.getState().status[targetSessionId]
+      const busyNow = statusNow === "submitted" || statusNow === "streaming" || statusNow === "cancelling" || statusNow === "fallback"
+      if (busyNow) {
+        enqueueForSend(targetSessionId, text, options, "code", { directory, extraDirectories, files: [] })
+        return true
+      }
       void sendMessage("code", text, { options, sessionId: targetSessionId, directory, extraDirectories, files: [] })
       return true
     },
-    [noProvider, onProviderBlocked, getDirs, buildOptions, sendMessage],
+    [noProvider, onProviderBlocked, getDirs, buildOptions, enqueueForSend, sendMessage],
+  )
+  /** O submit da chamada DESTE composer, preso à sessão dele. */
+  const submitVoiceToSession = useCallback(
+    (text: string): boolean => (sessionId ? submitVoiceTo(sessionId, text) : false),
+    [sessionId, submitVoiceTo],
   )
   /** Chat de código novo: cria a sessão dona da chamada antes de ligar. */
   const createCallSession = useCallback(async () => {
@@ -277,15 +271,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const voiceCall = useHostedVoiceCallControl({
     sessionId,
     mode: "code",
-    submit: submitVoice,
+    submit: submitVoiceToSession,
     createCallSession,
   })
   // Mesmo contrato do input do chat: o composer da chamada registra o submit
   // atual, mas a chamada continua presa à sessão em que nasceu.
   const registerVoiceSubmit = voiceCall.registerSubmit
   useEffect(() => {
-    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoice)
-  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoice])
+    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoiceToSession)
+  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoiceToSession])
   const selections = usePanelStore((s) => s.selections)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
