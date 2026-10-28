@@ -22,6 +22,7 @@ import { WorktreeSelector } from "@/src/components/worktree-selector"
 import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { ComputerChip } from "@/src/components/computer-chip"
+import { VoiceCallBadge } from "@/src/components/voice-call-badge"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -160,6 +161,9 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
       {extra}
       {sessionId && <BrowserTestChip sessionId={sessionId} compact className="self-center" />}
       {sessionId && <ComputerChip sessionId={sessionId} />}
+      {/* Chamada em curso fora da conversa dela: badge no header (o painel do
+          composer só existe na própria conversa da chamada). */}
+      <VoiceCallBadge activeSessionId={sessionId} />
       {/* O menu da sessão fica no grupo da direita, colado ao botão do painel:
           fora do trecho elástico, ele não se desloca com o título nem com a
           régua de pastas (que crescem e encolhem no meio do header), e o menu

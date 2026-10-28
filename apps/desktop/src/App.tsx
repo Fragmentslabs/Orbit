@@ -32,7 +32,6 @@ import { WorkspaceSearchDialog } from "@/src/components/workspace-search-dialog"
 import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store"
 import { ChatSearch } from "@/src/components/chat-search"
 import { VoiceCallProvider } from "@/src/components/voice-call-host"
-import { VoiceCallWidget } from "@/src/components/voice-call-widget"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { LinkRouter } from "@/src/components/link-router"
 
@@ -367,7 +366,6 @@ function Layout() {
                     <ChatView />
                   )}
                 </div>
-                <VoiceCallWidget activeSessionId={activeSession?.id} view={view} />
               </main>
           </Panel>
           {rightPanelOpen && (

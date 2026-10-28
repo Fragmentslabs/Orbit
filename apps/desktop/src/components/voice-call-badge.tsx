@@ -1,0 +1,201 @@
+import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { ArrowUpRight, ChevronDown, Hand, Phone, PhoneOff } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CallCaption } from "@/src/components/voice-call"
+import { useVoiceCallHost } from "@/src/components/voice-call-host"
+import { cn } from "@/lib/utils"
+
+/**
+ * Badge da chamada no header, no mesmo desenho do chip "Controlando <app>"
+ * do Computer Use: um pill com o telefone e o pulso, que no hover (ou clique)
+ * abre para BAIXO o card da chamada com fase, legenda e controles.
+ *
+ * Some quando a pessoa está na própria conversa da chamada — lá o painel do
+ * composer é o lugar certo — e aparece em qualquer outra conversa ou aba,
+ * inclusive nas páginas sem composer (memórias, modelos, ferramentas…).
+ */
+
+/** Espera do hover antes de abrir: passar o mouse pelo header a caminho de outra coisa não abre nada. */
+const PEEK_OPEN_MS = 300
+/** Tolerância ao sair: dá tempo de levar o mouse do chip até os botões do card. */
+const PEEK_CLOSE_MS = 200
+
+export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }) {
+  const { t } = useTranslation()
+  const host = useVoiceCallHost()
+  const { call, callSessionId, callSessionTitle, openCall } = host
+  const [held, setHeld] = useState(false)
+  const [peek, setPeek] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // A chamada acabou: nada fica aberto para a próxima vez.
+  useEffect(() => {
+    if (call.active) return
+    setHeld(false)
+    setPeek(false)
+  }, [call.active])
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
+
+  if (!call.active) return null
+
+  // Na conversa da chamada o painel do composer é o lugar certo; o badge só
+  // serve quando a pessoa está em outra conversa/aba.
+  if (callSessionId != null && activeSessionId === callSessionId) return null
+
+  const phase = call.phase
+  const caption = phase === "speaking" ? call.caption : null
+  const text = phase === "listening" ? call.partial : phase === "thinking" ? call.heard : call.saying
+  const placeholder =
+    phase === "listening" ? t("voice.call.listeningShort") : phase === "thinking" ? t("voice.call.thinking") : t("voice.call.speaking")
+  const errorText = call.error === "reply" ? t("voice.call.replyError") : call.error
+  const title = callSessionTitle || t("voice.call.inCall")
+
+  // O texto do pill É o indicador de estado: "Ouvindo" e "Falando" dividem o
+  // mesmo dourado e os mesmos três pontinhos — só o verbo muda. "Pensando"
+  // fica em cinza e sem pontinhos: ali não há som acontecendo.
+  const stateLabel =
+    phase === "listening"
+      ? t("voice.call.listeningShort")
+      : phase === "speaking"
+        ? t("voice.call.speaking")
+        : phase === "thinking"
+          ? t("voice.call.thinking")
+          : null
+  const stateDots = phase === "listening" || phase === "speaking"
+
+  const schedule = (next: boolean, ms: number) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setPeek(next), ms)
+  }
+  const hover = {
+    onMouseEnter: () => schedule(true, PEEK_OPEN_MS),
+    onMouseLeave: () => schedule(false, PEEK_CLOSE_MS),
+  }
+  const open = held || peek
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) {
+          if (details.reason === "trigger-press") setHeld(true)
+          return
+        }
+        // Clique no chip com o card só espiando: fixa em vez de fechar.
+        if (details.reason === "trigger-press" && !held && peek) {
+          setHeld(true)
+          return
+        }
+        setHeld(false)
+        setPeek(false)
+      }}
+    >
+      <div
+        {...hover}
+        title={title}
+        className="inline-flex max-w-full items-center self-center rounded-full border border-primary/60 bg-primary/10 shadow-sm backdrop-blur"
+      >
+        <PopoverTrigger
+          aria-label={t("voice.call.inCall")}
+          className="inline-flex min-w-0 items-center gap-1.5 rounded-full py-0.5 pl-2 pr-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          <Phone aria-hidden className="size-3.5 shrink-0 text-primary" />
+          {stateLabel ? (
+            <span
+              className={cn(
+                "hidden items-center gap-1 whitespace-nowrap @lg:inline-flex",
+                phase === "thinking" ? "text-muted-foreground italic" : "text-primary",
+              )}
+            >
+              {stateDots ? stateLabel.replace(/\s*…$/, "") : stateLabel}
+              {stateDots && (
+                <span aria-hidden className="voice-state-dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="hidden max-w-40 truncate @lg:inline">{title}</span>
+          )}
+          <ChevronDown className={cn("size-3 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </PopoverTrigger>
+      </div>
+      <PopoverContent align="end" side="bottom" sideOffset={6} className="w-80 p-2.5" {...hover}>
+        <div className="flex items-center gap-2">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Phone className="size-3" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium">{title}</p>
+            <p className="text-[11px] text-muted-foreground">{placeholder}</p>
+          </div>
+        </div>
+
+        <div aria-live="polite" className="mt-2 min-w-0">
+          {errorText && !text ? (
+            <p className="line-clamp-2 text-xs leading-snug text-destructive">{errorText}</p>
+          ) : caption ? (
+            <CallCaption lines={caption.lines} current={caption.current} />
+          ) : (
+            // Mesma altura da legenda para o card não pular quando a fala começa.
+            <div title={text || placeholder} className="flex h-[2.75em] min-w-0 items-end overflow-hidden text-xs leading-snug">
+              <span
+                className={cn(
+                  "line-clamp-2",
+                  !text
+                    ? "text-muted-foreground"
+                    : phase === "thinking" || call.waiting
+                      ? "text-muted-foreground italic"
+                      : "",
+                )}
+              >
+                {text || placeholder}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openCall}
+            disabled={!callSessionId}
+            className="flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="truncate">{t("voice.call.open")}</span>
+            <ArrowUpRight className="size-3.5 shrink-0" />
+          </button>
+          {phase !== "listening" && (
+            <button
+              type="button"
+              onClick={call.interrupt}
+              title={t("voice.call.interrupt")}
+              aria-label={t("voice.call.interrupt")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Hand className="size-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={call.hangUp}
+            title={t("voice.call.hangUp")}
+            aria-label={t("voice.call.hangUp")}
+            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
+          >
+            <PhoneOff className="size-3.5" />
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
