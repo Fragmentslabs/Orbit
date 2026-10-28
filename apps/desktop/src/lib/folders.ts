@@ -84,26 +84,73 @@ export type GitReposResult =
   { ok: true; repos: GitRepoEntry[] } | { ok: false; error: string };
 
 /**
- * O repositório dono de um caminho, ou `null` se nenhum o contém.
+ * Qual das caminhos contém o arquivo, ou `null` se nenhum o contém.
  *
  * O de prefixo MAIS LONGO, e não o primeiro que casar: num espaço onde a pasta
  * raiz também é repo, o caminho dela é prefixo de todo repo aninhado — e
- * `front/src/x.ts` pertence ao `front`, não à raiz.
+ * `front/src/x.ts` pertence ao `front`, não à raiz. Vale igual para as pastas
+ * de trabalho: uma pasta anexada que esteja dentro da principal é a dona dos
+ * arquivos dela.
  */
+export function folderForPath(
+  folders: string[],
+  filePath: string,
+): string | null {
+  const target = filePath.replace(/\\/g, "/");
+  let best: string | null = null;
+  let bestLen = -1;
+  for (const folder of folders) {
+    const root = folder.replace(/[\\/]+$/, "").replace(/\\/g, "/");
+    if (!target.startsWith(`${root}/`) || root.length <= bestLen) continue;
+    best = folder;
+    bestLen = root.length;
+  }
+  return best;
+}
+
+/** O repositório dono de um caminho, ou `null` se nenhum o contém. */
 export function repoForPath(
   repos: GitRepoEntry[],
   filePath: string,
 ): string | null {
-  const target = filePath.replace(/\\/g, "/");
-  let best: GitRepoEntry | null = null;
-  for (const repo of repos) {
-    const root = repo.path.replace(/[\\/]+$/, "").replace(/\\/g, "/");
-    if (!target.startsWith(root + "/")) continue;
-    if (!best || root.length > best.path.replace(/[\\/]+$/, "").length) {
-      best = repo;
-    }
+  return folderForPath(
+    repos.map((repo) => repo.path),
+    filePath,
+  );
+}
+
+/**
+ * Distribui arquivos pelas pastas de trabalho que os contêm — a base da lista
+ * de alterações quando o chat tem mais de uma pasta.
+ *
+ * O arquivo conta uma vez só: fica com a pasta mais específica, então uma pasta
+ * anexada dentro da principal não mostra as mesmas mudanças duas vezes. Arquivo
+ * que não está em pasta nenhuma (a leitura é de um instante atrás, logo depois
+ * de trocar as pastas) vai para `fallback`, em vez de sumir da tela.
+ *
+ * A ordem segue `folders` — a principal primeiro —, e o que não pertence a
+ * nenhuma fica no fim.
+ */
+export function groupByFolder<T extends { path: string }>(
+  folders: string[],
+  files: T[],
+  fallback: string,
+): Array<{ folder: string; files: T[] }> {
+  const byFolder = new Map<string, T[]>();
+  for (const file of files) {
+    const owner = folderForPath(folders, file.path) ?? fallback;
+    const list = byFolder.get(owner);
+    if (list) list.push(file);
+    else byFolder.set(owner, [file]);
   }
-  return best?.path ?? null;
+
+  const rank = (folder: string) => {
+    const index = folders.indexOf(folder);
+    return index === -1 ? folders.length : index;
+  };
+  return [...byFolder]
+    .map(([folder, list]) => ({ folder, files: list }))
+    .sort((a, b) => rank(a.folder) - rank(b.folder));
 }
 
 export type DiffResult =

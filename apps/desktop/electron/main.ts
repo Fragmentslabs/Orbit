@@ -91,7 +91,7 @@ import {
 } from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { createRemoteRepo } from './lib/github-repo'
-import { discoverGitRepos } from './lib/git-repos'
+import { discoverWorkspaceRepos } from './lib/git-repos'
 import { compactSession, continuationBrief, getRunningSessionIds } from './lib/chat-engine'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
@@ -1819,12 +1819,15 @@ app.whenReady().then(() => {
     shell.showItemInFolder(filePath)
   })
 
-  // Quais repositórios vivem nesta pasta de trabalho: a própria pasta quando é
-  // repo, mais as subpastas com git próprio (front/back de um espaço). O painel
-  // usa a lista para escolher com quem falar; sem lista, fala com a raiz.
-  ipcMain.handle('git:repos', async (_event, root: string) => {
+  // Quais repositórios vivem nestas pastas de trabalho: em cada uma, a própria
+  // pasta quando é repo e as subpastas com git próprio (front/back de um
+  // espaço). A lista cobre TODAS as pastas do chat — a principal e as anexadas
+  // —, e o painel usa a lista para escolher com quem falar; sem lista, fala com
+  // a pasta principal.
+  ipcMain.handle('git:repos', async (_event, root: string | string[]) => {
     try {
-      return { ok: true as const, repos: await discoverGitRepos(root) }
+      const roots = Array.isArray(root) ? root : [root]
+      return { ok: true as const, repos: await discoverWorkspaceRepos(roots) }
     } catch (err) {
       return { ok: false as const, error: (err as Error).message }
     }

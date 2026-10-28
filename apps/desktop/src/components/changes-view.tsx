@@ -41,9 +41,12 @@ export interface RevealRequest {
 }
 
 export interface ChangesViewProps {
-  /** Repositórios do espaço: a raiz quando é repo e/ou as subpastas com git. */
+  /**
+   * Repositórios do espaço: em cada pasta do chat (a principal e as anexadas),
+   * a própria pasta quando é repo e/ou as subpastas com git próprio.
+   */
   repos: GitRepoEntry[];
-  /** Pasta de trabalho — usada só quando nenhum repo foi descoberto. */
+  /** Pasta principal — usada só quando nenhum repo foi descoberto. */
   repoRoot: string;
   /** Arquivo a trazer para a vista (clique no índice à direita). */
   reveal: RevealRequest | null;

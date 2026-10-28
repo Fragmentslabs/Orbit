@@ -7,12 +7,18 @@ export interface GitRepoEntry {
   path: string;
   /** Rótulo curto: o nome da pasta. */
   name: string;
-  /** Caminho relativo à pasta de trabalho ("" quando é a própria pasta). */
+  /**
+   * Caminho visível até o repo: relativo à pasta principal quando ele está
+   * dentro dela; fora dela, prefixado com o nome da pasta anexada em que vive
+   * (`outro-projeto/api`). "" quando é a própria pasta principal.
+   */
   relative: string;
 }
 
 /** Teto de segurança: um espaço com dezenas de repos não vira uma lista infinita. */
 const MAX_REPOS = 12;
+/** Teto do conjunto: várias pastas anexadas somam, e o total também tem limite. */
+const MAX_WORKSPACE_REPOS = 24;
 
 /** Pastas que nunca valem uma varredura. */
 const SKIP = new Set(["node_modules", "vendor"]);
@@ -82,6 +88,82 @@ export async function discoverGitRepos(root: string): Promise<GitRepoEntry[]> {
       for (const deeper of await subdirs(dir)) {
         if (await hasGit(deeper)) add(deeper);
       }
+    }
+  }
+
+  return found;
+}
+
+/** Caminho normalizado para comparar: sem barra final e sempre com '/'. */
+function normalizePath(p: string): string {
+  return p.replace(/[\\/]+$/, "").replace(/\\/g, "/");
+}
+
+/** `dir` está dentro de `root` — ou é ele mesmo? */
+function isInside(root: string, dir: string): boolean {
+  const base = normalizePath(root);
+  const target = normalizePath(dir);
+  return target === base || target.startsWith(`${base}/`);
+}
+
+/** Caminho de `dir` a partir de `root` ("" quando são a mesma pasta). */
+function relativeTo(root: string, dir: string): string {
+  const base = normalizePath(root);
+  const target = normalizePath(dir);
+  if (target === base) return "";
+  return target.slice(base.length + 1);
+}
+
+/**
+ * Descobre os repositórios de TODAS as pastas de trabalho do chat — a principal
+ * e as anexadas.
+ *
+ * A primeira pasta é a principal e dá o vocabulário dos rótulos: um repo dentro
+ * dela tem o caminho relativo a ela, como sempre teve. Um repo que vive numa
+ * pasta anexada, fora da principal, ganha o nome dessa pasta como prefixo
+ * (`outro/api`) — é o que desfaz a dúvida de qual "api" é este quando duas
+ * pastas anexadas têm um. O caminho absoluto continua sendo a identidade.
+ *
+ * Repo que já apareceu numa pasta anterior não volta: uma pasta anexada que
+ * esteja dentro da principal é encontrada pela varredura da principal, e o
+ * rótulo dela fica o de lá.
+ *
+ * Lista vazia significa "nenhum repo em pasta nenhuma" — e aí o painel segue
+ * como sempre foi, falando com a pasta principal.
+ */
+export async function discoverWorkspaceRepos(
+  roots: string[],
+): Promise<GitRepoEntry[]> {
+  const unique: string[] = [];
+  for (const root of roots) {
+    if (!root) continue;
+    const key = normalizePath(root);
+    if (unique.some((r) => normalizePath(r) === key)) continue;
+    unique.push(root);
+  }
+  if (unique.length === 0) return [];
+
+  const main = unique[0];
+  const found: GitRepoEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const root of unique) {
+    if (found.length >= MAX_WORKSPACE_REPOS) break;
+    for (const repo of await discoverGitRepos(root)) {
+      if (found.length >= MAX_WORKSPACE_REPOS) break;
+      const key = normalizePath(repo.path);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({
+        ...repo,
+        // Dentro da principal o caminho já é relativo a ela; fora, o nome da
+        // pasta anexada é o que dá um caminho legível.
+        relative: isInside(main, repo.path)
+          ? relativeTo(main, repo.path)
+          : [path.basename(normalizePath(root)), repo.relative]
+              .filter(Boolean)
+              .join("/"),
+      });
     }
   }
 

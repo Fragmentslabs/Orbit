@@ -65,10 +65,10 @@ function viewerKey(file: ViewedFile | undefined): string {
 export function FoldersTab() {
   const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
-  // Quem tem git nesta pasta: a raiz e/ou as subpastas com repo próprio. A
-  // leitura das alterações usa a lista para mostrar o espaço inteiro, com cada
-  // projeto debaixo do seu nome — e não só o diff da pasta raiz, que num
-  // workspace não é repo nenhum.
+  // Quem tem git nas pastas do chat — a principal e as anexadas —, em cada uma
+  // a raiz e/ou as subpastas com repo próprio. A leitura das alterações usa a
+  // lista para mostrar o espaço inteiro, com cada projeto debaixo do seu nome;
+  // antes só a pasta principal era lida e as anexadas ficavam de fora.
   const repos = useGitRepos(folders);
 
   const [tab, setTab] = useState<BrowserTab>("files");

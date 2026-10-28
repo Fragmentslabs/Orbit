@@ -2,7 +2,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { discoverGitRepos } from "./git-repos";
+import { discoverGitRepos, discoverWorkspaceRepos } from "./git-repos";
 
 const base = path.join(os.tmpdir(), `orbit-git-repos-${Date.now()}`);
 
@@ -72,5 +72,51 @@ describe("discoverGitRepos", () => {
     const ws = path.join(base, "vazio");
     await fsp.mkdir(path.join(ws, "a", "b"), { recursive: true });
     expect(await discoverGitRepos(ws)).toEqual([]);
+  });
+});
+
+describe("discoverWorkspaceRepos", () => {
+  it("soma a pasta principal com as pastas anexadas ao chat", async () => {
+    const main = path.join(base, "espaco");
+    await mkRepo(path.join(main, "front"));
+    const extra = path.join(base, "anexada");
+    await mkRepo(extra);
+
+    const repos = await discoverWorkspaceRepos([main, extra]);
+    expect(repos.map((r) => r.name)).toEqual(["front", "anexada"]);
+    // O repo da pasta anexada é legível pelo nome dela.
+    expect(repos.map((r) => r.relative)).toEqual(["front", "anexada"]);
+  });
+
+  it("prefixa o repo aninhado com o nome da pasta anexada", async () => {
+    const main = path.join(base, "espaco2");
+    await fsp.mkdir(path.join(main, "docs"), { recursive: true });
+    const extra = path.join(base, "estudio");
+    await mkRepo(path.join(extra, "api"));
+
+    const repos = await discoverWorkspaceRepos([main, extra]);
+    expect(repos.map((r) => r.name)).toEqual(["api"]);
+    expect(repos[0].relative).toBe("estudio/api");
+  });
+
+  it("não repete o repo de uma pasta anexada que está dentro da principal", async () => {
+    const main = path.join(base, "espaco3");
+    await mkRepo(main);
+    const extra = path.join(main, "app");
+    await mkRepo(extra);
+
+    const repos = await discoverWorkspaceRepos([main, extra]);
+    expect(repos.map((r) => r.path)).toEqual([main, extra]);
+    // O rótulo continua sendo o caminho a partir da principal.
+    expect(repos.map((r) => r.relative)).toEqual(["", "app"]);
+  });
+
+  it("devolve lista vazia quando nenhuma pasta tem repo", async () => {
+    const main = path.join(base, "sem-git");
+    const extra = path.join(base, "sem-git-2");
+    await fsp.mkdir(main, { recursive: true });
+    await fsp.mkdir(extra, { recursive: true });
+    expect(await discoverWorkspaceRepos([main, extra])).toEqual([]);
+    expect(await discoverWorkspaceRepos([])).toEqual([]);
   });
 });

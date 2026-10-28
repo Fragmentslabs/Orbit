@@ -20,6 +20,7 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -91,6 +92,7 @@ import {
 } from "@/src/stores/branch-store";
 import {
   getBaseName,
+  groupByFolder,
   joinPath,
   repoForPath,
   type CommitEntry,
@@ -434,6 +436,18 @@ function buildChangeTree(
     root: rootNode,
     dirPaths: [...dirs.keys()].filter((p) => p !== base),
   };
+}
+
+/**
+ * Uma raiz da árvore de alterações: a pasta do chat dona das mudanças e a
+ * árvore podada montada a partir dela.
+ */
+interface ChangeGroup {
+  /** Caminho absoluto da pasta (a principal ou uma das anexadas). */
+  path: string;
+  name: string;
+  root: ChangeDirNode;
+  dirPaths: string[];
 }
 
 /** Desenha um nível da árvore podada: pastas primeiro, depois os arquivos. */
@@ -818,17 +832,61 @@ export function FileBrowser({
     [gitStatus, numstat],
   );
 
-  // Com mais de um repo a árvore nasce na pasta de trabalho, e não no repo
-  // ativo: é isso que faz cada projeto virar uma pasta de primeiro nível, com
-  // as alterações dele debaixo. Com um repo só, nasce nele — o caminho de
-  // sempre.
-  const { root: changeRoot, dirPaths: changeDirPaths } = useMemo(
+  /**
+   * As raízes da árvore de alterações.
+   *
+   * Com um repo só, a árvore nasce nele (ou na pasta de trabalho) — o caminho
+   * de sempre. Com mais de um, cada pasta do chat que TEM alterações vira uma
+   * raiz: num espaço com `front/` e `back/` isso põe cada projeto debaixo do
+   * seu nome, e com uma pasta anexada ao chat as mudanças dela aparecem junto.
+   * Antes só a pasta principal era lida, e as anexadas ficavam de fora.
+   */
+  const changeGroups = useMemo<ChangeGroup[]>(() => {
+    const fallback = repo ?? folders[0] ?? "";
+    if (repos.length <= 1) {
+      const { root, dirPaths } = buildChangeTree(fallback, changeFiles);
+      return [
+        {
+          path: fallback,
+          name: getBaseName(fallback),
+          root,
+          dirPaths,
+        },
+      ];
+    }
+
+    // O arquivo conta uma vez só (a pasta mais específica que o contém), e um
+    // arquivo de uma pasta que não está mais na lista não some: cai no
+    // `fallback` até a próxima leitura.
+    return groupByFolder(folders, changeFiles, fallback).map(
+      ({ folder, files }) => {
+        const { root, dirPaths } = buildChangeTree(folder, files);
+        return {
+          path: folder,
+          name: getBaseName(folder),
+          root,
+          dirPaths,
+        };
+      },
+    );
+  }, [repos.length, folders, repo, changeFiles]);
+
+  const changeDirPaths = useMemo(
+    () => changeGroups.flatMap((group) => group.dirPaths),
+    [changeGroups],
+  );
+  /**
+   * Com mais de uma pasta com alterações cada uma vira uma pasta da árvore, com
+   * o nome dela — é o que diz de qual projeto é o arquivo lá embaixo.
+   */
+  const changeShowFolders = changeGroups.length > 1;
+  /** O que abre e fecha na lista: as subpastas e, quando rotulada, a raiz. */
+  const changeExpandable = useMemo(
     () =>
-      buildChangeTree(
-        repos.length > 1 ? (folders[0] ?? repo ?? "") : (repo ?? ""),
-        changeFiles,
-      ),
-    [repos.length, folders, repo, changeFiles],
+      changeShowFolders
+        ? [...changeGroups.map((group) => group.path), ...changeDirPaths]
+        : changeDirPaths,
+    [changeShowFolders, changeGroups, changeDirPaths],
   );
 
   // Pastas da lista de alterações nascem TODAS abertas — é o ponto da aba: ver
@@ -839,15 +897,17 @@ export function FileBrowser({
     new Set(),
   );
   const changesExpanded = useMemo(() => {
-    const next = new Set(changeDirPaths);
+    const next = new Set(changeExpandable);
     for (const p of collapsedChanges) next.delete(p);
     return next;
-  }, [changeDirPaths, collapsedChanges]);
+  }, [changeExpandable, collapsedChanges]);
   const handleChangesExpandedChange = useCallback(
     (next: Set<string>) => {
-      setCollapsedChanges(new Set(changeDirPaths.filter((p) => !next.has(p))));
+      setCollapsedChanges(
+        new Set(changeExpandable.filter((p) => !next.has(p))),
+      );
     },
-    [changeDirPaths],
+    [changeExpandable],
   );
 
   useEffect(() => {
@@ -1494,7 +1554,22 @@ export function FileBrowser({
                   onSelect={handleSelectChange}
                   selectedPath={selectedPath}
                 >
-                  {renderChangeEntries(changeRoot, changesExpanded)}
+                  {changeGroups.map((group) =>
+                    changeShowFolders ? (
+                      <FileTreeFolder
+                        key={group.path}
+                        name={group.name}
+                        path={group.path}
+                      >
+                        {changesExpanded.has(group.path) &&
+                          renderChangeEntries(group.root, changesExpanded)}
+                      </FileTreeFolder>
+                    ) : (
+                      <Fragment key={group.path}>
+                        {renderChangeEntries(group.root, changesExpanded)}
+                      </Fragment>
+                    ),
+                  )}
                 </FileTree>
               </ScrollArea>
             )}
