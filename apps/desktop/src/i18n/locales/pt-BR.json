@@ -3062,6 +3062,11 @@
       "interrupt": "Interromper e falar",
       "interruptShort": "Interromper",
       "hangUp": "Encerrar chamada",
+      "inCall": "Em chamada",
+      "open": "Abrir chamada",
+      "elsewhere": "Chamada em andamento em {{title}}",
+      "elsewhereOther": "Chamada em andamento em outra conversa",
+      "listeningShort": "Ouvindo…",
       "failed": "A chamada caiu.",
       "replyError": "O agente não conseguiu responder."
     },

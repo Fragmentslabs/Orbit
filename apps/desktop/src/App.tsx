@@ -31,6 +31,8 @@ import { RotationDialogHost } from "@/src/components/models/rotation-dialog"
 import { WorkspaceSearchDialog } from "@/src/components/workspace-search-dialog"
 import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store"
 import { ChatSearch } from "@/src/components/chat-search"
+import { VoiceCallProvider } from "@/src/components/voice-call-host"
+import { VoiceCallWidget } from "@/src/components/voice-call-widget"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { LinkRouter } from "@/src/components/link-router"
 
@@ -257,8 +259,9 @@ function Layout() {
   }, [folders])
 
   return (
-    <DndContext {...sessionDnd.contextProps}>
-      {sessionDnd.overlay}
+    <VoiceCallProvider>
+      <DndContext {...sessionDnd.contextProps}>
+        {sessionDnd.overlay}
       <div
         className="relative flex min-w-0 flex-1"
         onDragEnter={handleDragEnter}
@@ -289,7 +292,7 @@ function Layout() {
         </div>
         <PanelGroup direction="horizontal" className="min-w-0 flex-1">
           <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
-              <main className="flex h-full min-w-0 flex-col">
+              <main className="relative flex h-full min-w-0 flex-col">
                 <ChatHeader
                   title={
                     view === "memories"
@@ -364,6 +367,7 @@ function Layout() {
                     <ChatView />
                   )}
                 </div>
+                <VoiceCallWidget activeSessionId={activeSession?.id} view={view} />
               </main>
           </Panel>
           {rightPanelOpen && (
@@ -381,7 +385,8 @@ function Layout() {
         </PanelGroup>
         {!rightPanelOpen && <RightPanelDropZone />}
       </div>
-    </DndContext>
+      </DndContext>
+    </VoiceCallProvider>
   )
 }
 

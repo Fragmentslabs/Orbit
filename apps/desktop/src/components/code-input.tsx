@@ -34,7 +34,7 @@ import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
 import { DictationButton } from "@/src/components/dictation-button"
-import { VoiceCallButton, VoiceCallPanel, useVoiceCallControl } from "@/src/components/voice-call"
+import { VoiceCallButton, VoiceCallPanel, useHostedVoiceCallControl } from "@/src/components/voice-call"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -239,7 +239,43 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     },
     [noProvider, onProviderBlocked, folders.length, buildOptions, getDirs, busy, sessionId, enqueueForSend, mode, onSubmit],
   )
-  const voiceCall = useVoiceCallControl({ sessionId, submit: submitVoice })
+  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. */
+  const submitVoiceTo = useCallback(
+    (targetSessionId: string, text: string): boolean => {
+      if (noProvider) {
+        onProviderBlocked?.()
+        return false
+      }
+      const { directory, extraDirectories } = getDirs()
+      const options = { ...buildOptions(), voiceCall: true }
+      void sendMessage("code", text, { options, sessionId: targetSessionId, directory, extraDirectories, files: [] })
+      return true
+    },
+    [noProvider, onProviderBlocked, getDirs, buildOptions, sendMessage],
+  )
+  /** Chat de código novo: cria a sessão dona da chamada antes de ligar. */
+  const createCallSession = useCallback(async () => {
+    if (folders.length === 0) return undefined
+    const { directory, extraDirectories } = getDirs()
+    const created = await createSession("code", { setActive: false, directory, extraDirectories })
+    void useSessionStore.getState().selectSession("code", created.id)
+    return {
+      sessionId: created.id,
+      submit: (text: string) => submitVoiceTo(created.id, text),
+    }
+  }, [folders.length, getDirs, createSession, submitVoiceTo])
+  const voiceCall = useHostedVoiceCallControl({
+    sessionId,
+    mode: "code",
+    submit: submitVoice,
+    createCallSession,
+  })
+  // Mesmo contrato do input do chat: o composer da chamada registra o submit
+  // atual, mas a chamada continua presa à sessão em que nasceu.
+  const registerVoiceSubmit = voiceCall.registerSubmit
+  useEffect(() => {
+    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoice)
+  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoice])
   const selections = usePanelStore((s) => s.selections)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
@@ -585,7 +621,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               </div>
               <SendButtonGroup
                 emptySlot={voiceCall.inSlot ? <VoiceCallButton control={voiceCall} /> : undefined}
-                emptySlotAlways={voiceCall.call.active}
+                emptySlotAlways={voiceCall.call.active && voiceCall.isCallSession}
                 busy={busy}
                 cancelling={status === "cancelling"}
                 disabled={folders.length === 0}

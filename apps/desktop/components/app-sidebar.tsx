@@ -27,6 +27,7 @@ import {
   Moon,
   Puzzle,
   Pencil,
+  Phone,
   Pin,
   PinOff,
   Plus,
@@ -88,6 +89,7 @@ import {
 import type { FolderInfo, SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { KO_FI_URL } from "@/src/lib/appLinks"
 import {
@@ -701,6 +703,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const unreadCounts = useSessionStore((s) => s.unreadCounts)
   const pendingAsks = useSessionStore((s) => s.pendingAsks)
+  // Chamada em curso NESTA conversa: o telefone fica aceso na linha, para a
+  // pessoa achar de volta sem depender do card flutuante.
+  const inCallHere = useVoiceActivity((s) => s.inCall && s.callSessionId === session.id)
   const togglePin = useSessionStore((s) => s.togglePin)
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
   const renameSession = useSessionStore((s) => s.renameSession)
@@ -835,6 +840,16 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           )}
           {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
             <span className="size-2 shrink-0 rounded-full bg-primary" />
+          )}
+          {inCallHere && (
+            <span
+              role="img"
+              aria-label={t("voice.call.inCall")}
+              title={t("voice.call.inCall")}
+              className="flex size-3.5 shrink-0 items-center justify-center text-primary"
+            >
+              <Phone aria-hidden className="size-3" />
+            </span>
           )}
           {trailing}
         </div>

@@ -17,18 +17,23 @@ interface VoiceActivityState {
   listening: boolean
   /** Modo chamada ligado: o microfone de ditado sai de cena enquanto isso. */
   inCall: boolean
+  /** Sessão dona da chamada em curso (a sidebar mostra o telefone nela). */
+  callSessionId: string | null
   setSpeaking: (speaking: boolean) => void
   setListening: (listening: boolean) => void
   setInCall: (inCall: boolean) => void
+  setCallSessionId: (sessionId: string | null) => void
 }
 
 export const useVoiceActivity = create<VoiceActivityState>((set) => ({
   speaking: false,
   listening: false,
   inCall: false,
+  callSessionId: null,
   setSpeaking: (speaking) => set({ speaking }),
   setListening: (listening) => set({ listening }),
   setInCall: (inCall) => set({ inCall }),
+  setCallSessionId: (callSessionId) => set({ callSessionId }),
 }))
 
 /**

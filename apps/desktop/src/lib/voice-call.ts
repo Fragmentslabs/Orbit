@@ -204,6 +204,21 @@ export function captionIndexAt(lines: CaptionLine[], position: number): number {
 }
 
 /**
+ * A chamada pertence a este composer? Só o id decide: a chamada sempre nasce
+ * com uma sessão de verdade (o composer cria uma antes de ligar quando está num
+ * chat novo), então não existe mais "dono pendente" sem id.
+ */
+export function isCallOwner({
+  callSessionId,
+  sessionId,
+}: {
+  callSessionId: string | null
+  sessionId?: string
+}): boolean {
+  return callSessionId != null && callSessionId === sessionId
+}
+
+/**
  * Markdown → texto que soa bem em voz alta. O prompt da chamada já pede texto
  * puro; isto é a rede para o que escapar (um negrito, um link, um bloco de código).
  */

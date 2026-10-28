@@ -4,6 +4,7 @@ import {
   callSpeech,
   captionIndexAt,
   captionLines,
+  isCallOwner,
   isSpeech,
   normalizeSpeech,
   speechPieceText,
@@ -177,5 +178,14 @@ describe("isSpeech", () => {
     expect(isSpeech(0.33, true, 0.2)).toBe(true)
     // Nunca acima do limiar de começar.
     expect(isSpeech(0.35, true, 0.9)).toBe(true)
+  })
+})
+
+describe("isCallOwner", () => {
+  it("só a sessão dona é dona", () => {
+    expect(isCallOwner({ callSessionId: "s1", sessionId: "s1" })).toBe(true)
+    expect(isCallOwner({ callSessionId: "s1", sessionId: "s2" })).toBe(false)
+    expect(isCallOwner({ callSessionId: "s1", sessionId: undefined })).toBe(false)
+    expect(isCallOwner({ callSessionId: null, sessionId: "s1" })).toBe(false)
   })
 })

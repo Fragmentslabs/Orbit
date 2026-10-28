@@ -1,10 +1,13 @@
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, Hand, PhoneOff } from "lucide-react"
+import { AudioLines, Hand, Phone, PhoneOff } from "lucide-react"
+import type { WorkspaceMode } from "@/lib/workspace-context"
 import { DictationWave } from "@/src/components/dictation-wave"
+import { useVoiceCallHost } from "@/src/components/voice-call-host"
 import { useVoiceStatus } from "@/src/hooks/use-speak"
 import { useVoiceCall } from "@/src/hooks/use-voice-call"
 import { dictationSupported, resolveVoiceSttSettings, voiceTargetReady } from "@/src/lib/dictation"
+import { isCallOwner } from "@/src/lib/voice-call"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
@@ -13,24 +16,31 @@ import { cn } from "@/lib/utils"
 /** Quanto o aviso de erro fica à vista depois de a chamada cair. */
 const ERROR_VISIBLE_MS = 6000
 
-/**
- * Estado do modo chamada para um input: o hook da chamada mais as regras de
- * quando ela aparece. Vive no INPUT (não num botão) porque a chamada tem duas
- * peças em lugares diferentes do campo: o botão no lugar do "Enviar"
- * (`VoiceCallButton`) e o painel no topo (`VoiceCallPanel`).
- */
-export function useVoiceCallControl({ sessionId, submit }: { sessionId?: string; submit: (text: string) => boolean }) {
+/** O que os dois controles precisam saber sobre o motor de voz antes de
+ *  oferecer a chamada. */
+function useVoiceCallSetup() {
   const settings = useAppSettings((s) => s.settings)
   const callEnabled = (settings as unknown as { voice?: { call?: { enabled?: boolean } } }).voice?.call?.enabled ?? true
   const stt = resolveVoiceSttSettings(settings)
   const { status } = useVoiceStatus(callEnabled && stt.enabled)
   const ready = voiceTargetReady(status, stt.engine, stt.modelId)
   const openSettings = useSettingsUi((s) => s.openSettings)
-  const call = useVoiceCall({ sessionId, submit })
-  const { error, dismissError, active, hangUp } = call
   // Ditado comum gravando: o microfone está ocupado, então a chamada não é
   // oferecida até o ditado acabar (o slot volta a ser o "Enviar").
   const dictating = useVoiceActivity((s) => s.listening && !s.inCall)
+  const available = callEnabled && stt.enabled && dictationSupported()
+  return { callEnabled, sttEnabled: stt.enabled, ready, openSettings, dictating, available }
+}
+
+/**
+ * Controle local, usado pelo overlay: ele tem a própria sessão e a própria
+ * janela, fora do host da janela principal.
+ */
+export function useVoiceCallControl({ sessionId, submit }: { sessionId?: string; submit: (text: string) => boolean }) {
+  const setup = useVoiceCallSetup()
+  const { ready, openSettings, available, dictating, callEnabled, sttEnabled } = setup
+  const call = useVoiceCall({ sessionId, submit })
+  const { error, dismissError, active, hangUp, start: startCall } = call
 
   useEffect(() => {
     if (!error) return
@@ -40,18 +50,17 @@ export function useVoiceCallControl({ sessionId, submit }: { sessionId?: string;
 
   // Desligaram a chamada (ou o ditado) nas preferências no meio dela: encerra.
   useEffect(() => {
-    if (active && (!callEnabled || !stt.enabled)) hangUp()
-  }, [active, callEnabled, stt.enabled, hangUp])
+    if (active && (!callEnabled || !sttEnabled)) hangUp()
+  }, [active, callEnabled, sttEnabled, hangUp])
 
   const start = useCallback(() => {
     if (!ready) {
       openSettings("voice")
       return
     }
-    call.start()
-  }, [ready, openSettings, call])
+    startCall()
+  }, [ready, openSettings, startCall])
 
-  const available = callEnabled && stt.enabled && dictationSupported()
   return {
     call,
     ready,
@@ -64,14 +73,107 @@ export function useVoiceCallControl({ sessionId, submit }: { sessionId?: string;
 export type VoiceCallControlState = ReturnType<typeof useVoiceCallControl>
 
 /**
+ * Controle da janela principal: lê a chamada do host global e só mostra o
+ * painel na conversa dona dela. Nas outras, o botão de ligação fica bloqueado
+ * e leva para a chamada em curso.
+ */
+export function useHostedVoiceCallControl({
+  sessionId,
+  mode,
+  submit,
+  createCallSession,
+}: {
+  sessionId?: string
+  mode: WorkspaceMode
+  submit: (text: string) => boolean
+  /**
+   * Chamada a partir de um chat novo: cria (e seleciona) a sessão que vai ser
+   * dona da chamada. Sem isso o submit teria `sessionId` undefined e o
+   * `sendMessage` cairia na sessão ativa — o chat que estiver aberto.
+   */
+  createCallSession?: () => Promise<{ sessionId: string; submit?: (text: string) => boolean } | undefined>
+}) {
+  const setup = useVoiceCallSetup()
+  const { ready, openSettings, available, dictating, callEnabled, sttEnabled } = setup
+  const host = useVoiceCallHost()
+  const call = host.call
+  const { active: callActive, hangUp } = call
+  const { openCall, start: startCall } = host
+  const isCallSession = isCallOwner({ callSessionId: host.callSessionId, sessionId })
+  const elsewhere = callActive && !isCallSession
+  const startingRef = useRef(false)
+
+  // O host confere a sessão: este composer só consegue registrar se ESTA
+  // conversa for a dona da chamada.
+  const hostRegisterSubmit = host.registerSubmit
+  const registerSubmit = useCallback(
+    (submit: (text: string) => boolean) => hostRegisterSubmit(sessionId, submit),
+    [hostRegisterSubmit, sessionId],
+  )
+
+  // Desligaram a chamada (ou o ditado) nas preferências: encerra em qualquer
+  // chat, não só no que está com o painel à vista.
+  useEffect(() => {
+    if (callActive && (!callEnabled || !sttEnabled)) hangUp()
+  }, [callActive, callEnabled, sttEnabled, hangUp])
+
+  const start = useCallback(() => {
+    if (startingRef.current) return
+    void (async () => {
+      startingRef.current = true
+      try {
+        if (elsewhere) {
+          openCall()
+          return
+        }
+        if (!ready) {
+          openSettings("voice")
+          return
+        }
+        if (sessionId) {
+          startCall(sessionId, mode, submit)
+          return
+        }
+        // Chat novo: a sessão nasce AGORA e a chamada já começa presa a ela.
+        // É o que impede o primeiro turno de cair no chat que estiver aberto.
+        const created = await createCallSession?.()
+        if (!created) return
+        startCall(created.sessionId, mode, created.submit ?? submit)
+      } catch {
+        // A chamada simplesmente não começa; o composer segue normal.
+      } finally {
+        startingRef.current = false
+      }
+    })()
+  }, [elsewhere, openCall, startCall, sessionId, mode, submit, createCallSession, ready, openSettings])
+
+  return {
+    call,
+    ready,
+    start,
+    /** O botão da chamada no slot vazio (bloqueado quando a chamada é de outra conversa). */
+    inSlot: callActive || (available && !dictating),
+    /** Esta conversa é a dona da chamada. */
+    isCallSession,
+    /** A chamada está em outra conversa. */
+    elsewhere,
+    openCall,
+    callSessionTitle: host.callSessionTitle,
+    registerSubmit,
+  }
+}
+
+export type HostedVoiceCallControlState = ReturnType<typeof useHostedVoiceCallControl>
+
+/**
  * O botão da chamada no lugar do "Enviar" (campo vazio): fora da chamada ela
  * começa; durante, vira o "desligar". Sem o motor de ditado pronto leva às
  * Preferências na aba de voz.
  */
-export function VoiceCallButton({ control }: { control: VoiceCallControlState }) {
+export function VoiceCallButton({ control }: { control: HostedVoiceCallControlState }) {
   const { t } = useTranslation()
   const { call, ready, start } = control
-  if (call.active) {
+  if (control.isCallSession && call.active) {
     return (
       <button
         type="button"
@@ -81,6 +183,25 @@ export function VoiceCallButton({ control }: { control: VoiceCallControlState })
         className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
       >
         <PhoneOff className="size-4" />
+      </button>
+    )
+  }
+  // Chamada em outra conversa: o botão não começa outra — explica onde ela
+  // está e leva para lá.
+  if (control.elsewhere) {
+    const label = control.callSessionTitle
+      ? t("voice.call.elsewhere", { title: control.callSessionTitle })
+      : t("voice.call.elsewhereOther")
+    return (
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={start}
+        className="relative flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Phone className="size-4 opacity-50" />
+        <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
       </button>
     )
   }
@@ -103,7 +224,7 @@ export function VoiceCallButton({ control }: { control: VoiceCallControlState })
  * (branca) e a de baixo é a próxima (cinza). Quando a fala avança, a trilha
  * sobe uma linha — a próxima assume o lugar da atual e uma nova entra embaixo.
  */
-function CallCaption({ lines, current }: { lines: string[]; current: number }) {
+export function CallCaption({ lines, current }: { lines: string[]; current: number }) {
   const at = Math.max(0, Math.min(current, lines.length - 1))
   return (
     <div className="h-[2.75em] min-w-0 flex-1 overflow-hidden text-xs leading-snug">
@@ -135,10 +256,14 @@ function CallCaption({ lines, current }: { lines: string[]; current: number }) {
  * branco e a próxima em cinza — e o "interromper". Fora da chamada mostra só
  * o aviso de uma chamada que caiu.
  */
-export function VoiceCallPanel({ control }: { control: VoiceCallControlState }) {
+export function VoiceCallPanel({ control }: { control: HostedVoiceCallControlState }) {
   const { t } = useTranslation()
   const { call } = control
   const errorText = call.error === "reply" ? t("voice.call.replyError") : call.error
+
+  // O painel é da conversa dona da chamada. As outras seguem com o composer
+  // normal; o card flutuante e o botão bloqueado levam até ela.
+  if (!control.isCallSession) return null
 
   if (!call.active) {
     if (!errorText) return null

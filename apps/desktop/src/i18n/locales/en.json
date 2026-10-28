@@ -3062,6 +3062,11 @@
       "interrupt": "Interrupt and talk",
       "interruptShort": "Interrupt",
       "hangUp": "End call",
+      "inCall": "In a call",
+      "open": "Open call",
+      "elsewhere": "Call in progress in {{title}}",
+      "elsewhereOther": "Call in progress in another chat",
+      "listeningShort": "Listening…",
       "failed": "The call dropped.",
       "replyError": "The agent couldn't reply."
     },

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, Monitor, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
@@ -31,7 +31,7 @@ import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
 import { DictationButton } from "@/src/components/dictation-button"
-import { VoiceCallButton, VoiceCallPanel, useVoiceCallControl } from "@/src/components/voice-call"
+import { VoiceCallButton, VoiceCallPanel, useHostedVoiceCallControl } from "@/src/components/voice-call"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -188,7 +188,40 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     },
     [noProvider, onProviderBlocked, buildOptions, busy, sessionId, enqueueForSend, mode, onSubmit],
   )
-  const voiceCall = useVoiceCallControl({ sessionId, submit: submitVoice })
+  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. */
+  const submitVoiceTo = useCallback(
+    (targetSessionId: string, text: string): boolean => {
+      if (noProvider) {
+        onProviderBlocked?.()
+        return false
+      }
+      const options = { ...buildOptions(), voiceCall: true }
+      void sendMessage("chat", text, { options, sessionId: targetSessionId, files: [] })
+      return true
+    },
+    [noProvider, onProviderBlocked, buildOptions, sendMessage],
+  )
+  /** Chat novo: cria a sessão dona da chamada antes de ligar. */
+  const createCallSession = useCallback(async () => {
+    const created = await createSession("chat", { setActive: false })
+    void selectSession("chat", created.id)
+    return {
+      sessionId: created.id,
+      submit: (text: string) => submitVoiceTo(created.id, text),
+    }
+  }, [createSession, selectSession, submitVoiceTo])
+  const voiceCall = useHostedVoiceCallControl({
+    sessionId,
+    mode: "chat",
+    submit: submitVoice,
+    createCallSession,
+  })
+  // O composer da sessão da chamada mantém o host com o submit mais recente
+  // (pastas/modos/fila mudam). A chamada em si nunca muda de destinatário.
+  const registerVoiceSubmit = voiceCall.registerSubmit
+  useEffect(() => {
+    if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoice)
+  }, [voiceCall.call.active, voiceCall.isCallSession, registerVoiceSubmit, submitVoice])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -359,8 +392,15 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               <ModelPicker sessionId={sessionId} />
             </div>
             <SendButtonGroup
-              emptySlot={voiceCall.inSlot ? <VoiceCallButton control={voiceCall} /> : undefined}
-              emptySlotAlways={voiceCall.call.active}
+              emptySlot={
+                // O chat novo do painel cria a sessão numa aba sem ativá-la; a
+                // chamada nasceria sem sessão. Ali só cabe o atalho para uma
+                // chamada que já existe; para começar, abra a conversa.
+                voiceCall.inSlot && (!!sessionId || !draftKey || voiceCall.call.active) ? (
+                  <VoiceCallButton control={voiceCall} />
+                ) : undefined
+              }
+              emptySlotAlways={voiceCall.call.active && voiceCall.isCallSession}
               busy={busy}
               cancelling={status === "cancelling"}
               disabled={false}
