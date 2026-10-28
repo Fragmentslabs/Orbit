@@ -416,6 +416,71 @@ export function documentFileName(title: string, format: DocumentDownload): strin
 }
 
 /**
+ * Um ARQUIVO da pasta de uma composição — o que o card da peça no chat lista.
+ *
+ * A peça tem uma pasta com o HTML, as mídias, as fontes e o acervo que o agente
+ * trouxe para ela. No chat, cada um desses arquivos nascia como um player solto
+ * na mensagem; o card reúne todos os da MESMA peça e diz, de cada um, se ele
+ * está sendo usado pela composição ou se ficou de fora.
+ *
+ * Nada é apagado: "descartado" é um ARQUIVO QUE A COMPOSIÇÃO NÃO CITA (a
+ * narração antiga, a imagem reprovada). Ele continua na pasta, na galeria e no
+ * card — com a etiqueta.
+ */
+export interface MotionBundleFile {
+  /** Caminho relativo dentro da pasta da peça, sempre com `/`. */
+  name: string
+  /** Tamanho em bytes (0 quando o arquivo sumiu do disco depois de listado). */
+  size: number
+  kind: "audio" | "image" | "video" | "font" | "file"
+  /** A composição cita este arquivo (index.html, audio.json ou um CSS/JS dela). */
+  used: boolean
+  /** Quando entrou na peça (ms). Sem registro, o mtime do arquivo. */
+  addedAt: number
+}
+
+/** Tudo o que o chat precisa saber de uma peça para desenhar o card dela. */
+export interface MotionBundle {
+  /** Id da composição no registro do main (`mv_…`). */
+  motionId: string
+  /** Nome da peça (o nome da pasta dela). */
+  name: string
+  /** Pasta da peça, para "Abrir pasta". */
+  folder: string
+  /** Os arquivos, do registrado mais recente para o mais antigo. */
+  files: MotionBundleFile[]
+  totalBytes: number
+  /** Quantos não são citados pela composição. */
+  discarded: number
+  /**
+   * Identificadores que ligam uma mídia do CHAT a esta peça: as referências de
+   * anexo de onde cada arquivo veio (`aud_…`, `img_…`, `vdo_…`) e os caminhos
+   * de origem (modo código). Já normalizados por `motionBundleKey` — a
+   * comparação é feita com essa mesma função dos dois lados.
+   */
+  keys: string[]
+}
+
+/**
+ * Chave comparável de uma mídia: o ID que a URL carrega, sem scheme e sem
+ * query, minúsculo.
+ *
+ * `orbit-audio://aud_x.wav` → `aud_x.wav`; `orbit-media://img_y.png` →
+ * `img_y.png`; `orbit-video://vid_z` → `vid_z`. Um caminho absoluto passa
+ * inteiro (barras normalizadas), porque é assim que um vídeo renderizado no
+ * projeto é identificado. É esta função que decide se um player solto no chat
+ * pertence à peça.
+ */
+export function motionBundleKey(value: string): string | null {
+  const clean = value.trim()
+  if (!clean) return null
+  const scheme = /^(?:orbit-media|orbit-audio|orbit-video|orbit-motion):\/\/(.+)$/i.exec(clean)
+  const raw = (scheme ? scheme[1] : clean).split(/[?#]/)[0].replace(/\/+$/, "")
+  if (!raw) return null
+  return raw.replace(/\\/g, "/").toLowerCase()
+}
+
+/**
  * Um MATERIAL da aba Fontes — foto, GIF, áudio ou vídeo que a conversa tem à mão.
  * É a visão de um item de mídia: o arquivo mora na galeria (e some de lá se for
  * excluído de lá), e a aba só o lista no escopo certo.

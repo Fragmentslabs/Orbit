@@ -301,6 +301,22 @@ export function motionAudioUrl(id: string, relative: string | null): string | nu
   return relative ? `${MOTION_SCHEME}://${id}/${relative}` : null
 }
 
+/**
+ * As composições de uma CONVERSA — o que o card da peça no chat precisa saber
+ * para juntar os arquivos dela: a pasta e o arquivo de entrada.
+ *
+ * Só as que o modo chat guarda (`sessionId` gravado no registro): uma peça de
+ * projeto registrada de outra conversa não é assunto desta.
+ */
+export async function motionPiecesForSession(
+  sessionId: string,
+): Promise<Array<{ id: string; folder: string; entry: string }>> {
+  const entries = await load(true)
+  return Object.entries(entries)
+    .filter(([, entry]) => entry.sessionId === sessionId)
+    .map(([id, entry]) => ({ id, folder: entry.folder, entry: entry.entry }))
+}
+
 /** Tira a composição do registro e libera o watcher dela. */
 export async function unregisterMotion(id: string): Promise<void> {
   const entries = await load()
@@ -308,6 +324,11 @@ export async function unregisterMotion(id: string): Promise<void> {
   delete entries[id]
   await persist()
   unwatchMotion(id)
+  // A origem dos arquivos morre com a peça: reabrir a mesma pasta depois cria
+  // uma peça NOVA, que não herdou os `aud_…` da anterior. O import é tardio
+  // porque motion-files lê este registro.
+  const files = await import('./motion-files').catch(() => null)
+  await files?.forgetMotionFiles(id).catch(() => {})
 }
 
 /**

@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import path from 'node:path'
 import { z } from 'zod'
 import type { MediaKind } from '@shared/media'
@@ -37,31 +36,9 @@ export interface PieceToolScope {
   readOnly?: boolean
 }
 
-const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
-
-/** Pasta de todas as peças de um tipo — a raiz que a exclusão pode limpar. */
-export function piecesRoot(kind: PieceKind): string {
-  return path.join(app.getPath('userData'), 'orbit-data', kind)
-}
-
-/** Pasta das peças de um tipo nesta conversa. */
-export function piecesDir(kind: PieceKind, sessionId: string): string {
-  if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
-  return path.join(piecesRoot(kind), sessionId)
-}
-
-/** "Intro do Orbit!" → "intro-do-orbit". O nome vira pasta. Puro. */
-export function pieceSlug(name: string, fallback: string): string {
-  const slug = name
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-    .replace(/-+$/g, '')
-  return slug || fallback
-}
+// Caminho e slug moram num módulo próprio (piece-paths): a importação de
+// projeto usa os dois sem arrastar media, diário e as outras peças junto.
+export { piecesDir, piecesRoot, pieceSlug } from './piece-paths'
 
 /**
  * Guarda a pasta da peça no diário do turno ANTES da escrita — chame dentro do

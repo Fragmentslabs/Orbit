@@ -16,6 +16,9 @@ import {
 } from "@/src/components/ai/chain-of-thought"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { MotionPartView } from "@/src/components/ai/motion-part"
+import { MotionBundleCard } from "@/src/components/messages/motion-bundle-card"
+import { planMotionBundles } from "@/src/lib/motion-bundle"
+import { useMotionBundleIndexes } from "@/src/stores/motion-bundles-store"
 import { DesignPartView } from "@/src/components/ai/design-part"
 import { SlidesPartView } from "@/src/components/ai/slides-part"
 import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS } from "@/src/lib/piece-tools"
@@ -154,10 +157,17 @@ const RENDER_PROPRIO = new Set([
   ...SLIDES_CARD_TOOLS,
 ])
 
-function segmentParts(parts: MessagePart[]): Segment[] {
+/**
+ * `cardPart`: partes que dão lugar ao card da peça. Elas não entram no
+ * agrupamento (uma imagem com card não pode virar miniatura de um grupo — o
+ * card é que fala pela peça).
+ */
+function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boolean): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    if (part.type === "tool" && WEB_TOOLS.has(part.tool)) {
+    if (cardPart(part)) {
+      segments.push({ kind: "part", id: part.id, part })
+    } else if (part.type === "tool" && WEB_TOOLS.has(part.tool)) {
       const last = segments[segments.length - 1]
       if (last?.kind === "research") last.parts.push(part)
       else segments.push({ kind: "research", id: part.id, parts: [part] })
@@ -189,7 +199,21 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
 }) {
   const { t } = useTranslation()
   const view = useSetting("chatView")
-  const segments = useMemo(() => segmentParts(arrangeForView(message.parts, view)), [message.parts, view])
+  // Mídia que é de uma PEÇA vira o card da peça, não um player solto — ver
+  // planMotionBundles. O que a composição não usa continua listado no card.
+  const indexes = useMotionBundleIndexes(sessionId)
+  const plan = useMemo(
+    () => planMotionBundles(message.parts, indexes, message.id),
+    [message.parts, indexes, message.id],
+  )
+  const parts = useMemo(
+    () => (plan.hidden.size ? message.parts.filter((part) => !plan.hidden.has(part.id)) : message.parts),
+    [message.parts, plan],
+  )
+  const segments = useMemo(
+    () => segmentParts(arrangeForView(parts, view), (part) => plan.cards.has(part.id)),
+    [parts, view, plan],
+  )
   const flat = view === "detailed"
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
@@ -217,6 +241,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <ActionsGroup key={segment.id} parts={segment.parts} flat={flat} />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
+        ) : plan.cards.has(segment.id) ? (
+          <MotionBundleCard key={segment.id} bundle={plan.cards.get(segment.id)!} />
         ) : segment.part.type === "text" ? (
           segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />

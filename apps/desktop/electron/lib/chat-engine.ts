@@ -97,6 +97,9 @@ import { hoistToolImages } from './tool-images'
 import { endActivity } from './computer/session'
 import { designNameFromInputJson, openDesignLive } from './tools/design'
 import { openMotionLive } from './tools/motion'
+import { reopenMotion } from './video/motion-open'
+import { registerMotionCover } from './video/motion-gallery'
+import { MAX_PROJECT_ZIP_BYTES, importMotionProject, readMotionProject } from './video/motion-project'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -284,6 +287,19 @@ function decodeDataUrlBytes(url: string): Buffer | null {
   } catch {
     return null
   }
+}
+
+/**
+ * O anexo é um PROJETO de composição exportado pela aba Motion? O `.zip` é a
+ * pista (nome ou mime); quem confirma é o manifesto lá dentro, em
+ * `readMotionProject`. Acima do teto de importação nem tenta: decodificar um
+ * base64 desse tamanho custa a memória do app inteiro.
+ */
+function isMotionProjectAttachment(file: FilePart, filename: string): boolean {
+  const zip = /\.zip$/i.test(filename) || /zip/i.test(file.mime ?? '')
+  if (!zip) return false
+  // base64 cresce ~4/3: acima do teto nem vale decodificar.
+  return file.url.length <= Math.ceil(MAX_PROJECT_ZIP_BYTES * 1.4) + 1024
 }
 
 const PDF_EXT = /\.pdf$/i
@@ -772,6 +788,53 @@ async function preprocessAttachment(
   // o agente recebe a referência e o caminho. É o primeiro corte porque `url`
   // aqui é só o preview — nenhum dos caminhos abaixo vale para ele.
   if (file.mediaId) return preprocessMediaRefAttachment(file, deps)
+
+  // PROJETO de composição de motion (.zip com `orbit.json` na raiz, o que
+  // "Salvar projeto" na aba Motion gera). Arrastar o arquivo aqui é o caminho
+  // de volta: a peça é recriada numa pasta NOVA desta conversa — mesmo nome,
+  // id novo, nada sobrescrito —, entra no registro e a aba abre nela. O agente
+  // recebe uma nota dizendo que a peça existe e como alcançá-la pelo id; o
+  // conteúdo (HTML, mídias, fontes) já está no disco, não vai para o contexto.
+  //
+  // Um `.zip` SEM o manifesto não é assunto daqui: segue o fluxo de anexo de
+  // sempre. E um `.skill` (que também é zip) chega no fluxo dele logo abaixo.
+  if (isMotionProjectAttachment(file, filename)) {
+    const bytes = decodeDataUrlBytes(file.url)
+    if (bytes) {
+      const manifest = readMotionProject(bytes)
+      if (manifest) {
+        if (!deps.sessionId) return [attachmentChip(file)]
+        try {
+          const imported = await importMotionProject(bytes, { sessionId: deps.sessionId })
+          // Galeria e aba: a peça importada tem que aparecer onde as outras
+          // aparecem — e já aberta, porque importar é para trabalhar nela.
+          void registerMotionCover(imported.id, { title: imported.name, sessionId: deps.sessionId }).catch(() => false)
+          void reopenMotion(imported.id).catch(() => false)
+          const note = [
+            `[Motion project imported — "${imported.name}" (id ${imported.id})]`,
+            `The whole composition was restored from the .zip: ${imported.files} file${imported.files === 1 ? '' : 's'} (HTML, media, fonts, audio.json) are in its folder, unchanged. It is registered as a NEW piece of this conversation — the same .zip can be imported again without touching this one — and its tab is open.`,
+            `Work on it by id: motion_read({ id: "${imported.id}" }) to see the HTML, motion_edit({ id: "${imported.id}" }) to change it, motion_preview({ id: "${imported.id}" }) to bring the tab back. The media files are already in the folder — reference them by relative path, no motion_asset needed.`,
+          ].join('\n')
+          return [
+            attachmentChip(file),
+            { id: newId('prt'), type: 'text', text: note, state: 'done', source: 'attachment' },
+          ]
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          return [
+            attachmentChip(file),
+            {
+              id: newId('prt'),
+              type: 'text',
+              text: `[Motion project could not be imported — ${message}]\nThe .zip was left untouched. Nothing in the app changed; tell the user what the error says.`,
+              state: 'done',
+              source: 'attachment',
+            },
+          ]
+        }
+      }
+    }
+  }
 
   // Elemento selecionado no browser do painel (modo seleção): o renderer
   // serializa o elemento (tag/url/selector/texto/html) como data URL JSON no

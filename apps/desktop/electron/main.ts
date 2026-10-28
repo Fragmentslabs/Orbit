@@ -27,6 +27,8 @@ import {
   type MotionRenderRequest,
 } from './lib/video/motion-store'
 import { measureMotionLayers } from './lib/video/motion-layers'
+import { listMotionBundles } from './lib/video/motion-files'
+import { exportMotionProject } from './lib/video/motion-project'
 import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
@@ -2340,6 +2342,38 @@ app.whenReady().then(() => {
         event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
       }
     })
+  })
+
+  // Os ARQUIVOS das composições desta conversa, para o card da peça no chat:
+  // nome, tamanho, tipo e se a composição cita cada um (usado / descartado).
+  // A lista sai da PASTA — o renderer não conhece caminho de peça nenhum, e o
+  // card se atualiza quando a pasta muda, sem nada ser gravado na mensagem.
+  ipcMain.handle('motion:bundles', async (_event, sessionId: string) => listMotionBundles(sessionId))
+
+  // "Salvar projeto": a pasta da composição inteira num .zip (HTML, mídias,
+  // fontes, audio.json) com um manifesto orbit.json na raiz — é o que o chat
+  // reconhece na volta para importar a peça em outra conversa. O arquivo nasce
+  // onde a pessoa disser, pelo mesmo diálogo do export de deck.
+  ipcMain.handle('motion:export', async (event, id: string) => {
+    let project: Awaited<ReturnType<typeof exportMotionProject>>
+    try {
+      project = await exportMotionProject(id)
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const target = await saveExport(win, {
+      title: 'Salvar o projeto da composição',
+      fileName: project.name,
+      filters: [{ name: 'Projeto do Orbit (zip)', extensions: ['zip'] }],
+    })
+    if (!target) return { ok: false as const, canceled: true as const }
+    try {
+      await fs.writeFile(target, project.buffer)
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
+    return { ok: true as const, path: target, files: project.files }
   })
 
   // Camadas da composição (quem entra e sai, e quando), medidas numa janela

@@ -19,7 +19,7 @@ import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, Com
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
-import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
+import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
@@ -694,6 +694,15 @@ export const motionApi = {
     const wrapper = window.ipcRenderer.on("motion:changed", (payload) => listener(payload as { id: string }))
     return () => window.ipcRenderer.off("motion:changed", wrapper)
   },
+  /** Os ARQUIVOS das composições da conversa — o que o card da peça no chat
+   *  lista. Sai da pasta da peça; `used` é derivado do que a composição cita. */
+  bundles: (sessionId: string) =>
+    window.ipcRenderer.invoke("motion:bundles", sessionId) as Promise<MotionBundle[]>,
+  /** "Salvar projeto": a pasta da peça inteira num .zip com manifesto. */
+  exportProject: (id: string) =>
+    window.ipcRenderer.invoke("motion:export", id) as Promise<
+      { ok: true; path: string; files: number } | { ok: false; canceled?: boolean; error?: string }
+    >,
 }
 
 /**

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { openMotionAndReport } from '../video/motion-open'
 import { getMotion, motionIdFor, registerMotion } from '../video/motion-store'
+import { pieceFileName, recordMotionFile } from '../video/motion-files'
 import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
 import { renderMotion } from '../video/motion'
 import { addVideoToGallery } from '../video/video-gallery'
@@ -12,6 +13,7 @@ import { VIDEO_GUIDES } from '../video/guide'
 import { panelMotionPreview } from '../panel-browser'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
+import { resolveAttachmentRef } from '../attachment-ref'
 import { createVideoTools } from './video'
 import {
   ASSET_SOURCE,
@@ -282,7 +284,24 @@ export function createMotionTools(
       }),
       execute: async ({ ref, path: source, filename, name, id }) => {
         const target = await resolveTarget({ name, id })
+        // A origem é resolvida ANTES de importar: o `id` que sai daqui
+        // (`aud_x.wav`, `img_x.png`) é a mesma identidade que a mídia tem no
+        // chat, e é ela — não o texto que o agente passou — que faz o player
+        // solto virar uma linha do card da peça.
+        const origin = ref ? await resolveAttachmentRef(ref).catch(() => null) : null
         const imported = await writing(target, () => importIntoPiece(target.folder, { ref, path: source, filename }, project))
+        // A origem do arquivo fica registrada na peça: é o que faz o player
+        // solto no chat virar uma linha do card da composição em vez de mais um
+        // card na conversa. O id é derivado da pasta + entrada (`motionIdFor`),
+        // então vale mesmo antes de a composição existir de verdade.
+        await recordMotionFile(
+          { id: motionIdFor(target.folder, target.file), folder: target.folder, sessionId: scope.sessionId },
+          {
+            name: pieceFileName(target.folder, imported.file) ?? imported.name,
+            ...(origin ? { ref: origin.id } : ref ? { ref: ref.trim().replace(/^ref\s+/i, '') } : {}),
+            ...(source && project ? { source: resolveSafePath(project, source) } : {}),
+          },
+        )
         return imported.report
       },
     })

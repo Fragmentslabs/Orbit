@@ -6,6 +6,7 @@ import {
   ChevronDown,
   CircleCheck,
   Clapperboard,
+  Download,
   Film,
   ImageIcon,
   Layers,
@@ -127,6 +128,13 @@ type RenderState =
   | { status: "idle" }
   | { status: "running"; frame: number; total: number }
   | { status: "done"; path: string }
+  | { status: "error"; message: string }
+
+/** "Salvar projeto": o .zip da peça inteira, com manifesto (ver motion-project). */
+type ProjectState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "done"; path: string; files?: number }
   | { status: "error"; message: string }
 
 type LayersState =
@@ -252,6 +260,7 @@ export function MotionTab({
   }, [fullscreen])
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [render, setRender] = useState<RenderState>({ status: "idle" })
+  const [project, setProject] = useState<ProjectState>({ status: "idle" })
   const [layers, setLayers] = useState<LayersState>({ status: "idle" })
   const [selectedName, setSelectedName] = useState<string | null>(null)
   /** As faixas da peça, medidas no main junto com as camadas — pela MESMA
@@ -808,6 +817,26 @@ export function MotionTab({
     [motionId, rendering],
   )
 
+  /**
+   * "Salvar projeto": a peça inteira num .zip — HTML, mídias, fontes, audio.json
+   * e o manifesto orbit.json. É o que o composer reconhece quando o arquivo é
+   * arrastado de volta em outra conversa (ver motion-project no main).
+   */
+  const saveProject = useCallback(() => {
+    if (!motionId || project.status === "saving") return
+    setProject({ status: "saving" })
+    motionApi
+      .exportProject(motionId)
+      .then((result) => {
+        if (result.ok) setProject({ status: "done", path: result.path, files: result.files })
+        else if (result.canceled) setProject({ status: "idle" })
+        else setProject({ status: "error", message: result.error ?? t("motion.error") })
+      })
+      .catch((err: unknown) =>
+        setProject({ status: "error", message: err instanceof Error ? err.message : String(err) }),
+      )
+  }, [motionId, project.status, t])
+
   const reveal = useCallback((target: string) => {
     // Mesmo canal dos outros pontos do app (file-viewer, video-part, task-modal):
     // abrir a pasta do sistema com o arquivo já selecionado.
@@ -859,6 +888,12 @@ export function MotionTab({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          <IconAction
+            icon={project.status === "saving" ? Loader2 : Download}
+            label={t("motion.saveProject")}
+            onClick={saveProject}
+            disabled={project.status === "saving"}
+          />
           <IconAction icon={RotateCw} label={t("motion.reload")} onClick={reload} />
           <IconAction
             icon={fullscreen ? Minimize2 : Maximize2}
@@ -906,6 +941,37 @@ export function MotionTab({
           estourava o painel exatamente por essa margem; o `overflow-hidden` do
           painel então cortava a borda direita e o X. Quem dá o respiro é o
           container, não o card. */}
+      {project.status === "done" && (
+        <div className="shrink-0 px-3 pt-2">
+          <Alert>
+            <Download className="text-emerald-500" />
+            <AlertTitle>{t("motion.projectSaved", { path: baseName(project.path) })}</AlertTitle>
+            <AlertDescription className="break-words">
+              {t("motion.projectSavedHint")}
+            </AlertDescription>
+            <AlertAction>
+              <Button variant="outline" size="sm" onClick={() => reveal(project.path)} title={project.path}>
+                {t("motion.showInFolder")}
+              </Button>
+              <IconAction icon={X} label={t("motion.dismiss")} onClick={() => setProject({ status: "idle" })} />
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
+
+      {project.status === "error" && (
+        <div className="shrink-0 px-3 pt-2">
+          <Alert variant="destructive">
+            <AlertTriangle />
+            <AlertTitle>{t("motion.saveProjectFailed")}</AlertTitle>
+            <AlertDescription className="break-words">{project.message}</AlertDescription>
+            <AlertAction>
+              <IconAction icon={X} label={t("motion.dismiss")} onClick={() => setProject({ status: "idle" })} />
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
+
       {renderedPath && (
         <div className="shrink-0 px-3 pt-2">
           <Alert>

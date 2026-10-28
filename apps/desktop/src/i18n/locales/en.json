@@ -2778,7 +2778,23 @@
     "loadFailed": "The composition did not load",
     "loadFailedHttp": "The server answered {{status}}: {{text}}",
     "loadTimeout": "The page did not respond in {{seconds}} s.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "bundle": {
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "discarded_one": "{{count}} discarded",
+      "discarded_other": "{{count}} discarded",
+      "new_one": "{{count}} new",
+      "new_other": "{{count}} new",
+      "used": "used",
+      "discardedTag": "discarded",
+      "openFolder": "Open folder",
+      "hint": "What the piece does not use stays here, in the folder and in the gallery — nothing is deleted."
+    },
+    "saveProject": "Save project (.zip)",
+    "projectSaved": "Project saved to {{path}}",
+    "projectSavedHint": "HTML, media, fonts and audio.json in one .zip — drop it in the composer of another conversation to bring the piece back.",
+    "saveProjectFailed": "Could not save the project"
   },
   "design": {
     "unavailable": "Canvas unavailable",

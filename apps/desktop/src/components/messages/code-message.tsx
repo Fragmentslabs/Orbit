@@ -19,6 +19,9 @@ import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { MotionPartView } from "@/src/components/ai/motion-part"
+import { MotionBundleCard } from "@/src/components/messages/motion-bundle-card"
+import { planMotionBundles } from "@/src/lib/motion-bundle"
+import { useMotionBundleIndexes } from "@/src/stores/motion-bundles-store"
 import { DesignPartView } from "@/src/components/ai/design-part"
 import { SlidesPartView } from "@/src/components/ai/slides-part"
 import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool } from "@/src/lib/piece-tools"
@@ -189,9 +192,15 @@ type Segment =
   | { kind: "image-group"; id: string; parts: ImagePart[] }
   | { kind: "part"; id: string; part: MessagePart }
 
-function segmentParts(parts: MessagePart[]): Segment[] {
+function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boolean): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
+    // Mídia que é de uma peça: fica como parte própria para dar lugar ao card
+    // dela (uma imagem com card não pode virar miniatura de um grupo).
+    if (cardPart(part)) {
+      segments.push({ kind: "part", id: part.id, part })
+      continue
+    }
     // Subagentes, TODO viva, propostas de skill e de conexão MCP, show_image e
     // artefatos têm render próprio — a chamada não entra no acordeon de ações (o
     // card do artefato JÁ é o resultado dela; o de MCP espera uma decisão sua)
@@ -241,7 +250,20 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
 }) {
   const { t } = useTranslation()
   const view = useSetting("chatView")
-  const segments = useMemo(() => segmentParts(arrangeForView(message.parts, view)), [message.parts, view])
+  // Mídia de uma peça de motion vira o card dela, igual ao modo chat.
+  const indexes = useMotionBundleIndexes(sessionId)
+  const plan = useMemo(
+    () => planMotionBundles(message.parts, indexes, message.id),
+    [message.parts, indexes, message.id],
+  )
+  const parts = useMemo(
+    () => (plan.hidden.size ? message.parts.filter((part) => !plan.hidden.has(part.id)) : message.parts),
+    [message.parts, plan],
+  )
+  const segments = useMemo(
+    () => segmentParts(arrangeForView(parts, view), (part) => plan.cards.has(part.id)),
+    [parts, view, plan],
+  )
   const flat = view === "detailed"
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
@@ -282,6 +304,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
+        ) : plan.cards.has(segment.id) ? (
+          <MotionBundleCard key={segment.id} bundle={plan.cards.get(segment.id)!} />
         ) : segment.part.type === "text" ? (
           segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />

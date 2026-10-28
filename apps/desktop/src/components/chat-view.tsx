@@ -50,6 +50,7 @@ import { MessageReplySelection } from "@/src/components/message-reply-selection"
 import { DateSeparator, isNewDay } from "@/src/components/messages/date-separator"
 import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
+import { useMotionBundleAnchors } from "@/src/stores/motion-bundles-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageBody, messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
@@ -764,6 +765,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   }, [folders, embedded, viewMode, sessionIdDoChat, pastaDaSessao, extrasDaSessao])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
+  // Os arquivos das peças de motion desta conversa: o card da peça no chat lê
+  // daqui (e se atualiza quando a pasta muda). Os endereços dizem em qual
+  // MENSAGEM cada card mora — a primeira que mostrou mídia daquela peça.
+  useMotionBundleAnchors(session?.id, messages, isBusy)
   // Sessão cujo histórico ainda não chegou do disco conta como conversa: sem
   // isso, trocar de chat passava pela tela de início (lista vazia por um
   // instante) e rodava as animações de saída e entrada antes de mostrar o
