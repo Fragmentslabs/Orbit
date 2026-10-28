@@ -43,6 +43,7 @@ import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
 import { ReferencePalette } from "@/src/components/reference-palette"
 import { useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
+import { useInputHistory } from "@/src/hooks/use-input-history"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
@@ -107,6 +108,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   // Chave da mensagem respondida: o chat de código não tem rascunho por
   // painel, então é a sessão (ou "draft" no chat novo).
   const replyKey = sessionId ?? "draft"
+  // ↑/↓ trazem de volta os textos já enviados nesta sessão.
+  const navigateHistory = useInputHistory(sessionId, replyKey)
   const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
   const plan = useModeActive("plan", sessionId, codeActiveModes.plan)
   const search = useModeActive("search", sessionId, codeActiveModes.search)
@@ -510,6 +513,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               <PromptInputTextarea
                 placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
                 suggestion={suggestion}
+                onHistory={navigateHistory}
                 className="px-3 pr-10 text-base md:text-base"
               />
             </div>

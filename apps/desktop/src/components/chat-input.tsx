@@ -59,6 +59,7 @@ import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { closestVariant } from "@shared/chat"
 import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
 import { toFileParts } from "@/src/lib/message-utils"
+import { useInputHistory } from "@/src/hooks/use-input-history"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 
@@ -77,6 +78,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   // Chave do rascunho (e da mensagem respondida): a mesma regra do
   // ChatInputDraft, para a citação de um chat não aparecer em outro.
   const replyKey = draftKey ?? sessionId ?? "draft"
+  // ↑/↓ trazem de volta os textos já enviados neste chat.
+  const navigateHistory = useInputHistory(sessionId, replyKey)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
@@ -320,7 +323,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               <VoiceCallPanel control={voiceCall} />
               <DictationButton sessionId={sessionId} />
             </div>
-            <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 pr-10 text-base md:text-base" />
+            <PromptInputTextarea
+              placeholder={t("input.placeholder")}
+              suggestion={suggestion}
+              onHistory={navigateHistory}
+              className="px-3 pr-10 text-base md:text-base"
+            />
           </div>
         </PromptInputBody>
         <PromptInputFooter>

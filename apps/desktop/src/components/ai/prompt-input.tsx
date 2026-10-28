@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import i18n from "@/src/i18n"
+import { historyKeyInput, type HistoryInput } from "@/src/lib/input-history"
 import {
   MAX_PASTED_VIDEO_BYTES,
   blobUrlsToDataUrls,
@@ -897,6 +898,10 @@ export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea>
   /** Próxima mensagem sugerida: com o campo vazio, aparece no lugar do
    *  placeholder e Tab a coloca no campo. */
   suggestion?: string
+  /** ↑/↓ do histórico de mensagens enviadas (ver useInputHistory): devolve o
+   *  texto a colocar no campo, já com a resposta armada, ou `null` quando a
+   *  tecla é do caret e não do histórico. */
+  onHistory?: (direction: "older" | "newer", input: HistoryInput) => string | null
 }
 
 export const PromptInputTextarea = ({
@@ -904,6 +909,7 @@ export const PromptInputTextarea = ({
   className,
   placeholder,
   suggestion,
+  onHistory,
   ...props
 }: PromptInputTextareaProps) => {
   const { t } = useTranslation()
@@ -922,6 +928,42 @@ export const PromptInputTextarea = ({
       controller.textInput.setInput(suggestion)
       return
     }
+    // ↑/↓ trazem de volta o que já foi enviado (useInputHistory), mas só na
+    // PONTA do campo: em qualquer outra posição a seta é do caret — inclusive
+    // num texto sem "\n" que apenas QUEBROU em várias linhas na tela.
+    // Modificador (Shift+↑ seleciona) e IME nunca são histórico.
+    if (
+      onHistory &&
+      controller &&
+      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+      !e.shiftKey &&
+      !e.altKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !isComposing &&
+      !e.nativeEvent.isComposing
+    ) {
+      const node = e.currentTarget
+      // Do textarea, não do estado: o que vale é o que está na tela.
+      const field = historyKeyInput(node)
+      if (field) {
+        const direction = e.key === "ArrowUp" ? "older" : "newer"
+        const text = onHistory(direction, field)
+        if (text !== null) {
+          e.preventDefault()
+          controller.textInput.setInput(text)
+          // O caret vai para a ponta que dá continuidade à navegação: ↑ deixa
+          // na primeira posição (de onde se sobe de novo), ↓ na última. Depois
+          // do commit do React, que é quem troca o valor do campo.
+          requestAnimationFrame(() => {
+            const caret = direction === "older" ? 0 : node.value.length
+            node.setSelectionRange(caret, caret)
+          })
+          return
+        }
+      }
+    }
+
     if (e.key === "Enter") {
       if (isComposing || e.nativeEvent.isComposing) {
         return
