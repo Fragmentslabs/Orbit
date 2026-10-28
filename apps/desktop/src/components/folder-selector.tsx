@@ -15,7 +15,7 @@ function loadRecentFolders(): string[] {
   return []
 }
 
-async function pickFolder(): Promise<string | null> {
+export async function pickFolder(): Promise<string | null> {
   try {
     const result = await window.ipcRenderer.invoke("select-folder")
     return result as string | null
@@ -50,9 +50,12 @@ interface FolderSelectorProps {
   onOpenChange?: (open: boolean) => void
   /** Omite o botão gatilho — usado quando outro componente abre este dropdown */
   hideTrigger?: boolean
+  /** Pasta ainda não escolhida (bloqueio do envio no modo código): a linha
+   *  que se abre ao redor do gatilho chama o olho para o que resolve. */
+  pulse?: boolean
 }
 
-export function FolderSelector({ folders, onFoldersChange, compact, open: openProp, onOpenChange, hideTrigger }: FolderSelectorProps) {
+export function FolderSelector({ folders, onFoldersChange, compact, open: openProp, onOpenChange, hideTrigger, pulse }: FolderSelectorProps) {
   const { t } = useTranslation()
   const nomePrincipal = useNomeDaPastaPrincipal(folders[0])
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -186,10 +189,20 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
         // Sem dropdown fora do header em telas pequenas (hideTrigger, acima):
         // o clique troca a pasta principal direto pelo seletor nativo, como
         // era antes de existir o dropdown.
-        <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
-          <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
-        </button>
+        <span className="relative inline-flex min-w-0 max-w-full">
+          {/* Sem pasta o modo código não tem onde trabalhar: o mesmo pulso do
+              botão de conectar provedor marca o único controle que resolve. */}
+          {pulse && (
+            <span
+              aria-hidden
+              className="folder-pulse-ring pointer-events-none absolute inset-0 rounded-md"
+            />
+          )}
+          <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
+            <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
+            <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+          </button>
+        </span>
       )}
       {/* Pastas extras + "+" ao lado do trigger. No header (compact) quem
           esconde essa fileira em telas pequenas é o container query do

@@ -1276,6 +1276,11 @@
     "configure": "Configurar provedor",
     "dismiss": "Dispensar"
   },
+  "folderHint": {
+    "hint": "Escolha uma pasta para enviar — o modo código trabalha dentro de um diretório.",
+    "choose": "Escolher pasta",
+    "dismiss": "Dispensar"
+  },
   "orchestrationConfig": {
     "titleSubagents": "Configurar subagentes",
     "titleOrchestra": "Configurar orquestra",

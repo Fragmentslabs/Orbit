@@ -45,6 +45,7 @@ import { ReferencePalette } from "@/src/components/reference-palette"
 import { useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useInputHistory } from "@/src/hooks/use-input-history"
 import { FolderSelector } from "@/src/components/folder-selector"
+import { FolderHintCard } from "@/src/components/folder-hint-card"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
@@ -148,6 +149,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   // é a fonte (é ele que o envio grava na sessão).
   const folders = foldersProp ?? foldersDoWorkspace
   const setFolders = onFoldersChangeProp ?? setFoldersDoWorkspace
+  // Sem pasta o modo código não tem onde trabalhar. O Enviar NÃO é
+  // desabilitado por isso: o submit é interceptado (o texto é preservado) e o
+  // card abaixo do seletor diz o motivo, com o atalho que resolve.
+  const noFolder = folders.length === 0
+  const [folderHintVisible, setFolderHintVisible] = useState(false)
+  // O card é sobre a falta de pasta: some sozinho quando uma é associada.
+  useEffect(() => {
+    if (!noFolder) setFolderHintVisible(false)
+  }, [noFolder])
 
   // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
   useEffect(() => {
@@ -466,9 +476,17 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       <div className="w-full max-w-2xl mx-auto pb-4 @container">
         {!hasMessages && showFolders && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
-            <FolderSelector folders={folders} onFoldersChange={setFolders} />
+            <FolderSelector folders={folders} onFoldersChange={setFolders} pulse={noFolder} />
           </div>
         )}
+        <FolderHintCard
+          visible={folderHintVisible}
+          onPick={(folder) => {
+            saveRecentFolders([folder])
+            setFolders([folder])
+          }}
+          onDismiss={() => setFolderHintVisible(false)}
+        />
         <PromptInputAttachments className="!w-auto !p-0 mb-2" leading={<ReplyBar replyKey={replyKey} />}>
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
@@ -526,11 +544,24 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         <QueueIndicator sessionId={sessionId} />
         <PromptInput
           multiple
-          onSubmitCapture={noProvider ? (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onProviderBlocked?.()
-          } : undefined}
+          onSubmitCapture={(e) => {
+            // Em CAPTURE, antes de o handleSubmit do PromptInput limpar o
+            // input: o texto do usuário fica onde está e o card diz o motivo,
+            // em vez de o clique morrer em silêncio (sem provedor ou sem
+            // pasta). O card do provedor tem precedência — sem ele nada mais
+            // funcionaria de qualquer forma.
+            if (noProvider) {
+              e.preventDefault()
+              e.stopPropagation()
+              onProviderBlocked?.()
+              return
+            }
+            if (noFolder) {
+              e.preventDefault()
+              e.stopPropagation()
+              setFolderHintVisible(true)
+            }
+          }}
           onSubmit={handleSubmit}
           className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
@@ -624,7 +655,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 emptySlotAlways={voiceCall.call.active && voiceCall.isCallSession}
                 busy={busy}
                 cancelling={status === "cancelling"}
-                disabled={folders.length === 0}
+                // Sem pasta o Enviar continua ativo de propósito (o submit é
+                // interceptado e o card explica). O chevron NÃO fica
+                // desabilitado — é a mesma peça visual do Enviar e ficaria com
+                // duas opacidades; ele também acende o card, em vez de abrir um
+                // menu de ações que agendariam sem diretório.
+                onOptionsBlocked={noFolder ? () => setFolderHintVisible(true) : undefined}
                 onStop={() => onStop?.()}
                 onQueue={(text, files) => {
                   if (!sessionId) return

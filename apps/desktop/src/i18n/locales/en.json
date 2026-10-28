@@ -1276,6 +1276,11 @@
     "configure": "Configure a provider",
     "dismiss": "Dismiss"
   },
+  "folderHint": {
+    "hint": "Choose a folder to send — code mode works inside a directory.",
+    "choose": "Choose folder",
+    "dismiss": "Dismiss"
+  },
   "orchestrationConfig": {
     "titleSubagents": "Configure subagents",
     "titleOrchestra": "Configure orchestra",

@@ -276,13 +276,17 @@
   }
 }
 
-.provider-pulse-ring {
+/* Mesmo pulso, outro bloqueio real: a pasta do modo código, que precisa ser
+   escolhida antes de enviar (ver FolderSelector). */
+.provider-pulse-ring,
+.folder-pulse-ring {
   outline: 1px solid var(--primary);
   animation: provider-pulse 3.2s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .provider-pulse-ring {
+  .provider-pulse-ring,
+  .folder-pulse-ring {
     animation: none;
     opacity: 0;
   }

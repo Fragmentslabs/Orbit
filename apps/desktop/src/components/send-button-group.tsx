@@ -35,6 +35,14 @@ interface SendButtonGroupProps {
   onStop: () => void;
   disabled?: boolean;
   /**
+   * Modo código sem pasta: agendar e enviar para o painel lateral gravariam a
+   * mensagem sem diretório, então o menu do chevron não abre. Desabilitar só
+   * essa metade não serve — o Enviar e o chevron são uma peça visual só, e
+   * ficariam com duas opacidades. Aqui o clique continua respondendo: quem
+   * sabe o motivo mostra a explicação.
+   */
+  onOptionsBlocked?: () => void;
+  /**
    * No lugar do "Enviar" quando o campo está vazio e o agente parado (o botão
    * de chamada). Com `emptySlotAlways` ele fica em qualquer caso — em chamada o
    * slot é o "desligar", que não pode sumir porque alguém digitou ou o agente
@@ -53,6 +61,7 @@ export function SendButtonGroup({
   onSendToSidePanel,
   onStop,
   disabled,
+  onOptionsBlocked,
   emptySlot,
   emptySlotAlways,
 }: SendButtonGroupProps) {
@@ -60,6 +69,9 @@ export function SendButtonGroup({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [pendingText, setPendingText] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<QueueAttachment[] | null>(null);
+  // Só um dos dois Selects (fila ou envio normal) está montado por vez, então
+  // o controle de abertura é compartilhado.
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const { textInput, attachments } = usePromptInputController();
   const text = textInput.value.trim();
   const hasText = text.length > 0;
@@ -105,6 +117,19 @@ export function SendButtonGroup({
     [pendingText, pendingFiles, onSchedule, attachments],
   );
 
+  const handleOptionsOpenChange = useCallback(
+    (next: boolean) => {
+      // Bloqueado: não abre (o menu só tem ações que precisam da pasta) e
+      // devolve o clique para quem sabe explicar.
+      if (next && onOptionsBlocked) {
+        onOptionsBlocked();
+        return;
+      }
+      setOptionsOpen(next);
+    },
+    [onOptionsBlocked],
+  );
+
   // Campo vazio com um botão próprio para esse caso (a chamada de voz).
   if (emptySlot && (emptySlotAlways || (!hasText && !busy))) return <>{emptySlot}</>;
 
@@ -143,6 +168,8 @@ export function SendButtonGroup({
           </InputGroupButton>
           <Select
             value=""
+            open={optionsOpen}
+            onOpenChange={handleOptionsOpenChange}
             onValueChange={(value) => {
               if (value === "side-panel") void withAttachments(onSendToSidePanel);
               else if (value === "stop-send") void withAttachments(onStopAndSend);
@@ -195,6 +222,8 @@ export function SendButtonGroup({
         </InputGroupButton>
         <Select
           value=""
+          open={optionsOpen}
+          onOpenChange={handleOptionsOpenChange}
           onValueChange={(value) => {
             if (value === "schedule") void handleScheduleOpen();
             else if (value === "side-panel") void withAttachments(onSendToSidePanel);
