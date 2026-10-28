@@ -2,6 +2,7 @@ import i18n from "@/src/i18n"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { VoiceTtsEngine } from "@shared/voice"
 import { parseVoiceStatus, type VoiceStatus } from "@/src/lib/dictation"
+import { speechPieceText, spokenPrefix } from "@/src/lib/voice-call"
 import { voiceApi } from "@/src/lib/voice-ipc"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 
@@ -61,6 +62,8 @@ interface ChunkPayload {
   n?: number
   /** Nº da frase, só na fala contínua (o modo chamada mostra a que está tocando). */
   seg?: number
+  /** Texto deste pedaço do áudio (o motor local manda; a rota do modelo, não). */
+  text?: string
 }
 
 /** O que o main manda em `voice:tts:done` (com `error` quando a síntese falhou). */
@@ -178,6 +181,12 @@ export class ChunkPlayer {
   private sources: AudioBufferSourceNode[] = []
   /** Frase (fala contínua) e fim, no relógio do contexto, de cada pedaço agendado. */
   private meta = new Map<AudioBufferSourceNode, { seg?: number; end: number }>()
+  /**
+   * Pedaços de cada frase com o texto e a janela de áudio: é o que permite
+   * revelar a legenda junto com o som. Fica fora do `meta` porque o `meta` some
+   * quando o pedaço termina — e a legenda precisa do que já tocou.
+   */
+  private pieces = new Map<number, { text: string; start: number; end: number }[]>()
   private nextAt = 0
 
   constructor(createContext: AudioContextFactory) {
@@ -210,7 +219,7 @@ export class ChunkPlayer {
    * Agenda um pedaço emendado no fim do anterior e devolve em quantos segundos
    * ele começa a tocar. Um pedaço vazio não agenda nada (devolve `null`).
    */
-  schedule(samples: Float32Array, sampleRate: number, seg?: number): number | null {
+  schedule(samples: Float32Array, sampleRate: number, seg?: number, text?: string): number | null {
     if (samples.length === 0) return null
     const context = this.ensure()
     if (context.state === "suspended") void context.resume()
@@ -225,6 +234,12 @@ export class ChunkPlayer {
     this.nextAt = at + buffer.duration
     this.sources.push(source)
     this.meta.set(source, { seg, end: this.nextAt })
+    // Sem texto não há legenda para este pedaço — mas o anterior já foi dito.
+    if (typeof seg === "number" && text?.trim()) {
+      const pieces = this.pieces.get(seg) ?? []
+      pieces.push({ text: text.trim(), start: at, end: this.nextAt })
+      this.pieces.set(seg, pieces)
+    }
     source.onended = () => {
       this.sources = this.sources.filter((current) => current !== source)
       this.meta.delete(source)
@@ -232,6 +247,30 @@ export class ChunkPlayer {
       this.onEnded?.()
     }
     return Math.max(0, at - context.currentTime)
+  }
+
+  /**
+   * O que já tocou da frase `seg`, em texto: os pedaços concluídos mais o
+   * começo do que está tocando agora — a legenda cresce junto com o áudio.
+   */
+  spokenText(seg: number): string {
+    const pieces = this.pieces.get(seg)
+    if (!pieces || pieces.length === 0) return ""
+    const now = this.clock
+    const parts: string[] = []
+    for (const piece of pieces) {
+      if (now >= piece.end) {
+        parts.push(piece.text)
+        continue
+      }
+      if (now > piece.start) {
+        const total = piece.end - piece.start
+        parts.push(spokenPrefix(piece.text, total > 0 ? (now - piece.start) / total : 1))
+      }
+      // O próximo pedaço ainda não começou: a legenda para aqui.
+      break
+    }
+    return parts.filter(Boolean).join(" ")
   }
 
   /**
@@ -260,6 +299,7 @@ export class ChunkPlayer {
     const dropped = keep.length !== this.sources.length
     this.sources = keep
     this.nextAt = end
+    for (const key of this.pieces.keys()) if (key > seg) this.pieces.delete(key)
     if (dropped) this.onEnded?.()
   }
 
@@ -276,6 +316,7 @@ export class ChunkPlayer {
     }
     this.sources = []
     this.meta.clear()
+    this.pieces.clear()
     this.nextAt = 0
   }
 
@@ -531,7 +572,15 @@ export function useSpeak() {
       // Frase descartada por um corte que ainda estava sendo gerada: chega morta.
       const dropped = droppedRef.current
       if (typeof seg === "number" && dropped && seg > dropped.keep && seg <= dropped.upTo) return
-      const startsIn = getPlayer().schedule(samples, sampleRate, seg)
+      // Texto deste pedaço: o motor local manda o dele; a rota do modelo manda
+      // só o áudio, então a fatia sai da frase inteira pela posição do pedaço.
+      const text =
+        typeof chunk.text === "string" && chunk.text.trim()
+          ? chunk.text.trim()
+          : typeof seg === "number"
+            ? speechPieceText(segTextsRef.current.get(seg) ?? "", chunk.i ?? 0, chunk.n ?? 1)
+            : undefined
+      const startsIn = getPlayer().schedule(samples, sampleRate, seg, text)
       setGen(false)
       setAudible(true)
       // Frase nova na fala contínua: ela passa a ser "a que está tocando" no
@@ -774,6 +823,7 @@ export function useSpeak() {
     for (const entry of segTimersRef.current) if (entry.seg > keep) clearTimeout(entry.timer)
     segTimersRef.current = segTimersRef.current.filter((entry) => entry.seg <= keep)
     if (lastSegRef.current !== null && lastSegRef.current > keep) lastSegRef.current = keep
+    for (const key of segTextsRef.current.keys()) if (key > keep) segTextsRef.current.delete(key)
     getPlayer().dropAfter(keep)
   }, [getPlayer])
 
@@ -812,5 +862,28 @@ export function useSpeak() {
   /** Some com o aviso de erro sem tocar em fala nenhuma (o botão volta ao normal). */
   const dismissError = useCallback(() => setError(null), [])
 
-  return { speak, speakStream, appendSpeech, endSpeech, trimSpeech, stop, speaking, generating, segment, segmentText, audible, error, dismissError }
+  /**
+   * Texto da frase `seg` que já tocou — os pedaços concluídos mais o começo do
+   * que está tocando. Lê o relógio do áudio na hora: quem mostra a legenda
+   * precisa re-renderizar enquanto a fala corre (o modo chamada faz isso).
+   */
+  const segSpokenText = useCallback((seg: number) => playerRef.current?.spokenText(seg) ?? "", [])
+
+  /** Textos das frases ANTERIORES a `seg`, na ordem em que foram faladas. */
+  const beforeSegText = useCallback((seg: number) => {
+    const out: { seg: number; text: string }[] = []
+    for (const [key, text] of segTextsRef.current) if (key < seg) out.push({ seg: key, text })
+    return out.sort((a, b) => a.seg - b.seg).map((entry) => entry.text)
+  }, [])
+
+  /**
+   * Todo o texto já pedido para a fala, na ordem das frases — inclusive o que
+   * ainda não tocou. É o roteiro de onde a legenda tira a próxima linha.
+   */
+  const speechScript = useCallback(() => {
+    const entries = [...segTextsRef.current.entries()].sort((a, b) => a[0] - b[0])
+    return entries.map(([, text]) => text).join(" ")
+  }, [])
+
+  return { speak, speakStream, appendSpeech, endSpeech, trimSpeech, stop, speaking, generating, segment, segmentText, segSpokenText, beforeSegText, speechScript, audible, error, dismissError }
 }

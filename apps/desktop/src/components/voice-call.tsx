@@ -99,9 +99,41 @@ export function VoiceCallButton({ control }: { control: VoiceCallControlState })
 }
 
 /**
+ * As duas linhas da legenda da chamada: a de cima é a que está sendo dita
+ * (branca) e a de baixo é a próxima (cinza). Quando a fala avança, a trilha
+ * sobe uma linha — a próxima assume o lugar da atual e uma nova entra embaixo.
+ */
+function CallCaption({ lines, current }: { lines: string[]; current: number }) {
+  const at = Math.max(0, Math.min(current, lines.length - 1))
+  return (
+    <div className="h-[2.75em] min-w-0 flex-1 overflow-hidden text-xs leading-snug">
+      <div
+        className="transition-transform duration-200 ease-out"
+        // 1.375em = leading-snug: a trilha sobe exatamente uma linha por vez.
+        style={{ transform: `translateY(-${(at * 1.375).toFixed(3)}em)` }}
+      >
+        {lines.map((line, index) => (
+          <div
+            key={index}
+            aria-hidden={index === at ? undefined : true}
+            className={cn(
+              "h-[1.375em] truncate transition-colors duration-200",
+              index === at ? "text-foreground" : "text-muted-foreground/40",
+            )}
+          >
+            {line}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Painel da chamada no topo do campo (cobre o texto): a fase (ouvindo /
- * pensando / falando), a prévia do que se diz e o "interromper". Fora da
- * chamada mostra só o aviso de uma chamada que caiu.
+ * pensando / falando), a legenda em duas linhas — a que está sendo dita em
+ * branco e a próxima em cinza — e o "interromper". Fora da chamada mostra só
+ * o aviso de uma chamada que caiu.
  */
 export function VoiceCallPanel({ control }: { control: VoiceCallControlState }) {
   const { t } = useTranslation()
@@ -118,6 +150,7 @@ export function VoiceCallPanel({ control }: { control: VoiceCallControlState }) 
   }
 
   const { phase } = call
+  const caption = phase === "speaking" ? call.caption : null
   const text = phase === "listening" ? call.partial : phase === "thinking" ? call.heard : call.saying
   const placeholder =
     phase === "listening" ? t("voice.call.listening") : phase === "thinking" ? t("voice.call.thinking") : t("voice.call.speaking")
@@ -148,9 +181,11 @@ export function VoiceCallPanel({ control }: { control: VoiceCallControlState }) 
         <span role="status" className="line-clamp-2 min-w-0 flex-1 text-xs leading-snug text-destructive">
           {errorText}
         </span>
+      ) : caption ? (
+        <CallCaption lines={caption.lines} current={caption.current} />
       ) : (
-        // Duas linhas ancoradas EMBAIXO: o texto novo (a prévia que cresce, a
-        // frase que está tocando) fica à vista e o antigo sobe e some no topo.
+        // Fora da fala (ouvindo/pensando) a prévia cresce ancorada EMBAIXO: o
+        // texto novo fica à vista e o antigo sobe e some no topo.
         <div
           title={text || placeholder}
           className={cn(

@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { VOICE_DEFAULTS } from "@shared/voice"
 import type { WaveLevels } from "@/src/components/dictation-wave"
 import { useDictation } from "@/src/hooks/use-dictation"
 import { readTtsEngine, readTtsPrefs, useSpeak } from "@/src/hooks/use-speak"
-import { callSpeech, isSpeech, trackNoise, speechText, takeSpeakable, turnEnded } from "@/src/lib/voice-call"
+import {
+  callSpeech,
+  captionIndexAt,
+  captionLines,
+  isSpeech,
+  normalizeSpeech,
+  trackNoise,
+  speechText,
+  takeSpeakable,
+  turnEnded,
+} from "@/src/lib/voice-call"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSessionStatus, useSessionStore } from "@/src/stores/session-store"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
@@ -61,8 +71,6 @@ export function useVoiceCall({
   const [phase, setPhaseState] = useState<CallPhase>("listening")
   const [partial, setPartial] = useState("")
   const [heard, setHeard] = useState("")
-  /** Frases da resposta, na ordem em que foram para a fala (o `seg` de cada uma). */
-  const [sentences, setSentences] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const activeRef = useRef(false)
@@ -131,7 +139,6 @@ export function useVoiceCall({
         return
       }
       setHeard(said)
-      setSentences([])
       replyRef.current = { sentAt: Date.now(), offset: 0, streaming: false, toolSeen: false, done: false, ignore: false, sawBusy: false }
       setPhase("thinking")
       if (!submitRef.current(said)) hangUpRef.current()
@@ -143,7 +150,7 @@ export function useVoiceCall({
   const dictationRef = useRef(dictation)
   dictationRef.current = dictation
 
-  const { speakStream, appendSpeech, endSpeech, trimSpeech, stop: stopSpeaking, speaking, segmentText, audible } = useSpeak()
+  const { speakStream, appendSpeech, endSpeech, trimSpeech, stop: stopSpeaking, speaking, segment, segSpokenText, beforeSegText, speechScript, audible } = useSpeak()
 
   const listen = useCallback(() => {
     if (!activeRef.current) return
@@ -210,7 +217,6 @@ export function useVoiceCall({
         speakStream({ voice: ttsPrefs.voice, lang: ttsPrefs.lang, speed: ttsPrefs.speed, engine: ttsEngine })
       }
       appendSpeech(spoken)
-      setSentences((prev) => [...prev, spoken])
     }
     if (!reply.toolSeen) {
       const { chunk, next } = takeSpeakable(speech.lead, reply.offset, finished && !speech.hasTool)
@@ -220,7 +226,8 @@ export function useVoiceCall({
     if (speech.hasTool && !reply.toolSeen) {
       // Partiu para as ferramentas: fica a frase de espera (a que está tocando,
       // ou a primeira); o resto do que ele narrou antes — às vezes o próprio
-      // raciocínio — sai da fila, gerado ou não.
+      // raciocínio — sai da fila, gerado ou não. A legenda acompanha o corte
+      // porque o `useSpeak` descarta o texto das frases que saíram.
       reply.toolSeen = true
       if (reply.streaming) trimSpeech()
     }
@@ -248,7 +255,6 @@ export function useVoiceCall({
     setActive(true)
     setError(null)
     setHeard("")
-    setSentences([])
     replyRef.current = idleReply()
     // Um erro de um ditado anterior derrubaria a chamada logo ao começar.
     dictationRef.current.dismissError()
@@ -293,6 +299,34 @@ export function useVoiceCall({
     return () => window.ipcRenderer.off("voice:hangup", wrapper)
   }, [])
 
+  // A legenda da fala acompanha o ÁUDIO, não a geração: as frases já tocadas
+  // ficam, e a que está tocando é revelada pelo relógio do player. Um tick de
+  // 100 ms é o suficiente para as linhas subirem junto com a voz.
+  const [, bumpSpeechFrame] = useReducer((frame: number) => frame + 1, 0)
+  useEffect(() => {
+    if (phase !== "speaking" || segment === null) return
+    const timer = setInterval(bumpSpeechFrame, 100)
+    return () => clearInterval(timer)
+  }, [phase, segment])
+
+  const saying = (() => {
+    if (segment === null) return ""
+    return [...beforeSegText(segment), segSpokenText(segment)].filter(Boolean).join(" ")
+  })()
+
+  // As duas linhas que o painel mostra: a que está sendo dita (o ponto do
+  // áudio) e a próxima, que já foi gerada mas ainda não tocou. O roteiro tem
+  // o texto todo, inclusive o das frases futuras; o `saying` dá a posição.
+  const caption = (() => {
+    if (segment === null) return null
+    const lines = captionLines(speechScript())
+    if (lines.length === 0) return null
+    return {
+      lines: lines.map((line) => line.text),
+      current: captionIndexAt(lines, normalizeSpeech(saying).length),
+    }
+  })()
+
   return {
     active,
     phase,
@@ -300,8 +334,10 @@ export function useVoiceCall({
     partial,
     /** O último turno da pessoa, como foi enviado. */
     heard,
-    /** A frase da resposta que está tocando agora (ou a última, se ainda não começou). */
-    saying: segmentText ?? sentences[0] ?? "",
+    /** O que já foi dito da resposta, até o ponto do áudio — a posição da legenda. */
+    saying,
+    /** As duas linhas da legenda: a atual e a próxima. */
+    caption,
     /** Falando, mas sem som neste instante: o agente ainda trabalha na próxima frase. */
     waiting: phase === "speaking" && !audible,
     error,

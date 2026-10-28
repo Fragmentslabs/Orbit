@@ -123,6 +123,87 @@ export function takeSpeakable(text: string, from: number, final: boolean): { chu
 }
 
 /**
+ * O começo de `text` que já foi dito, cortado em limite de palavra: a legenda
+ * do modo chamada cresce junto com o áudio sem cortar uma palavra ao meio.
+ * `fraction` é 0..1 do que já tocou.
+ */
+export function spokenPrefix(text: string, fraction: number): string {
+  if (!text) return ""
+  if (fraction >= 1) return text
+  if (!Number.isFinite(fraction) || fraction <= 0) return ""
+  const cut = Math.ceil(text.length * fraction)
+  if (cut >= text.length) return text
+  // O primeiro espaço depois do corte: a palavra que começou só entra quando
+  // estiver inteira (ou quando for a última).
+  const rest = text.slice(cut)
+  const gap = rest.search(/\s/)
+  return gap === -1 ? text : text.slice(0, cut + gap)
+}
+
+/**
+ * Fatia de `text` que cabe ao pedaço `index` de `total`. É o caminho de quem
+ * manda só o áudio fatiado, sem o texto do pedaço (a rota do modelo): divide
+ * por palavras para as fatias não se sobreporem nem deixarem buraco.
+ */
+export function speechPieceText(text: string, index: number, total: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0 || total <= 0 || index < 0 || index >= total) return ""
+  if (total === 1) return words.join(" ")
+  const start = Math.round((words.length * index) / total)
+  const end = Math.round((words.length * (index + 1)) / total)
+  return words.slice(start, Math.max(start, end)).join(" ")
+}
+
+/** Uma linha de legenda e o trecho que ela cobre no texto normalizado. */
+export interface CaptionLine {
+  text: string
+  /** Índice do primeiro caractere da linha no texto normalizado. */
+  start: number
+  /** Índice logo depois do último caractere da linha. */
+  end: number
+}
+
+/** Espaços, quebras e tabulações em um espaço só — a medida da legenda. */
+export function normalizeSpeech(text: string): string {
+  return text.replace(/\s+/g, " ").trim()
+}
+
+/**
+ * Corta a fala em linhas de legenda curtas (até `maxChars`), sempre em limite
+ * de palavra: o painel da chamada mostra duas — a que está sendo dita e a
+ * próxima —, então cada linha precisa caber em uma linha visual.
+ */
+export function captionLines(text: string, maxChars = 48): CaptionLine[] {
+  const normalized = normalizeSpeech(text)
+  if (!normalized) return []
+  const lines: CaptionLine[] = []
+  let from = 0
+  while (from < normalized.length) {
+    let end = Math.min(normalized.length, from + maxChars)
+    if (end < normalized.length) {
+      const space = normalized.lastIndexOf(" ", end)
+      if (space > from) end = space
+    }
+    const line = normalized.slice(from, end).trim()
+    if (line) lines.push({ text: line, start: from, end })
+    from = end
+    while (from < normalized.length && normalized[from] === " ") from++
+  }
+  return lines
+}
+
+/**
+ * Índice da linha que está sendo dita para uma posição (em caracteres) no
+ * texto normalizado. Posições no espaço entre duas linhas continuam na
+ * anterior; a próxima só assume quando a primeira letra dela começa.
+ */
+export function captionIndexAt(lines: CaptionLine[], position: number): number {
+  let index = 0
+  for (let i = 0; i < lines.length; i++) if (lines[i].start <= position) index = i
+  return index
+}
+
+/**
  * Markdown → texto que soa bem em voz alta. O prompt da chamada já pede texto
  * puro; isto é a rede para o que escapar (um negrito, um link, um bloco de código).
  */

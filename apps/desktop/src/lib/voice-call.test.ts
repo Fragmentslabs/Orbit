@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest"
 import type { ChatMessage } from "@shared/chat"
-import { callSpeech, isSpeech, speechText, takeSpeakable, turnEnded } from "./voice-call"
+import {
+  callSpeech,
+  captionIndexAt,
+  captionLines,
+  isSpeech,
+  normalizeSpeech,
+  speechPieceText,
+  speechText,
+  spokenPrefix,
+  takeSpeakable,
+  turnEnded,
+} from "./voice-call"
 
 describe("turnEnded", () => {
   it("silêncio antes de qualquer fala não encerra a vez", () => {
@@ -29,6 +40,75 @@ describe("takeSpeakable", () => {
 
   it("não corta número decimal no meio", () => {
     expect(takeSpeakable("Custa 3.50 reais", 0, false).chunk).toBe("")
+  })
+})
+
+describe("spokenPrefix", () => {
+  it("revela o texto na proporção do áudio, sempre no fim de uma palavra", () => {
+    expect(spokenPrefix("Primeira frase dita.", 0)).toBe("")
+    expect(spokenPrefix("Primeira frase dita.", 0.5)).toBe("Primeira frase")
+    expect(spokenPrefix("Primeira frase dita.", 1)).toBe("Primeira frase dita.")
+  })
+
+  it("no fim, mostra a última palavra inteira em vez de cortá-la", () => {
+    expect(spokenPrefix("Uma frase", 0.9)).toBe("Uma frase")
+  })
+
+  it("fração inválida não revela nada", () => {
+    expect(spokenPrefix("Uma frase", Number.NaN)).toBe("")
+  })
+})
+
+describe("speechPieceText", () => {
+  it("divide o texto por palavras sem sobrepor nem deixar buraco", () => {
+    const text = "Uma frase um pouco maior para dividir"
+    const pieces = [0, 1, 2].map((index) => speechPieceText(text, index, 3))
+    expect(pieces.join(" ")).toBe(text)
+  })
+
+  it("pedaço fora do intervalo não devolve texto", () => {
+    expect(speechPieceText("Uma frase", 3, 3)).toBe("")
+    expect(speechPieceText("", 0, 2)).toBe("")
+  })
+})
+
+describe("captionLines", () => {
+  it("corta em linhas curtas, sempre no fim de uma palavra", () => {
+    const normalized = normalizeSpeech("A primeira linha tem um tamanho curto e a segunda continua.")
+    const lines = captionLines(normalized, 20)
+    expect(lines.map((line) => line.text)).toEqual([
+      "A primeira linha tem",
+      "um tamanho curto e a",
+      "segunda continua.",
+    ])
+    expect(lines.every((line) => line.text.length <= 20)).toBe(true)
+    for (const line of lines) expect(normalized.slice(line.start, line.end).trim()).toBe(line.text)
+  })
+
+  it("normaliza quebras e espaços antes de medir", () => {
+    expect(normalizeSpeech("  Uma   frase\ncom   espaços  ")).toBe("Uma frase com espaços")
+    expect(captionLines("  Uma   frase\ncom   espaços  ", 10).map((line) => line.text)).toEqual([
+      "Uma frase",
+      "com",
+      "espaços",
+    ])
+  })
+
+  it("texto vazio não vira linha", () => {
+    expect(captionLines("", 20)).toEqual([])
+    expect(captionLines("   \n ", 20)).toEqual([])
+  })
+})
+
+describe("captionIndexAt", () => {
+  it("a próxima linha só assume quando a primeira letra dela começa", () => {
+    const lines = captionLines("A primeira linha tem um tamanho curto e a segunda continua.", 20)
+    expect(captionIndexAt(lines, 0)).toBe(0)
+    expect(captionIndexAt(lines, 20)).toBe(0)
+    expect(captionIndexAt(lines, 21)).toBe(1)
+    expect(captionIndexAt(lines, 41)).toBe(1)
+    expect(captionIndexAt(lines, 42)).toBe(2)
+    expect(captionIndexAt(lines, 1000)).toBe(2)
   })
 })
 

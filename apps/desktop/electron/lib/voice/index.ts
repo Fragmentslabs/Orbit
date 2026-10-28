@@ -198,6 +198,8 @@ interface FalaChunk {
   sr: number
   i: number
   n: number
+  /** Texto do pedaço, quando o motor o manda (o local manda; o modelo, não). */
+  text?: string
 }
 
 /**
@@ -222,7 +224,9 @@ async function rodarFala(
     payload,
     signal,
     (chunk) =>
-      emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg }),
+      // O texto do pedaço vai junto: o renderer revela a legenda de cada
+      // trecho no ritmo do áudio (a rota do modelo manda o dela sem texto).
+      emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg, text: chunk.text }),
     idioma,
   )
 }

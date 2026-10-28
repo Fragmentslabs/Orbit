@@ -222,6 +222,45 @@ describe("ChunkPlayer", () => {
     expect(context.closed).toBe(true)
     expect(player.pending).toBe(0)
   })
+
+  it("spokenText cresce com o áudio, pedaço por pedaço da frase", () => {
+    const context = new FakeContext()
+    const player = newPlayer(context)
+    // 1s cada; o primeiro começa em 0.02 e o segundo emenda em 1.02.
+    player.schedule(new Float32Array(24000).fill(0), 24000, 0, "Primeira frase.")
+    player.schedule(new Float32Array(24000).fill(0), 24000, 0, "Segunda frase.")
+    player.schedule(new Float32Array(24000).fill(0), 24000, 1, "Outra frase mais comprida.")
+
+    expect(player.spokenText(0)).toBe("")
+
+    context.currentTime = 0.52
+    expect(player.spokenText(0)).toBe("Primeira")
+
+    context.currentTime = 1.5
+    expect(player.spokenText(0)).toBe("Primeira frase. Segunda")
+    expect(player.spokenText(1)).toBe("")
+
+    context.currentTime = 2.5
+    expect(player.spokenText(0)).toBe("Primeira frase. Segunda frase.")
+    expect(player.spokenText(1)).toBe("Outra frase mais")
+  })
+
+  it("spokenText some quando a frase saiu da fila (corte para ferramentas)", () => {
+    const context = new FakeContext()
+    const player = newPlayer(context)
+
+    player.schedule(new Float32Array(24000).fill(0), 24000, 0, "Fica.")
+    player.schedule(new Float32Array(24000).fill(0), 24000, 1, "Sai.")
+    context.currentTime = 2.5
+
+    expect(player.spokenText(1)).toBe("Sai.")
+    player.dropAfter(0)
+
+    expect(player.spokenText(0)).toBe("Fica.")
+    expect(player.spokenText(1)).toBe("")
+    player.stopAll()
+    expect(player.spokenText(0)).toBe("")
+  })
 })
 
 describe("readTtsPrefs", () => {
