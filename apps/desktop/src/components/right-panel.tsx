@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -809,7 +809,9 @@ export function RightPanel() {
             // A aba em modo apresentação é a MESMA aba de Design (designPlay),
             // mas o que ela faz ali é rodar o protótipo — daí o Play, no lugar
             // do ícone de canvas, para as duas não se confundirem na fila.
-            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : tab.type === "design" && tab.designPlay ? Play : Icon
+            // Conversa no painel é conversa, não worker: balões aninhados, o
+            // mesmo ícone que identifica um subchat na sidebar.
+            const TabIcon = tab.type === "chat" && tab.sessionId ? MessagesSquare : tab.type === "design" && tab.designPlay ? Play : Icon
             // Os três indicadores falam da CONVERSA — está respondendo, deu
             // erro, chegou mensagem — e só a aba de chat mostra uma conversa.
             // Várias outras carregam um sessionId por serem daquele chat (a

@@ -173,18 +173,44 @@ function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
   return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
 }
 
-/** Modelo efetivo da sessão: override por chat > default global do provider.
- *  Chat novo (draft) sem escolha explícita herda o modelo do último chat usado
- *  (override da sessão mais recente) antes de cair no default global. */
+/** Override herdado do PAI: um subchat não tem escolha própria até alguém
+ *  trocar o modelo nele. Sem isto ele caía no default GLOBAL do provider, que
+ *  pode ser outro modelo (subchat aberto a partir de um chat em DeepSeek
+ *  nascia em Claude). Sobe a cadeia até o primeiro ancestral com override. */
+function inheritedOverride(
+  sessionId: string,
+  overrides: Record<string, SelectedModel>,
+  sessions: SessionInfo[],
+): SelectedModel | undefined {
+  const byId = new Map(sessions.map((s) => [s.id, s]))
+  const seen = new Set<string>()
+  let parentId = byId.get(sessionId)?.parentId
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId)
+    const override = overrides[parentId]
+    if (override) return override
+    parentId = byId.get(parentId)?.parentId
+  }
+  return undefined
+}
+
+/** Modelo efetivo da sessão: override por chat > override herdado do pai
+ *  (subchats) > default global do provider. Chat novo (draft) sem escolha
+ *  explícita herda o modelo do último chat usado (override da sessão mais
+ *  recente) antes de cair no default global. */
 export function sessionModelFor(sessionId?: string | null): SelectedModel | null {
   const prefs = useSessionModelPrefs.getState()
   const override = prefs.overrides[sessionId ?? DRAFT_KEY]
   if (override) return override
-  if (!sessionId) {
-    const latest = latestSession(useSessionStore.getState().sessions)
-    const latestOverride = latest ? prefs.overrides[latest.id] : undefined
-    if (latestOverride) return latestOverride
+  if (sessionId) {
+    return (
+      inheritedOverride(sessionId, prefs.overrides, useSessionStore.getState().sessions) ??
+      useProviderStore.getState().selectedModel
+    )
   }
+  const latest = latestSession(useSessionStore.getState().sessions)
+  const latestOverride = latest ? prefs.overrides[latest.id] : undefined
+  if (latestOverride) return latestOverride
   return useProviderStore.getState().selectedModel
 }
 
@@ -196,7 +222,7 @@ export function useSessionModel(sessionId?: string | null): SelectedModel | null
   const sessions = useSessionStore((s) => s.sessions)
   const override = sessionId ? overrides[sessionId] : overrides[DRAFT_KEY]
   if (override) return override
-  if (sessionId) return globalModel
+  if (sessionId) return inheritedOverride(sessionId, overrides, sessions) ?? globalModel
   const latest = latestSession(sessions)
   return (latest && overrides[latest.id]) ?? globalModel
 }

@@ -22,6 +22,7 @@ import {
   Heart,
   Loader2,
   MessageSquare,
+  MessagesSquare,
   Monitor,
   Moon,
   Puzzle,
@@ -685,7 +686,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   button: React.ElementType
   buttonClassName?: string
   actionButtonClassName?: string
-  /** Ícone à esquerda (padrão: balão de chat; workers usam Bot/Terminal) */
+  /** Ícone à esquerda (padrão: balão de chat; worker usa Bot, subchat usa
+   *  MessagesSquare — os dois balões aninhados dizem "conversa aberta daqui",
+   *  sem cara de agente) */
   icon?: React.ElementType
   /** Status da sessão exibido como dot (workers da orquestração) */
   statusDot?: string
@@ -895,7 +898,7 @@ function SessionItem({ session, childSessions = [] }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={Bot}
+                icon={child.orchestration?.role === "worker" ? Bot : MessagesSquare}
                 statusDot={statusMap[child.id]}
               />
             </SidebarMenuSubItem>
@@ -945,7 +948,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={Bot}
+                icon={child.orchestration?.role === "worker" ? Bot : MessagesSquare}
                 statusDot={statusMap[child.id]}
               />
             </div>

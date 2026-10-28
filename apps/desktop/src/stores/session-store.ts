@@ -150,8 +150,9 @@ interface SessionState {
   /** Fecha a oferta de continuar num chat novo (não volta até a próxima
    *  compactação, que muda a contagem de resumos). */
   dismissCompactionSuggestion: (sessionId: string) => void
-  /** Cria o chat filho da oferta: mesma pasta/modo do pai, `parentId` para a
-   *  sidebar/breadcrumb e o brief do agente como resumo de abertura. */
+  /** Cria o chat NOVO da oferta de contexto cheio: mesma pasta/modo/modelo do
+   *  pai, SEM `parentId` (é um chat de topo, não um subchat) e com o brief do
+   *  agente como resumo de abertura. */
   createContinuationSession: (
     parentId: string,
     title: string,
@@ -654,9 +655,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // escopo do que está em jogo).
       directory: parent.directory,
       extraDirectories: parent.extraDirectories,
-      // Anexado: breadcrumb no filho, aba automática no painel do pai, e
-      // exclusão/arquivamento em cascata (ver removeSession/archiveSession).
-      parentId,
+      // SEM parentId: a oferta nasce do contexto cheio do pai e promete um
+      // chat NOVO. Anexado, ele aparecia indentado como subchat e ainda sumia
+      // junto com o pai ao arquivar/excluir (cascata).
       createdAt: now,
       updatedAt: now,
     }
@@ -687,6 +688,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
     loadedMessages.add(child.id)
     emitChatEvent({ type: "session", sessionId: child.id, session: child })
+    // Continua no MESMO modelo do pai: o chat novo troca o contexto, não a
+    // configuração. Sem isto ele caía no default global (outro provedor).
+    const parentModel = sessionModelFor(parentId)
+    if (parentModel) {
+      useSessionModelPrefs.getState().selectModel(child.id, parentModel.providerId, parentModel.modelId)
+    }
     return child
   },
 

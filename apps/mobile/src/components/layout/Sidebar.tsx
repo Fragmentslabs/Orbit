@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import {
   MessageSquare,
+  MessagesSquare,
   Terminal,
   BrainCircuit,
   BarChart3,
@@ -621,8 +622,9 @@ export function Sidebar() {
     groupsExpanded,
   ])
 
-  // Linha de subchat — mesmo visual do chat normal, mas com ícone Bot (como o
-  // desktop: SessionRow com icon={Bot} nos filhos).
+  // Linha de filho do chat — worker continua com o Bot (é um agente), subchat
+  // usa MessagesSquare (os dois balões aninhados dizem "conversa aberta daqui"),
+  // igual ao desktop.
   const renderChildRow = useCallback(
     (child: SessionInfo) => (
       <SessionRow
@@ -633,7 +635,7 @@ export function Sidebar() {
         error={status[child.id] === 'error'}
         unread={unreadCounts[child.id] > 0}
         pinned={child.pinned}
-        icon={Bot}
+        icon={child.orchestration?.role === 'worker' ? Bot : MessagesSquare}
         selectionMode={selectionMode}
         selected={selectedIds.has(child.id)}
         onPress={() => handleOpenSession(child.id)}

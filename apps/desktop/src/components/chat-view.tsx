@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ArrowDown, ChevronRight, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
+import { ArrowDown, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -641,7 +641,7 @@ const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(win
 const CAPABILITIES_SEEN_KEY = "orbit-capabilities-seen"
 
 /** `embedded`: o chat está numa aba do painel lateral. Lá o espaço vertical é
- *  curto e a aba já diz qual chat é, então persona do topo e breadcrumb saem. */
+ *  curto e a aba já diz qual chat é, então a persona do topo sai. */
 export function ChatView({ sessionId, embedded = false }: { sessionId?: string; embedded?: boolean } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
@@ -674,9 +674,6 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     if (idx > 0 && messages[idx - 1].role === "user") ids.add(messages[idx - 1].id)
     return ids
   }, [planReview, messages, session])
-  const parentSession = useSessionStore((s) =>
-    session?.parentId ? s.sessions.find((x) => x.id === session.parentId) : undefined,
-  )
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -1295,25 +1292,6 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
-      {/* Breadcrumb de chat orquestrado: pai > worker */}
-      {session?.parentId && !embedded && (
-        <div className="z-30 flex items-center gap-1 px-4 pt-2 text-xs text-muted-foreground">
-          <button
-            type="button"
-            className="max-w-48 truncate transition-colors hover:text-foreground"
-            onClick={() => {
-              // Acompanha o modo do pai para a sidebar destacar a sessão certa
-              const targetMode = parentSession?.mode ?? viewMode
-              if (targetMode !== mode) setMode(targetMode)
-              void selectSession(targetMode, session.parentId!)
-            }}
-          >
-            {parentSession?.title ?? "Chat principal"}
-          </button>
-          <ChevronRight className="size-3 shrink-0" />
-          <span className="max-w-64 truncate text-foreground">{session.title}</span>
-        </div>
-      )}
       <div className="relative min-h-0 flex-1">
         {showTopPersona && (
           <div
