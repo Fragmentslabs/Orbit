@@ -10,7 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
-import { usePanelStore } from "@/src/stores/panel-store"
+import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useEsteiraStore } from "@/src/stores/esteira-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
@@ -67,7 +67,11 @@ function Layout() {
   const { mode: workspaceMode, view, folders, setFolders, setMode, setView } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setModeState] = useState<SidebarMode>(loadMode)
-  const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
+  // O painel é do CHAT, não da janela. O agente pode estar trabalhando numa
+  // sessão que não é a da tela: a aba (e a abertura) nascem lá, e é só ao
+  // voltar para aquele chat que o painel aparece — aqui não se abre nada.
+  const activeKey = activeSession?.id ?? ORPHAN_KEY
+  const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -196,6 +200,13 @@ function Layout() {
   useEffect(() => {
     if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
   }, [workspaceMode, setRightPanelOpen])
+
+  // O store também precisa saber qual balde a tela mostra: quem abre o painel
+  // sem ser de sessão nenhuma (diff de task da esteira, aba escolhida no "+")
+  // abre no painel da TELA, e ele escreve por esse balde.
+  useEffect(() => {
+    usePanelStore.getState().setUiBucket(activeKey)
+  }, [activeKey])
 
   /**
    * A paleta (⌘P) pode pedir um arquivo com o painel FECHADO — e aí o RightPanel

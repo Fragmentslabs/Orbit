@@ -10,7 +10,9 @@ import { ORPHAN_KEY, usePanelStore } from "./panel-store"
  */
 function reset() {
   usePanelStore.setState({
-    rightPanelOpen: false,
+    openBySession: {},
+    // A tela mostra "s1" nos testes: é o balde das aberturas sem sessão.
+    uiBucket: "s1",
     selectorOpen: false,
     tabsBySession: {},
     activeTabBySession: {},
@@ -28,7 +30,7 @@ describe("abrir uma aba pelo card da conversa", () => {
     usePanelStore.getState().openArtifactTab("s1", "art_1.html", "Vendas")
 
     const state = usePanelStore.getState()
-    expect(state.rightPanelOpen).toBe(true)
+    expect(state.openBySession.s1).toBe(true)
     expect(state.selectorOpen).toBe(false)
     const tabs = tabsOf("s1")
     expect(tabs).toHaveLength(1)
@@ -137,7 +139,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
 
     const state = usePanelStore.getState()
-    expect(state.rightPanelOpen).toBe(true)
+    expect(state.openBySession.s1).toBe(true)
     expect(state.selectorOpen).toBe(false)
     const tabs = tabsOf("s1")
     expect(tabs).toHaveLength(1)
@@ -151,23 +153,51 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(state.activeTabBySession.s1).toBe(tabs[0].id)
   })
 
-  it("registrar a MESMA composição de novo traz a aba para o chat atual — uma só", () => {
+  /**
+   * A peça é uma por CONVERSA. O agente pode mexer na mesma composição a partir
+   * de outro chat, e levar a aba do chat onde o usuário a abriu seria mexer no
+   * que ele está vendo — cada balde tem a sua, e como o painel só mostra as
+   * abas do chat ativo, nunca são duas à vista.
+   */
+  it("a composição aberta em outra conversa fica onde está", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
     const first = tabsOf("s1")[0].id
-    usePanelStore.getState().setSelectorOpen(true)
 
-    // O usuário trocou de chat: a composição é uma só, e o painel só mostra as
-    // abas do chat ATIVO — então a aba vem para o balde dele, mantendo o id.
-    // (Focar no balde antigo seria focar numa aba que não está à vista.)
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s2"))
 
     const state = usePanelStore.getState()
-    expect(tabsOf("s1")).toHaveLength(0)
+    expect(tabsOf("s1")).toHaveLength(1)
+    expect(tabsOf("s1")[0].id).toBe(first)
     expect(tabsOf("s2")).toHaveLength(1)
-    expect(tabsOf("s2")[0].id).toBe(first)
     expect(tabsOf("s2")[0]).toMatchObject({ type: "motion", motionId: "mv_abc", sessionId: "s2" })
-    expect(state.activeTabBySession.s2).toBe(first)
-    expect(state.selectorOpen).toBe(false)
+    expect(state.activeTabBySession.s2).toBe(tabsOf("s2")[0].id)
+  })
+
+  it("a aba de um chat de fundo abre o painel DELE, não o da tela", () => {
+    // A tela está em "s1" (ver reset) e o agente trabalha em "s2".
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s2"))
+
+    const { openBySession } = usePanelStore.getState()
+    expect(openBySession.s2).toBe(true)
+    expect(openBySession.s1 ?? false).toBe(false)
+  })
+
+  it("fechar o painel de um chat não fecha o do outro", () => {
+    usePanelStore.getState().setUiBucket("s2")
+    usePanelStore.getState().setRightPanelOpen(true)
+    usePanelStore.getState().setUiBucket("s1")
+    usePanelStore.getState().setRightPanelOpen(false)
+
+    expect(usePanelStore.getState().openBySession).toEqual({ s2: true, s1: false })
+  })
+
+  it("o painel aberto no chat novo continua aberto na sessão que ele ganha", () => {
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc"))
+    expect(usePanelStore.getState().openBySession[ORPHAN_KEY]).toBe(true)
+
+    usePanelStore.getState().adoptOrphanTabs("s1")
+
+    expect(usePanelStore.getState().openBySession.s1).toBe(true)
   })
 
   it("a mesma composição, já adotada pelo chat, é reusada em vez de duplicada", () => {

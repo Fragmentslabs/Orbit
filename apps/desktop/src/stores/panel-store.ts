@@ -191,7 +191,17 @@ export interface AgentBrowserEntry {
 export const AGENT_BROWSER_FRESH_MS = 30_000
 
 interface PanelState {
-  rightPanelOpen: boolean
+  /**
+   * Painel ABERTO por balde de abas. O agente trabalha no fundo, num chat que
+   * não é o que está na tela: a aba dele nasce no balde DELE, e o painel abre
+   * lá — no chat do usuário não se mexe. Quem está na tela é o App, que mostra
+   * `openBySession[balde da sessão ativa]`.
+   */
+  openBySession: Record<string, boolean>
+  /** Balde que a tela está mostrando. Dá dono à abertura pedida por quem não é
+   *  de sessão nenhuma (diff de task da esteira, aba escolhida no "+"). */
+  uiBucket: string
+  setUiBucket: (bucket: string) => void
   setRightPanelOpen: (open: boolean) => void
 
   /** SelectorScreen aberto pelo "+" mesmo com aba ativa — a tela inicial do
@@ -323,6 +333,25 @@ function tabSession(sessionId: string): string | undefined {
   return sessionId === ORPHAN_KEY ? undefined : sessionId
 }
 
+/**
+ * Marca o painel do balde como ABERTO. Se ele aparece AGORA não se decide
+ * aqui: uma aba pode nascer para um chat que o agente está trabalhando no
+ * fundo, e abrir o painel do chat que o usuário está vendo seria abrir o painel
+ * errado — quem olha o balde da tela é o App.
+ *
+ * O seletor de abas (o "+") também é da TELA: uma aba aberta para outro chat
+ * não pode fechar o que o usuário está vendo ali.
+ */
+function abrir(
+  state: PanelState,
+  bucket: string,
+): Pick<PanelState, "openBySession" | "selectorOpen"> {
+  return {
+    openBySession: { ...state.openBySession, [bucket]: true },
+    selectorOpen: bucket === state.uiBucket ? false : state.selectorOpen,
+  }
+}
+
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 const ACTIVE_TIMEOUT_MS = 6000
 
@@ -339,8 +368,11 @@ export const usePanelStore = create<PanelState>((set, get) => {
   }
 
   return {
-    rightPanelOpen: false,
-    setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+    openBySession: {},
+    uiBucket: ORPHAN_KEY,
+    setUiBucket: (bucket) => set({ uiBucket: bucket }),
+    setRightPanelOpen: (open) =>
+      set((state) => ({ openBySession: { ...state.openBySession, [state.uiBucket]: open } })),
 
     selectorOpen: false,
     setSelectorOpen: (open) => set({ selectorOpen: open }),
@@ -367,8 +399,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
               },
             ]
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, sessionId),
           tabsBySession: { ...state.tabsBySession, [sessionId]: nextTabs },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: id },
         }
@@ -490,8 +521,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const existing = tabs.find((t) => t.type === "artifact" && t.artifactId === artifactId)
         if (existing) {
           return {
-            rightPanelOpen: true,
-            selectorOpen: false,
+            ...abrir(state, sessionId),
             activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
           }
         }
@@ -503,198 +533,103 @@ export const usePanelStore = create<PanelState>((set, get) => {
           artifactId,
         }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, sessionId),
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
       }),
 
     // A composição de motion é um recurso do PROJETO, não de uma mensagem: a
-    // aba nasce do evento do main que registrou a pasta. A mesma peça é UMA
-    // aba, onde ela estiver — duas seriam dois iframes e dois playheads da
-    // mesma coisa.
+    // aba nasce do evento do main que registrou a pasta. Na MESMA conversa a
+    // peça é UMA aba — duas seriam dois iframes e dois playheads da mesma
+    // coisa. Em OUTRA conversa ela pode ter a aba dela também: o agente pode
+    // estar mexendo na composição de um chat enquanto o usuário olha outro, e
+    // levar a aba de lá seria mexer no que o usuário tem na tela.
     openMotionTab: (ref) =>
       set((state) => {
         const bucket = ref.sessionId ?? ORPHAN_KEY
-        const tabsBySession = { ...state.tabsBySession }
-        for (const [key, tabs] of Object.entries(tabsBySession)) {
-          // A mesma composição pelo id OU pelo arquivo: uma aba antiga (de antes
-          // do id estável) é reaproveitada e passa a apontar para o id novo.
-          const existing = tabs.find(
-            (t) => t.type === "motion" && (t.motionId === ref.id || (ref.path != null && t.motionPath === ref.path)),
-          )
-          if (!existing) continue
-          if (key === bucket) {
-            const refreshed: PanelTab = {
-              ...existing,
+        const tabs = state.tabsBySession[bucket] ?? []
+        // A mesma composição pelo id OU pelo arquivo: uma aba antiga (de antes
+        // do id estável) é reaproveitada e passa a apontar para o id novo.
+        const existing = tabs.find(
+          (t) => t.type === "motion" && (t.motionId === ref.id || (ref.path != null && t.motionPath === ref.path)),
+        )
+        const tab: PanelTab = existing
+          ? { ...existing, motionId: ref.id, motionEntry: ref.entry, motionPath: ref.path ?? existing.motionPath }
+          : {
+              id: `motion-${nextTabId()}`,
+              type: "motion",
+              title: ref.title,
+              sessionId: tabSession(bucket),
               motionId: ref.id,
               motionEntry: ref.entry,
-              motionPath: ref.path ?? existing.motionPath,
+              motionPath: ref.path,
             }
-            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
-            return {
-              rightPanelOpen: true,
-              selectorOpen: false,
-              tabsBySession,
-              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
-            }
-          }
-          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
-          // está. O painel só mostra as abas do chat ativo — "focar" uma aba
-          // de outro balde seria focar no que não se vê. É o mesmo movimento do
-          // adoptOrphanTabs, com o sessionId do balde novo.
-          const rest = tabs.filter((t) => t !== existing)
-          if (rest.length > 0) tabsBySession[key] = rest
-          else delete tabsBySession[key]
-          const moved: PanelTab = {
-            ...existing,
-            title: ref.title,
-            motionId: ref.id,
-            motionEntry: ref.entry,
-            motionPath: ref.path ?? existing.motionPath,
-            sessionId: tabSession(bucket),
-          }
-          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
-          return {
-            rightPanelOpen: true,
-            selectorOpen: false,
-            tabsBySession,
-            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
-          }
-        }
-        // Sem sessão no evento, o balde é o do chat ativo — resolvido pelo
-        // consumidor do evento (App), que conhece o modo corrente; aqui sobra o
-        // órfão, que é o balde que o painel mostra quando não há chat ativo.
-        const tab: PanelTab = {
-          id: `motion-${nextTabId()}`,
-          type: "motion",
-          title: ref.title,
-          sessionId: tabSession(bucket),
-          motionId: ref.id,
-          motionEntry: ref.entry,
-          motionPath: ref.path,
-        }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
-          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          ...abrir(state, bucket),
+          tabsBySession: {
+            ...state.tabsBySession,
+            [bucket]: existing ? tabs.map((t) => (t === existing ? tab : t)) : [...tabs, tab],
+          },
           activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
       }),
 
     // Mesmo raciocínio do openMotionTab: o canvas é um recurso do PROJETO
     // (conversa, no modo chat), não de uma mensagem — a aba nasce do evento do
-    // main que registrou a pasta, e a mesma peça é UMA aba, onde ela estiver.
+    // main que registrou a pasta. Uma por conversa, não uma no mundo: a do
+    // outro chat fica onde está.
     openDesignTab: (ref) =>
       set((state) => {
         const bucket = ref.sessionId ?? ORPHAN_KEY
-        const tabsBySession = { ...state.tabsBySession }
-        for (const [key, tabs] of Object.entries(tabsBySession)) {
-          const existing = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === ref.id)
-          if (!existing) continue
-          if (key === bucket) {
-            const refreshed: PanelTab = { ...existing, designPath: ref.path ?? existing.designPath }
-            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
-            return {
-              rightPanelOpen: true,
-              selectorOpen: false,
-              tabsBySession,
-              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
+        const tabs = state.tabsBySession[bucket] ?? []
+        const existing = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === ref.id)
+        const tab: PanelTab = existing
+          ? { ...existing, designPath: ref.path ?? existing.designPath }
+          : {
+              id: `design-${nextTabId()}`,
+              type: "design",
+              title: ref.title,
+              sessionId: tabSession(bucket),
+              designId: ref.id,
+              designPath: ref.path,
             }
-          }
-          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
-          // está — o painel só mostra as abas do chat ativo.
-          const rest = tabs.filter((t) => t !== existing)
-          if (rest.length > 0) tabsBySession[key] = rest
-          else delete tabsBySession[key]
-          const moved: PanelTab = {
-            ...existing,
-            title: ref.title,
-            designPath: ref.path ?? existing.designPath,
-            sessionId: tabSession(bucket),
-          }
-          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
-          return {
-            rightPanelOpen: true,
-            selectorOpen: false,
-            tabsBySession,
-            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
-          }
-        }
-        const tab: PanelTab = {
-          id: `design-${nextTabId()}`,
-          type: "design",
-          title: ref.title,
-          sessionId: tabSession(bucket),
-          designId: ref.id,
-          designPath: ref.path,
-        }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
-          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          ...abrir(state, bucket),
+          tabsBySession: {
+            ...state.tabsBySession,
+            [bucket]: existing ? tabs.map((t) => (t === existing ? tab : t)) : [...tabs, tab],
+          },
           activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
       }),
 
     // Mesmo raciocínio do openDesignTab: o deck é um recurso do PROJETO
     // (conversa, no modo chat), não de uma mensagem — a aba nasce do evento do
-    // main que registrou a pasta, e o mesmo deck é UMA aba, onde ela estiver.
+    // main que registrou a pasta. Uma por conversa, não uma no mundo: a do
+    // outro chat fica onde está.
     openSlidesTab: (ref) =>
       set((state) => {
         const bucket = ref.sessionId ?? ORPHAN_KEY
-        const tabsBySession = { ...state.tabsBySession }
-        for (const [key, tabs] of Object.entries(tabsBySession)) {
-          const existing = tabs.find((t) => t.type === "slides" && t.slidesId === ref.id)
-          if (!existing) continue
-          if (key === bucket) {
-            const refreshed: PanelTab = {
-              ...existing,
+        const tabs = state.tabsBySession[bucket] ?? []
+        const existing = tabs.find((t) => t.type === "slides" && t.slidesId === ref.id)
+        const tab: PanelTab = existing
+          ? { ...existing, slidesEntry: ref.entry, slidesPath: ref.path ?? existing.slidesPath }
+          : {
+              id: `slides-${nextTabId()}`,
+              type: "slides",
+              title: ref.title,
+              sessionId: tabSession(bucket),
+              slidesId: ref.id,
               slidesEntry: ref.entry,
-              slidesPath: ref.path ?? existing.slidesPath,
+              slidesPath: ref.path,
             }
-            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
-            return {
-              rightPanelOpen: true,
-              selectorOpen: false,
-              tabsBySession,
-              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
-            }
-          }
-          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
-          // está — o painel só mostra as abas do chat ativo.
-          const rest = tabs.filter((t) => t !== existing)
-          if (rest.length > 0) tabsBySession[key] = rest
-          else delete tabsBySession[key]
-          const moved: PanelTab = {
-            ...existing,
-            title: ref.title,
-            slidesEntry: ref.entry,
-            slidesPath: ref.path ?? existing.slidesPath,
-            sessionId: tabSession(bucket),
-          }
-          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
-          return {
-            rightPanelOpen: true,
-            selectorOpen: false,
-            tabsBySession,
-            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
-          }
-        }
-        const tab: PanelTab = {
-          id: `slides-${nextTabId()}`,
-          type: "slides",
-          title: ref.title,
-          sessionId: tabSession(bucket),
-          slidesId: ref.id,
-          slidesEntry: ref.entry,
-          slidesPath: ref.path,
-        }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
-          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          ...abrir(state, bucket),
+          tabsBySession: {
+            ...state.tabsBySession,
+            [bucket]: existing ? tabs.map((t) => (t === existing ? tab : t)) : [...tabs, tab],
+          },
           activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
       }),
@@ -704,22 +639,16 @@ export const usePanelStore = create<PanelState>((set, get) => {
     // artboard reaproveita a aba e só troca a tela inicial.
     openDesignPlayTab: (designId, file, fullscreen) =>
       set((state) => {
-        let bucket = ORPHAN_KEY
-        let source: PanelTab | undefined
-        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
-          const editor = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === designId)
-          if (editor) {
-            bucket = key
-            source = editor
-            break
-          }
-        }
+        // O Play sai da aba que está na TELA, então a apresentação nasce no
+        // balde da tela — mesmo que o mesmo canvas esteja aberto em outra
+        // conversa, onde a aba de lá não é tocada.
+        const bucket = state.uiBucket
         const tabs = state.tabsBySession[bucket] ?? []
+        const source = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === designId)
         const existing = tabs.find((t) => t.type === "design" && t.designPlay && t.designId === designId)
         if (existing) {
           return {
-            rightPanelOpen: true,
-            selectorOpen: false,
+            ...abrir(state, bucket),
             tabsBySession: {
               ...state.tabsBySession,
               [bucket]: tabs.map((t) =>
@@ -740,8 +669,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           designFullscreen: fullscreen,
         }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, bucket),
           tabsBySession: { ...state.tabsBySession, [bucket]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
@@ -755,8 +683,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const existing = tabs.find((t) => t.type === "document" && t.documentId === ref.documentId)
         if (existing) {
           return {
-            rightPanelOpen: true,
-            selectorOpen: false,
+            ...abrir(state, sessionId),
             activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
           }
         }
@@ -768,8 +695,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           documentId: ref.documentId,
         }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, sessionId),
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
@@ -789,8 +715,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
         if (existing) {
           return {
-            rightPanelOpen: true,
-            selectorOpen: false,
+            ...abrir(state, sessionId),
             tabsBySession: {
               ...state.tabsBySession,
               [sessionId]: tabs.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)),
@@ -807,8 +732,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           ...patch,
         }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, sessionId),
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
@@ -822,8 +746,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const existing = tabs.find((t) => t.type === "memory" && t.memoryId === ref.memoryId)
         if (existing) {
           return {
-            rightPanelOpen: true,
-            selectorOpen: false,
+            ...abrir(state, sessionId),
             activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
           }
         }
@@ -835,8 +758,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           memoryId: ref.memoryId,
         }
         return {
-          rightPanelOpen: true,
-          selectorOpen: false,
+          ...abrir(state, sessionId),
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
@@ -858,7 +780,12 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const activeTabBySession = { ...state.activeTabBySession }
         activeTabBySession[sessionId] = activeTabBySession[ORPHAN_KEY] ?? null
         delete activeTabBySession[ORPHAN_KEY]
-        return { tabsBySession, activeTabBySession }
+        // O painel que estava aberto no rascunho continua aberto na sessão que
+        // nasceu — do contrário a primeira mensagem fecharia a aba que o chat
+        // novo já mostrava.
+        const openBySession = { ...state.openBySession }
+        if (openBySession[ORPHAN_KEY]) openBySession[sessionId] = true
+        return { tabsBySession, activeTabBySession, openBySession }
       }),
 
     getTabs: (sessionId) => get().tabsBySession[sessionId] ?? [],
@@ -916,7 +843,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
       if (!sessionId) return
       const { agentBrowser } = get()
       get().ensureAgentBrowserTab(sessionId, agentBrowser[sessionId]?.url)
-      set({ rightPanelOpen: true, selectorOpen: false })
+      set((state) => abrir(state, sessionId))
     },
 
     // Cada clique em link no terminal cria uma aba própria (semântica de
@@ -926,7 +853,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const id = `browser-${nextTabId()}`
         const tabs = state.tabsBySession[sessionId] ?? []
         return {
-          rightPanelOpen: true,
+          ...abrir(state, sessionId),
           // Clique do usuário (link do terminal / card do processo): a aba nova
           // assume a frente, então o selector deixa de estar em exibição.
           selectorOpen: false,
@@ -1085,7 +1012,9 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     openChatTab: (sessionId, title) =>
       set((state) => ({
-        rightPanelOpen: true,
+        // A aba de chat é criada no balde da TELA (ver RightPanel): é nela que o
+        // painel tem de abrir, mesmo quando o chat pedido é outro.
+        ...abrir(state, state.uiBucket),
         pendingChatTab: state.pendingChatTab + 1,
         pendingChatTabSession: sessionId,
         pendingChatTabTitle: title,
@@ -1096,7 +1025,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     openDiff: (sessionId, messageId, title) =>
       set((state) => ({
-        rightPanelOpen: true,
+        ...abrir(state, state.uiBucket),
         pendingDiff: state.pendingDiff + 1,
         pendingDiffSessionId: sessionId,
         pendingDiffMessageId: messageId,
@@ -1107,7 +1036,8 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     openTaskDiff: (esteiraId, taskId, title) =>
       set((state) => ({
-        rightPanelOpen: true,
+        // O diff da task não é de sessão nenhuma: abre no painel da tela.
+        ...abrir(state, state.uiBucket),
         pendingDiff: state.pendingDiff + 1,
         pendingDiffSessionId: undefined,
         pendingDiffMessageId: undefined,
@@ -1122,7 +1052,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     openChatTabWithPendingInput: (sessionId, title, input) =>
       set((state) => ({
-        rightPanelOpen: true,
+        ...abrir(state, state.uiBucket),
         pendingInput: { sessionId, text: input },
         pendingChatTab: state.pendingChatTab + 1,
         pendingChatTabSession: sessionId,
