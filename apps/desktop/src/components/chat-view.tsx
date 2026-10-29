@@ -348,7 +348,7 @@ function EarlierMessages({ hiddenCount, onLoad, paused }: {
   )
 }
 
-function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer }: {
+function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer, underVeil }: {
   messages: ChatMessage[]
   /** O histórico da sessão ainda não chegou do disco. */
   historyPending: boolean
@@ -356,6 +356,10 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
   busyLabel?: string
   mode: "chat" | "code"
   sessionId?: string
+  /** Há véu no topo (persona visível): só aí a conversa pode subir por baixo
+   *  dele. Sem véu, subir a conversa a coloca por cima do header, que é
+   *  transparente de propósito (a persona transborda para dentro dele). */
+  underVeil?: boolean
   sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
   planIds: Set<string>
   planReview: PlanReview | undefined
@@ -555,7 +559,7 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
 
   return (
     // initial="instant": o chat abre já no fim, sem rolar por tudo até lá.
-    <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} initial="instant" className="relative flex-1 -mt-10">
+    <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} initial="instant" className={cn("relative flex-1", underVeil && "-mt-10")}>
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {startIndex > 0 && (
           // key pela janela: cada carga remonta o observador, que reavalia na
@@ -1503,6 +1507,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
               planReview={planReview}
               plan={plan}
               footer={hasInlineCards ? inlineCards : null}
+              underVeil={showTopPersona}
             />
           </div>
         </div>
