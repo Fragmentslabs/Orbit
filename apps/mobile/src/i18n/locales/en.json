@@ -1,4 +1,10 @@
 {
+  "orbitUi": {
+    "nav": {
+      "open": "Open",
+      "otherSurface": "Only in the desktop app"
+    }
+  },
   "settings": {
     "title": "Settings",
     "providers": "Providers",

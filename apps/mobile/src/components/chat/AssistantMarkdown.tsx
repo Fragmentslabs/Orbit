@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { Linking, View, Text } from 'react-native'
 import { CodeBlock } from '~/components/chat/CodeBlock'
+import { NavCard } from '~/components/chat/NavCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -37,6 +38,7 @@ type Block =
   | { type: 'hr' }
   | { type: 'blockquote'; segments: InlineSegment[] }
   | { type: 'table'; headers: InlineSegment[][]; rows: InlineSegment[][][] }
+  | { type: 'nav'; destino: string; nota?: string }
 
 /** Fecha fences/ênfases incompletas para o parse não quebrar no meio do stream. */
 function stabilizeMarkdown(text: string): string {
@@ -91,6 +93,30 @@ function listDepth(indent: string): number {
   // 2 espaços ou 1 tab = 1 nível
   const spaces = indent.replace(/\t/g, '  ').length
   return Math.floor(spaces / 2)
+}
+
+/**
+ * Lê as linhas `{"type":"nav",…}` de um fence orbit-ui. Os outros tipos do
+ * orbit-ui não têm renderer aqui ainda e são ignorados — desenhar o cartão de
+ * navegação é o que tira o JSON cru da tela.
+ */
+function parseNavFence(codeLines: string[]): { destino: string; nota?: string }[] {
+  const items: { destino: string; nota?: string }[] = []
+  for (const raw of codeLines) {
+    const line = raw.trim()
+    if (!line.startsWith('{')) continue
+    try {
+      const parsed = JSON.parse(line) as { type?: unknown; destino?: unknown; nota?: unknown }
+      if (parsed.type !== 'nav' || typeof parsed.destino !== 'string') continue
+      items.push({
+        destino: parsed.destino,
+        nota: typeof parsed.nota === 'string' ? parsed.nota : undefined,
+      })
+    } catch {
+      /* linha ainda chegando no stream — o parse fecha quando ela completar */
+    }
+  }
+  return items
 }
 
 function parseMarkdown(text: string): Block[] {
@@ -150,6 +176,16 @@ function parseMarkdown(text: string): Block[] {
         }
         codeLines.push(lines[i])
         i++
+      }
+      // orbit-ui: o cartão vira componente. Um fence sem `nav` nenhum continua
+      // caindo no code block de sempre — os outros tipos ainda não são
+      // desenhados aqui, e trocar isso é uma decisão à parte.
+      if (language === 'orbit-ui') {
+        const navItems = parseNavFence(codeLines)
+        if (navItems.length > 0) {
+          for (const item of navItems) blocks.push({ type: 'nav', ...item })
+          continue
+        }
       }
       blocks.push({
         type: 'codeblock',
@@ -452,6 +488,8 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
             )
           case 'hr':
             return <View key={i} style={{ height: 1, marginVertical: 4, backgroundColor: tokens.border }} />
+          case 'nav':
+            return <NavCard key={i} destino={block.destino} nota={block.nota} />
           default:
             return null
         }

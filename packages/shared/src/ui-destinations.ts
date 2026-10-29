@@ -47,12 +47,22 @@ export interface UiDestination {
   id: string
   /** Aba do SettingsDialog no desktop. Ausente = a tela não existe lá. */
   desktop?: SettingsTab
-  /** Rota do expo-router no mobile, relativa a /(main). Ausente = não existe lá. */
-  mobile?: string
+  /** Onde a tela fica no celular. Ausente = não existe lá. */
+  mobile?: MobileDestination
   /** A aba some nas outras plataformas (ver `visibleTabs` em settings-dialog). */
   desktopPlatforms?: readonly DesktopPlatform[]
   /** Como o usuário chama isso, em pt e en — é o que liga a pergunta ao destino. */
   keywords: readonly string[]
+}
+
+export interface MobileDestination {
+  /** Rota do expo-router no formato que o app usa: "/(main)/providers". */
+  path: string
+  /**
+   * Chave do título que a própria tela mostra ("providersScreen.title").
+   * Guardada junto da rota para as duas não divergirem.
+   */
+  titleKey: string
 }
 
 export const UI_DESTINATIONS: readonly UiDestination[] = [
@@ -75,7 +85,7 @@ export const UI_DESTINATIONS: readonly UiDestination[] = [
   {
     id: "providers",
     desktop: "providers",
-    mobile: "/providers",
+    mobile: { path: "/(main)/providers", titleKey: "providersScreen.title" },
     keywords: [
       "provedor",
       "provedores",
@@ -96,7 +106,7 @@ export const UI_DESTINATIONS: readonly UiDestination[] = [
   {
     id: "preferences",
     desktop: "autonomy",
-    mobile: "/preferences",
+    mobile: { path: "/(main)/preferences", titleKey: "preferencesScreen.title" },
     keywords: [
       "preferências",
       "preferences",
@@ -112,25 +122,25 @@ export const UI_DESTINATIONS: readonly UiDestination[] = [
   {
     id: "appearance",
     desktop: "appearance",
-    mobile: "/appearance",
+    mobile: { path: "/(main)/appearance", titleKey: "appearanceScreen.title" },
     keywords: ["aparência", "appearance", "tema", "theme", "cor", "cores", "fonte", "densidade", "claro", "escuro"],
   },
   {
     id: "notifications",
     desktop: "notifications",
-    mobile: "/notifications",
+    mobile: { path: "/(main)/notifications", titleKey: "notificationsScreen.title" },
     keywords: ["notificação", "notificações", "notification", "aviso", "avisos", "som", "alerta", "segundo plano"],
   },
   {
     id: "howto",
     desktop: "howto",
-    mobile: "/howto",
+    mobile: { path: "/(main)/howto", titleKey: "howtoScreen.title" },
     keywords: ["como funciona", "how it works", "ajuda", "help", "atalho", "atalhos", "combinações", "tutorial", "manual"],
   },
   {
     id: "about",
     desktop: "about",
-    mobile: "/about",
+    mobile: { path: "/(main)/about", titleKey: "aboutScreen.title" },
     keywords: ["sobre", "about", "versão", "version", "créditos", "atualização", "update", "apoiar", "beta"],
   },
   {
