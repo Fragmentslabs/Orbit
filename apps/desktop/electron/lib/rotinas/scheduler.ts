@@ -210,6 +210,14 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
   await salvarRun(run)
   emitir({ type: 'run', run })
   void notificar(rotina, run)
+
+  // Agenda "uma vez só": depois de rodar, a rotina se desativa. O cálculo já
+  // não a devolveria (o alvo ficou no passado), mas o switch ligado na UI
+  // diria o contrário — desligar aqui fecha o ciclo no lugar certo.
+  if (rotina.agenda.umaVezData) {
+    const desativada = await atualizarRotina(rotina.id, (r) => ({ ...r, ativa: false }))
+    if (desativada) emitir({ type: 'rotina', rotina: desativada })
+  }
   return session.id
 }
 

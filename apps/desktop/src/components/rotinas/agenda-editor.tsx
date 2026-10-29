@@ -17,6 +17,13 @@ import { descreverAgenda, diasCurtos, modoDaAgenda, type ModoAgenda } from "./ag
 const UTEIS = [1, 2, 3, 4, 5]
 const FIM_DE_SEMANA = [0, 6]
 
+/** Hoje em "YYYY-MM-DD" (fuso local) — padrão do modo "uma vez". */
+function hojeISO(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (agenda: Agenda) => void }) {
   const { t } = useTranslation()
   const modo = modoDaAgenda(agenda)
@@ -26,6 +33,9 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   const trocarModo = (proximo: ModoAgenda) => {
     if (proximo === "diario") onChange({ horario: agenda.horario })
     else if (proximo === "semanal") onChange({ horario: agenda.horario, dias: agenda.dias?.length ? agenda.dias : UTEIS })
+    else if (proximo === "horas") onChange({ horario: agenda.horario, intervaloHoras: agenda.intervaloHoras ?? 6 })
+    else if (proximo === "unico")
+      onChange({ horario: agenda.horario, umaVezData: agenda.umaVezData ?? hojeISO() })
     else onChange({ horario: agenda.horario, intervaloDias: agenda.intervaloDias ?? 2 })
   }
 
@@ -42,7 +52,7 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        {(["diario", "semanal", "intervalo"] as ModoAgenda[]).map((op) => (
+        {(["diario", "semanal", "intervalo", "horas", "unico"] as ModoAgenda[]).map((op) => (
           <button
             key={op}
             type="button"
@@ -127,6 +137,43 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
           />
           {t("rotinas.agenda.dias")}
         </label>
+      )}
+
+      {modo === "horas" && (
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {t("rotinas.agenda.aCada")}
+          <input
+            type="number"
+            min={1}
+            max={23}
+            value={agenda.intervaloHoras ?? 6}
+            onChange={(e) =>
+              onChange({
+                horario: agenda.horario,
+                intervaloHoras: Math.max(1, Math.min(23, Number(e.target.value) || 6)),
+              })
+            }
+            className="w-16 rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          />
+          {t("rotinas.agenda.horas")}
+        </label>
+      )}
+
+      {modo === "unico" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            {t("rotinas.agenda.em")}
+            <input
+              type="date"
+              value={agenda.umaVezData ?? hojeISO()}
+              onChange={(e) =>
+                e.target.value && onChange({ horario: agenda.horario, umaVezData: e.target.value })
+              }
+              className="rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+            />
+          </label>
+          <p className="text-[11px] text-muted-foreground">{t("rotinas.agenda.umaVezDica")}</p>
+        </div>
       )}
 
       <p className="text-[11px] text-muted-foreground">{descreverAgenda(agenda, t)}</p>

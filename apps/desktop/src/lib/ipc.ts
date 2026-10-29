@@ -39,6 +39,7 @@ import type {
   Rotina,
   RotinaEvent,
   RotinaModelo,
+  RotinaPendente,
   RotinaRun,
 } from "@shared/rotinas"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
@@ -635,6 +636,17 @@ export const rotinasApi = {
   /** Descarta métricas de execuções cujo chat já foi excluído. */
   podarRuns: (sessionIds: string[]) =>
     window.ipcRenderer.invoke("rotinas:podarRuns", sessionIds) as Promise<number>,
+  /** Propostas do agente (tool rotinas_manage) aguardando o card. */
+  pendentes: () => window.ipcRenderer.invoke("rotinas:pendentes") as Promise<RotinaPendente[]>,
+  aprovarPendente: (id: string) =>
+    window.ipcRenderer.invoke("rotinas:aprovarPendente", id) as Promise<Rotina | null>,
+  descartarPendente: (id: string) =>
+    window.ipcRenderer.invoke("rotinas:descartarPendente", id) as Promise<void>,
+  /** Segundo plano (macOS): LaunchAgent que relança o app com --hidden. */
+  backgroundEstado: () =>
+    window.ipcRenderer.invoke("rotinas:background:estado") as Promise<{ ativo: boolean; suportado: boolean }>,
+  backgroundAtivar: (ativo: boolean) =>
+    window.ipcRenderer.invoke("rotinas:background:ativar", ativo) as Promise<{ ok: boolean; error?: string }>,
   gerar: (
     descricao: string,
     modelo: RotinaModelo,

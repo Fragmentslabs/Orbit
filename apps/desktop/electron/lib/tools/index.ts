@@ -14,6 +14,7 @@ import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createBrowserRecordTools } from './browser-record'
 import { createEsteiraTools } from './esteira'
+import { createRotinasTool } from './rotinas'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
 import { createSubchatTools } from './subchats'
@@ -146,6 +147,14 @@ export function buildToolSet(
   // (em "ask" a pergunta sobe ao usuário; em "approve" é auto-respondida)
   const allowQuestion =
     input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
+
+  // Rotinas: o agente agenda pelo chat. A ação "criar" só PROPÕE — o card da
+  // conversa é quem cria; as demais ações são imediatas. Fora dos workers
+  // (quem agenda é quem conversa com a pessoa) e do modo plano (grava a
+  // proposta em disco).
+  if (input.orchestrationRole !== 'worker' && !input.options.plan) {
+    tools.rotinas_manage = createRotinasTool(input)
+  }
 
   if (input.mode === 'chat') {
     // Modo chat: as tools de fábrica só entram quando um toggle está ativo, e

@@ -4,9 +4,12 @@ import { parseHorario } from "@shared/rotinas"
 
 /** Helpers puros da agenda — separados dos componentes por causa do fast refresh. */
 
-export type ModoAgenda = "diario" | "semanal" | "intervalo"
+export type ModoAgenda = "diario" | "semanal" | "intervalo" | "horas" | "unico"
 
 export function modoDaAgenda(agenda: Agenda): ModoAgenda {
+  // A precedência espelha a do cálculo (proximaExecucao).
+  if (agenda.umaVezData) return "unico"
+  if (agenda.intervaloHoras && agenda.intervaloHoras > 0) return "horas"
   if (agenda.intervaloDias && agenda.intervaloDias > 1) return "intervalo"
   if (agenda.dias?.length) return "semanal"
   return "diario"
@@ -26,9 +29,21 @@ function diasAbreviados(t: TFunction): string[] {
 const UTEIS = "1,2,3,4,5"
 const FIM_DE_SEMANA = "0,6"
 
+/** "2026-10-30" → "30/10/2026" (data fixa, sem depender do locale). */
+function formatarData(data: string): string {
+  const [ano, mes, dia] = data.split("-")
+  return `${dia}/${mes}/${ano}`
+}
+
 /** Frase do cartão: "Todo dia às 09:00", "Seg, Qua, Sex às 18:30"… */
 export function descreverAgenda(agenda: Agenda, t: TFunction): string {
   const horario = parseHorario(agenda.horario) ? agenda.horario : "??:??"
+  if (agenda.umaVezData) {
+    return t("rotinas.agenda.resumoUnico", { data: formatarData(agenda.umaVezData), horario })
+  }
+  if (agenda.intervaloHoras && agenda.intervaloHoras > 0) {
+    return t("rotinas.agenda.resumoHoras", { horas: agenda.intervaloHoras })
+  }
   if (agenda.intervaloDias && agenda.intervaloDias > 1) {
     return t("rotinas.agenda.resumoIntervalo", { dias: agenda.intervaloDias, horario })
   }

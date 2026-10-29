@@ -1060,7 +1060,9 @@
       "modo": {
         "diario": "Todo dia",
         "semanal": "Dias da semana",
-        "intervalo": "A cada N dias"
+        "intervalo": "A cada N dias",
+        "horas": "A cada N horas",
+        "unico": "Uma vez"
       },
       "horario": "às",
       "dia": {
@@ -1090,7 +1092,12 @@
       },
       "resumoUteis": "Seg a Sex às {{horario}}",
       "resumoFimDeSemana": "Fim de semana às {{horario}}",
-      "selecionarHorario": "Horário"
+      "selecionarHorario": "Horário",
+      "horas": "horas",
+      "em": "em",
+      "umaVezDica": "Depois de rodar, a rotina se desativa sozinha.",
+      "resumoHoras": "A cada {{horas}} horas",
+      "resumoUnico": "Uma vez em {{data}} às {{horario}}"
     },
     "modos": {
       "loop": {

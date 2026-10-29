@@ -49,6 +49,31 @@ const PickerNativo: ComponentType<any> | null = (() => {
 const UTEIS = [1, 2, 3, 4, 5]
 const FIM_DE_SEMANA = [0, 6]
 
+/** Hoje em "YYYY-MM-DD" (fuso local) — padrão do modo "uma vez". */
+function hojeISO(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** "YYYY-MM-DD" → Date ao meio-dia (meia-noite atravessa fuso/verão). */
+function dataParaDate(data: string): Date {
+  const [ano, mes, dia] = data.split('-').map(Number)
+  return new Date(ano, mes - 1, dia, 12, 0, 0, 0)
+}
+
+/** Date → "YYYY-MM-DD" local. */
+function formatarDataISO(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** "YYYY-MM-DD" → "DD/MM/YYYY" para o chip. */
+function formatarDataCurta(data: string): string {
+  const [ano, mes, dia] = data.split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
 /**
  * Modal centralizado de seleção de horário — estrutura compartilhada pelo
  * seletor nativo e pelo fallback manual: overlay escuro (tocar fora fecha
@@ -251,6 +276,7 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   const nomes = diasCurtos(t)
   const horarioValido = !!parseHorario(agenda.horario)
   const [mostrarPicker, setMostrarPicker] = useState(false)
+  const [mostrarDataPicker, setMostrarDataPicker] = useState(false)
   /** Binário sem o módulo nativo (build antigo) → usa o seletor manual. */
   const [modoNativo, setModoNativo] = useState(!!PickerNativo)
   const fecharPicker = () => setMostrarPicker(false)
@@ -258,6 +284,8 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   const trocarModo = (proximo: ModoAgenda) => {
     if (proximo === 'diario') onChange({ horario: agenda.horario })
     else if (proximo === 'semanal') onChange({ horario: agenda.horario, dias: agenda.dias?.length ? agenda.dias : UTEIS })
+    else if (proximo === 'horas') onChange({ horario: agenda.horario, intervaloHoras: agenda.intervaloHoras ?? 6 })
+    else if (proximo === 'unico') onChange({ horario: agenda.horario, umaVezData: agenda.umaVezData ?? hojeISO() })
     else onChange({ horario: agenda.horario, intervaloDias: agenda.intervaloDias ?? 2 })
   }
 
@@ -277,7 +305,7 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   return (
     <View style={{ gap: 10 }}>
       <View style={s.rowWrap}>
-        {(['diario', 'semanal', 'intervalo'] as ModoAgenda[]).map((op) => (
+        {(['diario', 'semanal', 'intervalo', 'horas', 'unico'] as ModoAgenda[]).map((op) => (
           <Pressable
             key={op}
             onPress={() => trocarModo(op)}
@@ -367,6 +395,60 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
             style={[s.intervaloInput, { borderColor: tokens.border, color: tokens.foreground }]}
           />
           <Text style={[s.linkText, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.dias')}</Text>
+        </View>
+      )}
+
+      {modo === 'horas' && (
+        <View style={s.rowWrap}>
+          <Text style={[s.linkText, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.aCada')}</Text>
+          <TextInput
+            value={String(agenda.intervaloHoras ?? 6)}
+            onChangeText={(v) =>
+              onChange({
+                horario: agenda.horario,
+                intervaloHoras: Math.max(1, Math.min(23, Number(v) || 6)),
+              })
+            }
+            keyboardType="number-pad"
+            style={[s.intervaloInput, { borderColor: tokens.border, color: tokens.foreground }]}
+          />
+          <Text style={[s.linkText, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.horas')}</Text>
+        </View>
+      )}
+
+      {modo === 'unico' && (
+        <View style={{ gap: 6 }}>
+          <View style={s.rowWrap}>
+            <Text style={[s.linkText, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.em')}</Text>
+            {mostrarDataPicker && PickerNativo ? (
+              <PickerNativo
+                mode="date"
+                value={dataParaDate(agenda.umaVezData ?? hojeISO())}
+                onChange={(evento: DateTimePickerEvent, data?: Date) => {
+                  if (evento.type === 'set' && data) {
+                    onChange({ horario: agenda.horario, umaVezData: formatarDataISO(data) })
+                  }
+                  setMostrarDataPicker(false)
+                }}
+              />
+            ) : PickerNativo ? (
+              <Pressable onPress={() => setMostrarDataPicker(true)} hitSlop={8}>
+                <Text style={[s.horarioInput, { color: tokens.foreground }]}>
+                  {formatarDataCurta(agenda.umaVezData ?? hojeISO())}
+                </Text>
+              </Pressable>
+            ) : (
+              // Sem o módulo nativo (build antigo): campo de texto direto.
+              <TextInput
+                value={agenda.umaVezData ?? ''}
+                onChangeText={(v) => v && onChange({ horario: agenda.horario, umaVezData: v })}
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor={tokens.mutedForeground}
+                style={[s.intervaloInput, { borderColor: tokens.border, color: tokens.foreground, minWidth: 110 }]}
+              />
+            )}
+          </View>
+          <Text style={[s.resumo, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.umaVezDica')}</Text>
         </View>
       )}
 

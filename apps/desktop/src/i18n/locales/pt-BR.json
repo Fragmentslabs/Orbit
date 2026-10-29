@@ -1429,6 +1429,13 @@
     "add": "Adicionar skill",
     "discarded": "Proposta dispensada."
   },
+  "rotinaProposal": {
+    "building": "Preparando a rotina…",
+    "created": "Rotina criada — aparece no painel Rotinas.",
+    "discard": "Descartar",
+    "create": "Criar rotina",
+    "discarded": "Proposta descartada."
+  },
   "mcpProposal": {
     "building": "Preparando a conexão.",
     "connect": "Conectar",
@@ -2621,7 +2628,9 @@
       "modo": {
         "diario": "Todo dia",
         "semanal": "Dias da semana",
-        "intervalo": "A cada N dias"
+        "intervalo": "A cada N dias",
+        "horas": "A cada N horas",
+        "unico": "Uma vez"
       },
       "horario": "às",
       "dia": {
@@ -2637,6 +2646,11 @@
       "fimDeSemana": "Fim de semana",
       "aCada": "A cada",
       "dias": "dias",
+      "horas": "horas",
+      "em": "em",
+      "umaVezDica": "Depois de rodar, a rotina se desativa sozinha.",
+      "resumoHoras": "A cada {{horas}} horas",
+      "resumoUnico": "Uma vez em {{data}} às {{horario}}",
       "resumoDiario": "Todo dia às {{horario}}",
       "resumoDias": "{{dias}} às {{horario}}",
       "resumoIntervalo": "A cada {{dias}} dias às {{horario}}",
@@ -2651,6 +2665,10 @@
       },
       "resumoUteis": "Seg a Sex às {{horario}}",
       "resumoFimDeSemana": "Fim de semana às {{horario}}"
+    },
+    "background": {
+      "titulo": "Rodar em segundo plano",
+      "dica": "O app reabre sozinho se você sair — as rotinas disparam mesmo sem ninguém abrir o Orbit."
     },
     "modos": {
       "loop": {

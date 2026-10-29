@@ -28,7 +28,7 @@ Rules:
 - The routine's result is a chat message the user reads: by default the prompt just answers in the chat. It must NOT create, modify or delete files, folders or scripts in the working folders, and must not commit or install anything, unless the user's description EXPLICITLY asks to persist something to disk (e.g. "save to a file", "write a JSON"). If the goal is delivering information — a greeting, the news, a summary — deliver it as plain text in the reply.
 - "Create tasks" is NOT a request to persist to disk. See the PIPELINE section below.
 - The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
-- agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only when the user asks for "every N days".
+- agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only for "every N days" and intervaloHoras only for "every N hours" (one cadence, never two). For a one-time request ("once on DATE", "tomorrow at 9", "remind me on the 5th"), set umaVezData as "YYYY-MM-DD" plus horario — the routine turns itself off after that single run.
 - If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
 
 PIPELINE = ORBIT'S ESTEIRA (task board), never a file:
@@ -61,7 +61,7 @@ Rules:
 - The result is a chat message the user reads: the prompt just answers in the chat — it must NOT touch files or the filesystem in any way.
 - "Pipeline"/"pipeline mode"/"esteira" name Orbit's task board, not a file and not CI/CD. If the description asks to turn something into tasks, the prompt must use the esteira tools (esteira_list, then esteira_create_task per task) — never describe writing a file, which this mode cannot do anyway.
 - The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
-- agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only when the user asks for "every N days".
+- agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only for "every N days" and intervaloHoras only for "every N hours" (one cadence, never two). For a one-time request ("once on DATE", "tomorrow at 9", "remind me on the 5th"), set umaVezData as "YYYY-MM-DD" plus horario — the routine turns itself off after that single run.
 - If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
 - Suggest modes conservatively, from the CHAT-ONLY set:
   - brain: the routine should remember previous runs (daily briefings, follow-ups, anything cumulative).
@@ -100,8 +100,27 @@ function normalizarAgenda(bruta: unknown): Agenda {
     // mostrar sete chips onde cabe uma frase.
     if (dias.length > 0 && dias.length < 7) agenda.dias = dias
   }
+  // Cadências novas: "a cada N horas" e "uma vez só". A precedência espelha a
+  // do cálculo (proximaExecucao): umaVezData > intervaloHoras > intervaloDias.
+  const umaVez =
+    typeof obj.umaVezData === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(obj.umaVezData.trim())
+      ? obj.umaVezData.trim()
+      : null
+  if (umaVez) return { horario, umaVezData: umaVez }
+  const intervaloHoras = Number(obj.intervaloHoras)
+  if (
+    Number.isInteger(intervaloHoras) &&
+    intervaloHoras >= 1 &&
+    intervaloHoras <= 23 &&
+    !agenda.dias &&
+    !agenda.intervaloDias
+  ) {
+    agenda.intervaloHoras = intervaloHoras
+  }
   const intervalo = Number(obj.intervaloDias)
-  if (Number.isInteger(intervalo) && intervalo > 1 && !agenda.dias) agenda.intervaloDias = intervalo
+  if (Number.isInteger(intervalo) && intervalo > 1 && !agenda.dias && !agenda.intervaloHoras) {
+    agenda.intervaloDias = intervalo
+  }
   return agenda
 }
 

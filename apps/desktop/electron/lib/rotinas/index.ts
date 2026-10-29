@@ -35,7 +35,9 @@ export async function carregarTudo(): Promise<{ rotinas: Rotina[]; runs: RotinaR
 
 export async function criarRotina(input: NovaRotinaInput): Promise<Rotina> {
   const rotina: Rotina = {
-    id: novoId(),
+    // Proposta aprovada no card da conversa já trouxe o próprio id — a
+    // identidade estável é o que deixa o card reconhecer a rotina criada.
+    id: input.id ?? novoId(),
     titulo: input.titulo.trim(),
     prompt: input.prompt.trim(),
     agenda: input.agenda,

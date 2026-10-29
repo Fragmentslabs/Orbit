@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { MessageSquareIcon, PlusIcon, TerminalIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { rotinasApi } from "@/src/lib/ipc"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useRotinasStore } from "@/src/stores/rotinas-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -32,6 +34,12 @@ export function RotinasView() {
   const sessions = useSessionStore((s) => s.sessions)
   const sessoesCarregadas = useSessionStore((s) => s.initialized)
   const [criarAberto, setCriarAberto] = useState(false)
+  // Segundo plano (macOS): LaunchAgent que relança o app com --hidden.
+  const [background, setBackground] = useState<{ ativo: boolean; suportado: boolean } | null>(null)
+
+  useEffect(() => {
+    void rotinasApi.backgroundEstado().then(setBackground)
+  }, [])
 
   const aberta = abertaId ? rotinas.find((r) => r.id === abertaId && r.mode === mode) : undefined
   const doModo = rotinas.filter((r) => r.mode === mode)
@@ -98,6 +106,23 @@ export function RotinasView() {
       )}
 
       <ListaDeRotinas modo={mode} onCriarNova={() => setCriarAberto(true)} />
+
+      {background?.suportado && (
+        <div className="flex shrink-0 items-center gap-3 border-t px-1 pb-1 pt-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-foreground">{t("rotinas.background.titulo")}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{t("rotinas.background.dica")}</p>
+          </div>
+          <Switch
+            checked={background.ativo}
+            onCheckedChange={async (v) => {
+              const r = await rotinasApi.backgroundAtivar(v)
+              setBackground({ ativo: v && r.ok, suportado: true })
+            }}
+            aria-label={t("rotinas.background.titulo")}
+          />
+        </div>
+      )}
 
       <CriarRotinaDialog
         aberto={criarAberto}

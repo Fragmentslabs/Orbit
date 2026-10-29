@@ -31,6 +31,7 @@ import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
+import { isRotinaProposal, RotinaProposalCard } from "@/src/components/rotinas/rotina-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskTrigger } from "@/src/components/ai/task"
 import { ToolActionItem } from "@/src/components/ai/actions-group"
@@ -261,7 +262,13 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
     [message.parts, plan],
   )
   const segments = useMemo(
-    () => segmentParts(arrangeForView(parts, view), (part) => plan.cards.has(part.id)),
+    () =>
+      segmentParts(
+        arrangeForView(parts, view),
+        // A proposta de rotina tem card próprio, como as peças — sem isto ela
+        // cairia no grupo de tarefas e a decisão "criar/descartar" sumiria.
+        (part) => plan.cards.has(part.id) || isRotinaProposal(part),
+      ),
     [parts, view, plan],
   )
   const flat = view === "detailed"
@@ -328,6 +335,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" && segment.part.tool === "rotinas_manage" ? (
+          <RotinaProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" &&
           (segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update") ? (
           <McpProposalCard key={segment.id} part={segment.part} />

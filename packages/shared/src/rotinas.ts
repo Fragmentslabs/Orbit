@@ -41,6 +41,21 @@ export interface Agenda {
   dias?: number[]
   /** Alternativa a `dias`: a cada N dias contados da última execução. */
   intervaloDias?: number
+  /**
+   * Alternativa a `dias`: a cada N horas contadas da última execução (a
+   * primeira cai no próximo `horario` do dia).
+   */
+  intervaloHoras?: number
+  /**
+   * Agenda "uma vez só": data no formato "YYYY-MM-DD" (fuso local). Junto com
+   * `horario` forma o único disparo — depois de rodar (ou da data passar), a
+   * rotina não dispara mais e o scheduler a desativa sozinho.
+   *
+   * Precedência quando há mais de um campo preenchido (agendas vindas de um
+   * rotinas.json editado à mão): `umaVezData` > `intervaloHoras` >
+   * `intervaloDias` > `dias`.
+   */
+  umaVezData?: string
 }
 
 // ─── Modos ───────────────────────────────────────────────────────────────────
@@ -167,6 +182,30 @@ export interface NovaRotinaInput {
   pastas: string[]
   visionModel?: RotinaModelo
   ativa?: boolean
+  /**
+   * Só quem já tem identidade própria passa: a proposta aprovada no card da
+   * conversa cria a rotina com o MESMO id (é o que deixa o card reconhecê-la).
+   */
+  id?: string
+}
+
+/**
+ * Proposta de rotina feita pelo agente (tool rotinas_manage): fica em staging
+ * até a pessoa aprovar no card. Não é uma Rotina — não tem criadoEm nem
+ * ultimaExecucao, e só existe enquanto não aprovada.
+ */
+export interface RotinaPendente {
+  /** Id da proposta E da rotina que nasce dela na aprovação. */
+  id: string
+  titulo: string
+  prompt: string
+  agenda: Agenda
+  modos: RotinaModos
+  mode: 'chat' | 'code'
+  pastas: string[]
+  modelo: RotinaModelo
+  visionModel?: RotinaModelo
+  criadoEm: number
 }
 
 // ─── Execuções ───────────────────────────────────────────────────────────────
@@ -232,6 +271,17 @@ function comHorario(base: Date, hora: number, minuto: number): number {
   return d.getTime()
 }
 
+/** "YYYY-MM-DD" → Date local à meia-noite. Null quando inválida. */
+function parseUmaVezData(data: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data.trim())
+  if (!match) return null
+  const [ano, mes, dia] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const d = new Date(ano, mes - 1, dia)
+  // Rejeita datas que o Date "conserta" (31/02 → 03/03).
+  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null
+  return d
+}
+
 /**
  * Próximo instante de execução ESTRITAMENTE depois de `depoisDe`.
  *
@@ -250,6 +300,29 @@ export function proximaExecucao(
   if (!hm) return null
   const { hora, minuto } = hm
   const base = new Date(depoisDe)
+
+  if (agenda.umaVezData) {
+    const data = parseUmaVezData(agenda.umaVezData)
+    if (!data) return null
+    const alvo = comHorario(data, hora, minuto)
+    // Só existe UM disparo: se a data já passou, a rotina nunca mais roda — o
+    // scheduler a desativa ao concluir a execução (ver executarRotina).
+    return alvo > depoisDe ? alvo : null
+  }
+
+  if (agenda.intervaloHoras && agenda.intervaloHoras > 0) {
+    const passo = Math.floor(agenda.intervaloHoras) * 60 * 60 * 1000
+    // Com execução anterior, a contagem parte dela (a cada N horas de fato);
+    // sem, a primeira cai no `horario` de hoje — grade ancorada no horário.
+    const ancora = ultimaExecucao ?? comHorario(base, hora, minuto)
+    let alvo = ancora
+    if (alvo <= depoisDe) {
+      const saltos = Math.ceil((depoisDe - alvo) / passo)
+      alvo += Math.max(saltos, 1) * passo
+      while (alvo <= depoisDe) alvo += passo
+    }
+    return alvo
+  }
 
   if (agenda.intervaloDias && agenda.intervaloDias > 0) {
     const passo = Math.floor(agenda.intervaloDias)

@@ -30,6 +30,7 @@ import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
+import { isRotinaProposal, RotinaProposalCard } from "@/src/components/rotinas/rotina-proposal-card"
 import {
   AgentPartView,
   AssistantMarkdown,
@@ -211,7 +212,13 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
     [message.parts, plan],
   )
   const segments = useMemo(
-    () => segmentParts(arrangeForView(parts, view), (part) => plan.cards.has(part.id)),
+    () =>
+      segmentParts(
+        arrangeForView(parts, view),
+        // A proposta de rotina tem card próprio como as peças — sem isto ela
+        // cairia no acordeon de ações e a decisão "criar/descartar" sumiria.
+        (part) => plan.cards.has(part.id) || isRotinaProposal(part),
+      ),
     [parts, view, plan],
   )
   const flat = view === "detailed"
@@ -275,6 +282,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "rotinas_manage" ? (
+          <RotinaProposalCard key={segment.id} part={segment.part} />
         ) : MOTION_CARD_TOOLS.has(segment.part.tool) ? (
           <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : DESIGN_CARD_TOOLS.has(segment.part.tool) ? (

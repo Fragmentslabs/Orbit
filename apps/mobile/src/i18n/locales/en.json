@@ -1060,7 +1060,9 @@
       "modo": {
         "diario": "Every day",
         "semanal": "Weekdays",
-        "intervalo": "Every N days"
+        "intervalo": "Every N days",
+        "horas": "Every N hours",
+        "unico": "Once"
       },
       "horario": "at",
       "dia": {
@@ -1090,7 +1092,12 @@
       },
       "resumoUteis": "Mon-Fri at {{horario}}",
       "resumoFimDeSemana": "Weekend at {{horario}}",
-      "selecionarHorario": "Time"
+      "selecionarHorario": "Time",
+      "horas": "hours",
+      "em": "on",
+      "umaVezDica": "The routine turns itself off after running.",
+      "resumoHoras": "Every {{horas}} hours",
+      "resumoUnico": "Once on {{data}} at {{horario}}"
     },
     "modos": {
       "loop": {

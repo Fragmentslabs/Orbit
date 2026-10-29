@@ -1429,6 +1429,13 @@
     "add": "Add skill",
     "discarded": "Proposal discarded."
   },
+  "rotinaProposal": {
+    "building": "Preparing the routine…",
+    "created": "Routine created — find it in the Routines panel.",
+    "discard": "Discard",
+    "create": "Create routine",
+    "discarded": "Proposal discarded."
+  },
   "mcpProposal": {
     "building": "Preparing the connection.",
     "connect": "Connect",
@@ -2621,7 +2628,9 @@
       "modo": {
         "diario": "Every day",
         "semanal": "Days of the week",
-        "intervalo": "Every N days"
+        "intervalo": "Every N days",
+        "horas": "Every N hours",
+        "unico": "Once"
       },
       "horario": "at",
       "dia": {
@@ -2637,6 +2646,11 @@
       "fimDeSemana": "Weekend",
       "aCada": "Every",
       "dias": "days",
+      "horas": "hours",
+      "em": "on",
+      "umaVezDica": "The routine turns itself off after running.",
+      "resumoHoras": "Every {{horas}} hours",
+      "resumoUnico": "Once on {{data}} at {{horario}}",
       "resumoDiario": "Every day at {{horario}}",
       "resumoDias": "{{dias}} at {{horario}}",
       "resumoIntervalo": "Every {{dias}} days at {{horario}}",
@@ -2651,6 +2665,10 @@
       },
       "resumoUteis": "Mon to Fri at {{horario}}",
       "resumoFimDeSemana": "Weekends at {{horario}}"
+    },
+    "background": {
+      "titulo": "Run in the background",
+      "dica": "The app relaunches itself if you quit — routines fire even when nobody opens Orbit."
     },
     "modos": {
       "loop": {

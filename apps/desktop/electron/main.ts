@@ -197,6 +197,8 @@ import * as esteira from './lib/esteira'
 import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat, validarPastaDosWorktrees } from './lib/worktrees/servico'
 import { pastaNoRepositorioPrincipal } from './lib/worktrees/principal'
 import * as rotinas from './lib/rotinas'
+import { aplicarBackground, estadoBackground } from './lib/rotinas/background'
+import { aprovarRotinaPendente, descartarRotinaPendente, listarRotinasPendentes } from './lib/rotinas/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
 import type { FaseTemplate, NovaEsteiraInput, NovaTaskInput } from '@shared/esteira'
@@ -308,6 +310,10 @@ registerSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
+// --hidden (LaunchAgent de segundo plano): a janela nasce pronta mas invisível
+// — as rotinas disparam em segundo plano e quem traz a janela de volta é o
+// Dock/menu, como uma janela fechada qualquer.
+const oculto = process.argv.includes('--hidden')
 
 /**
  * O app está saindo DE VERDADE? O `close` da janela consulta isto antes de
@@ -549,8 +555,11 @@ function createWindow() {
   const showWindow = () => {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   }
-  win.once('ready-to-show', showWindow)
-  setTimeout(showWindow, 5000)
+  // --hidden: o ready-to-show não mostra nada — o app roda só para as rotinas.
+  if (!oculto) {
+    win.once('ready-to-show', showWindow)
+    setTimeout(showWindow, 5000)
+  }
 
   win.on('maximize', () => win?.webContents.send('window:maximized-change', true))
   win.on('unmaximize', () => win?.webContents.send('window:maximized-change', false))
@@ -2494,6 +2503,15 @@ app.whenReady().then(() => {
     (_e, descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string, modo?: 'chat' | 'code', visionDisponivel?: boolean) =>
       rotinas.gerarRotina(descricao, modelo, pastas, idioma, modo, visionDisponivel),
   )
+  // Propostas do agente (tool rotinas_manage): o card da conversa lista,
+  // aprova e descarta. A aprovação cria a rotina de verdade (com o id da
+  // proposta) e o evento 'rotina' sai dela, como qualquer criação.
+  ipcMain.handle('rotinas:pendentes', () => listarRotinasPendentes())
+  ipcMain.handle('rotinas:aprovarPendente', (_e, id: string) => aprovarRotinaPendente(id))
+  ipcMain.handle('rotinas:descartarPendente', (_e, id: string) => descartarRotinaPendente(id))
+  // Segundo plano (macOS): LaunchAgent que relança o app com --hidden.
+  ipcMain.handle('rotinas:background:estado', () => estadoBackground())
+  ipcMain.handle('rotinas:background:ativar', (_e, ativo: boolean) => aplicarBackground(ativo))
   rotinas.iniciarScheduler()
 
   // Galeria de mídia (aba "Mídia" do painel direito)
