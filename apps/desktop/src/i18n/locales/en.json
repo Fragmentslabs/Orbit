@@ -533,6 +533,10 @@
     "connected": "Connected",
     "attachedDoc": "Attached document",
     "fullText": "Content",
+    "openInPanel": "Open in panel",
+    "openInMemoriesScreen": "Open in Memories",
+    "notFound": "Memory not found — it may have been deleted.",
+    "citationHint": "Cited memory — click to open in the panel",
     "moreConnected_one": "+{{count}} connection",
     "moreConnected_other": "+{{count}} connections",
     "deleteTitle": "Delete memory?",
@@ -772,6 +776,10 @@
       "slides": {
         "label": "Slides",
         "description": "Present a slide deck produced by the assistant"
+      },
+      "memory": {
+        "label": "Memory",
+        "description": "A memory cited in the conversation"
       }
     },
     "unreadMessages": "Unread messages"

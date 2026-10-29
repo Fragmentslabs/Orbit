@@ -4,6 +4,7 @@ import { FileText, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 import type { Memory } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
@@ -17,11 +18,14 @@ import { MemoryCard } from "./memory-card"
  * markdown anexado quando existe, senão o texto completo da memória (o card o
  * corta em duas linhas, então aqui é onde ele aparece por inteiro).
  */
-export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose }: {
+export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, className }: {
   memory: Memory
   related: Memory[]
   onSelectRelated: (id: string) => void
-  onClose: () => void
+  /** Fechar a visão. Ausente = não há o que fechar (aba do painel: a aba tem seu X). */
+  onClose?: () => void
+  /** Largura/ocupação — a aba do painel usa a largura toda em vez dos w-96 fixos. */
+  className?: string
 }) {
   const { t } = useTranslation()
   const openDoc = useMemoryStore((s) => s.openDoc)
@@ -48,20 +52,22 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose }:
   }, [memory.id, memory.hasDoc, openDoc])
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col gap-2 overflow-hidden">
+    <aside className={cn("flex shrink-0 flex-col gap-2 overflow-hidden", className ?? "w-96")}>
       {/* O fechar fica na própria linha: ao lado do card ele roubava largura e
           deixava o card mais estreito que a caixa do documento abaixo. */}
-      <div className="flex justify-end">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          title={t("common.close")}
-          onClick={onClose}
-        >
-          <X className="size-3.5" />
-        </Button>
-      </div>
+      {onClose && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            title={t("common.close")}
+            onClick={onClose}
+          >
+            <X className="size-3.5" />
+          </Button>
+        </div>
+      )}
       <MemoryCard memory={memory} related={related} onSelectRelated={onSelectRelated} />
 
       <div className="flex min-h-0 flex-1 flex-col rounded-lg border bg-card">

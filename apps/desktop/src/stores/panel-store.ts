@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides" | "memory"
 
 export interface PanelTab {
   id: string
@@ -45,6 +45,8 @@ export interface PanelTab {
   designPlay?: string
   /** A apresentação foi aberta do editor em tela cheia: nasce em tela cheia. */
   designFullscreen?: boolean
+  /** Aba Memória: id do registro (mem_xxx) aberto por uma citacao na conversa. */
+  memoryId?: string
   /** Aba Fonte: documento aberto por uma citacao, e o trecho a grifar. */
   sourceDocId?: string
   sourcePage?: number
@@ -243,6 +245,9 @@ interface PanelState {
     sessionId: string,
     ref: { docId: string; page: number; fromLine?: number; toLine?: number; title: string },
   ) => void
+  /** Abre (ou reaproveita) a aba com uma memória citada na conversa. Mesma
+   *  ideia do openSourceTab: uma aba por memória, reabrir foca a existente. */
+  openMemoryTab: (sessionId: string, ref: { memoryId: string; title: string }) => void
   /** Chat novo virou sessão: as abas abertas no balde órfão passam a ser dela. */
   adoptOrphanTabs: (sessionId: string) => void
   getTabs: (sessionId: string) => PanelTab[]
@@ -809,6 +814,34 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
       }),
 
+    openMemoryTab: (sessionId, ref) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        // Uma aba por memória: a mesma citação clicada duas vezes foca a aba
+        // existente, e duas memórias diferentes convivem para comparação.
+        const existing = tabs.find((t) => t.type === "memory" && t.memoryId === ref.memoryId)
+        if (existing) {
+          return {
+            rightPanelOpen: true,
+            selectorOpen: false,
+            activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `memory-${nextTabId()}`,
+          type: "memory",
+          title: ref.title,
+          sessionId: tabSession(sessionId),
+          memoryId: ref.memoryId,
+        }
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
+
     adoptOrphanTabs: (sessionId) =>
       set((state) => {
         const orphans = state.tabsBySession[ORPHAN_KEY]
@@ -1129,6 +1162,7 @@ function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): v
       documentId: t.documentId,
       url: t.url,
       sourceDocId: t.sourceDocId,
+      memoryId: t.memoryId,
     }))
     const key = JSON.stringify({ activeTabId, snapshotTabs })
     if (lastPanelSnapshots.get(sessionId) === key) continue

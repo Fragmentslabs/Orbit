@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { classifyMarkdownLink, parseSourceHref, rescueLegacyCitations } from './citations'
+import {
+  classifyMarkdownLink,
+  linkifyMemoryIds,
+  parseMemoryHref,
+  parseSourceHref,
+  rescueLegacyCitations,
+  splitMemoryIds,
+} from './citations'
 import { sourceAnchor } from '@/electron/lib/document-pages'
 
 /**
@@ -97,5 +104,94 @@ describe('classifyMarkdownLink', () => {
     for (const href of [undefined, '', '#', 'mailto:x@y.com', 'javascript:void(0)', 'caminho com espaço']) {
       expect(() => classifyMarkdownLink(href, '1')).not.toThrow()
     }
+  })
+})
+
+describe('parseMemoryHref', () => {
+  it('lê o endereço que a citação de memória usa', () => {
+    expect(parseMemoryHref('#orbit-memory/mem_msj8qkrh9r542h0y')).toBe('mem_msj8qkrh9r542h0y')
+  })
+
+  it('recusa id fora do formato e link comum', () => {
+    expect(parseMemoryHref('#orbit-memory/abc123')).toBeNull()
+    expect(parseMemoryHref('https://exemplo.com/mem_abc123')).toBeNull()
+    expect(parseMemoryHref('#orbit-memory/../../etc/passwd')).toBeNull()
+  })
+
+  it('a citação de memória válida vira chip, e a quebrada vira texto', () => {
+    expect(classifyMarkdownLink('#orbit-memory/mem_abc123', 'idioma')).toEqual({
+      kind: 'memory',
+      memoryId: 'mem_abc123',
+    })
+    expect(classifyMarkdownLink('#orbit-memory/', 'idioma')).toEqual({ kind: 'broken-memory' })
+  })
+})
+
+describe('linkifyMemoryIds', () => {
+  it('converte o id solto no chip, no meio da frase', () => {
+    expect(linkifyMemoryIds('Anotei isso em mem_abc123 e sigo daqui.')).toBe(
+      'Anotei isso em [mem_abc123](#orbit-memory/mem_abc123) e sigo daqui.',
+    )
+  })
+
+  /**
+   * O linkify roda sobre o markdown de TODA resposta. Um id citado dentro de
+   * um bloco de código é exemplo, não referência — transformá-lo em chip
+   * estragaria o código que a pessoa vai copiar.
+   */
+  it('não toca em bloco de código nem em código inline', () => {
+    const texto = '```ts\nconst id = "mem_abc123"\n```\n\nUse `mem_def456` como exemplo.'
+    expect(linkifyMemoryIds(texto)).toBe(texto)
+  })
+
+  it('não reescreve link que já existe nem href solto', () => {
+    const pronto = 'Veja [idioma](#orbit-memory/mem_abc123).'
+    expect(linkifyMemoryIds(pronto)).toBe(pronto)
+    const solto = 'O endereço é #orbit-memory/mem_abc123.'
+    expect(linkifyMemoryIds(solto)).toBe(solto)
+  })
+
+  it('sem id de memória devolve a mesma referência de string', () => {
+    const texto = 'Nenhuma memória citada aqui.'
+    expect(linkifyMemoryIds(texto)).toBe(texto)
+  })
+
+  it('converte mais de um id na mesma frase', () => {
+    expect(linkifyMemoryIds('mem_abc123 e mem_def456')).toBe(
+      '[mem_abc123](#orbit-memory/mem_abc123) e [mem_def456](#orbit-memory/mem_def456)',
+    )
+  })
+
+  /**
+   * As tools listam as memórias como "#mem_xxx". Sem consumir o "#", o chip
+   * apareceria com um jornal solto na frente ("#idioma do usuário").
+   */
+  it('engole o "#" da saída das tools', () => {
+    expect(linkifyMemoryIds('Salvei em #mem_abc123.')).toBe(
+      'Salvei em [mem_abc123](#orbit-memory/mem_abc123).',
+    )
+  })
+
+  it('não casa dentro de outra palavra', () => {
+    const texto = 'o campo xmem_abc123 não é uma citação'
+    expect(linkifyMemoryIds(texto)).toBe(texto)
+  })
+})
+
+describe('splitMemoryIds', () => {
+  it('isola o id da saída da tool e mantém o texto em volta', () => {
+    expect(splitMemoryIds('Salva #mem_abc123 com 3 vínculos')).toEqual([
+      'Salva ',
+      { memoryId: 'mem_abc123' },
+      ' com 3 vínculos',
+    ])
+  })
+
+  it('texto sem id volta como um pedaço só', () => {
+    expect(splitMemoryIds('nada aqui')).toEqual(['nada aqui'])
+  })
+
+  it('id colado em pontuação não leva a pontuação junto', () => {
+    expect(splitMemoryIds('#mem_abc123:')).toEqual([{ memoryId: 'mem_abc123' }, ':'])
   })
 })

@@ -22,6 +22,7 @@ export type PanelSnapshotTabType =
   | 'motion'
   | 'design'
   | 'slides'
+  | 'memory'
 
 export interface PanelSnapshotTab {
   id: string
@@ -38,6 +39,7 @@ export interface PanelSnapshotTab {
   documentId?: string
   url?: string
   sourceDocId?: string
+  memoryId?: string
 }
 
 export interface PanelSnapshot {

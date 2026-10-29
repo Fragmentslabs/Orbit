@@ -38,7 +38,7 @@ import { hostnameOf, messageText, speakableText, visibleMessageText } from "@/sr
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { classifyMarkdownLink, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
+import { classifyMarkdownLink, linkifyMemoryIds, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
 import { chatApi } from "@/src/lib/ipc"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -51,6 +51,7 @@ import {
 import { MessageResponse } from "@/src/components/ai/message"
 import { OrbitUiHostContext } from "@/src/components/ai/generative-ui"
 import { DiffBadge } from "@/src/components/messages/diff-badge"
+import { MemoryCitation, MemoryIdText } from "@/src/components/messages/memory-citation"
 import { MessageUsage } from "@/src/components/messages/message-usage"
 import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
@@ -111,6 +112,12 @@ function makeMarkdownLink(sessionId?: string): Components["a"] {
     if (link.kind === "broken-source") {
       return <span className="text-muted-foreground">{children}</span>
     }
+    if (link.kind === "memory") {
+      return <MemoryCitation memoryId={link.memoryId} label={text} sessionId={sessionId} />
+    }
+    if (link.kind === "broken-memory") {
+      return <span className="text-muted-foreground">{children}</span>
+    }
     if (link.kind === "web-citation" && href) {
       return (
         <InlineCitation>
@@ -150,8 +157,9 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
   const host = useMemo(() => ({ sessionId }), [sessionId])
   // Respostas gravadas antes da mudanca de formato guardam a citacao antiga,
   // que o sanitizador derruba; a reescrita aqui devolve o clique a elas sem
-  // mexer no historico em disco.
-  const text = useMemo(() => rescueLegacyCitations(children), [children])
+  // mexer no historico em disco. O mesmo vale para o id de memória escrito
+  // solto: vira chip na renderização, inclusive nas respostas antigas.
+  const text = useMemo(() => linkifyMemoryIds(rescueLegacyCitations(children)), [children])
   return (
     <div
       className={cn(
@@ -260,10 +268,12 @@ export function AgentPartView({ part }: { part: AgentPart }) {
 }
 
 /** Fallback genérico para ferramentas sem visual dedicado. */
-export function GenericToolView({ part, label, subtitle }: {
+export function GenericToolView({ part, label, subtitle, sessionId }: {
   part: ToolPart
   label: string
   subtitle?: string
+  /** Onde abrir a memória citada: a aba do painel pertence a esta sessão. */
+  sessionId?: string
 }) {
   const [open, setOpen] = useState(false)
   const detail = part.error ?? part.output
@@ -293,7 +303,7 @@ export function GenericToolView({ part, label, subtitle }: {
       <CollapsibleContent>
         {detail && (
           <pre className="mt-1 max-h-64 overflow-auto rounded-lg border bg-muted/30 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {detail}
+            <MemoryIdText text={detail} sessionId={sessionId} />
           </pre>
         )}
       </CollapsibleContent>

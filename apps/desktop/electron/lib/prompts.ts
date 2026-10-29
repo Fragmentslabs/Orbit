@@ -508,7 +508,9 @@ PROACTIVITY — turn a repetition into a question, not a rule:
   Preferences → Comportamento, and asking about it is intrusive.
 
 memory_search: use whenever the user references something past.
-memory_link: connect existing memories — thinking in terms of a tree (parent-child) or graph (related).`
+memory_link: connect existing memories — thinking in terms of a tree (parent-child) or graph (related).
+
+CITING A MEMORY. When a memory is the reason for what you are saying ("você prefere X", "o padrão é Y"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx). The app renders a chip with the memory summary, and clicking it opens the memory in the side panel. Use the id exactly as memory_search / memory_save returned it — a guessed id opens nothing. Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
 
 const BRAIN_CODE_PROMPT = `BRAIN MODE ACTIVE (CODE). Tools: memory_tree / memory_search / memory_save /
 memory_update / memory_link / memory_open / memory_graph — all scoped to the PROJECT (active folder).
@@ -575,7 +577,13 @@ They never state anything the text does not. memory_update takes them too — us
 you are rewriting anyway.
 
 DOC: use document for extensive context (maps, schemas). text stays the short summary.
-Use memory_graph to navigate the project graph, memory_search for text search.`
+Use memory_graph to navigate the project graph, memory_search for text search.
+
+CITING A MEMORY. When a memory is the reason for what you are saying ("o padrão do projeto é Y",
+"a regra de cobrança vem daqui"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx).
+The app renders a chip with the summary, and clicking it opens the memory in the side panel. Use the
+id exactly as memory_tree / memory_search / memory_open returned it — a guessed id opens nothing.
+Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
 
 const SKILLS_INSTRUCTION = `USER SKILLS. The sections below are knowledge curated by the user (conventions, patterns, permanent instructions). Apply a skill whenever the topic is relevant — you decide contextually. When the user's message references @skill-name, applying that skill is MANDATORY. A built-in skill (source: builtin) lists only its description: call skill_read({ slug }) to load its full instructions before applying it.`
 

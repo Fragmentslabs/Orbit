@@ -533,6 +533,10 @@
     "connected": "Conectadas",
     "attachedDoc": "Documento anexado",
     "fullText": "Conteúdo",
+    "openInPanel": "Abrir no painel",
+    "openInMemoriesScreen": "Ver na tela de memórias",
+    "notFound": "Memória não encontrada — pode ter sido excluída.",
+    "citationHint": "Memória citada — clique para abrir no painel",
     "moreConnected_one": "+{{count}} conexão",
     "moreConnected_other": "+{{count}} conexões",
     "deleteTitle": "Excluir memória?",
@@ -772,6 +776,10 @@
       "slides": {
         "label": "Slides",
         "description": "Apresente um deck de slides produzido pelo assistente"
+      },
+      "memory": {
+        "label": "Memória",
+        "description": "Uma memória citada na conversa"
       }
     },
     "unreadMessages": "Mensagens não lidas"

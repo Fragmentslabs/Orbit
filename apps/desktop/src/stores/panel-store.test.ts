@@ -63,6 +63,28 @@ describe("abrir uma aba pelo card da conversa", () => {
     expect(tabs).toHaveLength(2)
     expect(state.activeTabBySession.s1).toBe(tabs[1].id)
   })
+
+  /**
+   * A citação de memória usa o mesmo gesto — e a mesma regra: a aba nasce
+   * apontando para UMA memória, e clicar de novo na mesma citação foca a aba
+   * que já está lá em vez de empilhar cópias.
+   */
+  it("a memória citada abre aba, e a mesma memória reaproveita a aba", () => {
+    usePanelStore.getState().setSelectorOpen(true)
+    usePanelStore.getState().openMemoryTab("s1", { memoryId: "mem_abc123", title: "Idioma" })
+
+    const first = tabsOf("s1")
+    expect(first).toHaveLength(1)
+    expect(first[0]).toMatchObject({ type: "memory", memoryId: "mem_abc123", title: "Idioma", sessionId: "s1" })
+    expect(usePanelStore.getState().selectorOpen).toBe(false)
+
+    usePanelStore.getState().openMemoryTab("s1", { memoryId: "mem_def456", title: "Design system" })
+    usePanelStore.getState().openMemoryTab("s1", { memoryId: "mem_abc123", title: "Idioma" })
+
+    const tabs = tabsOf("s1")
+    expect(tabs).toHaveLength(2)
+    expect(usePanelStore.getState().activeTabBySession.s1).toBe(tabs[0].id)
+  })
 })
 
 /**

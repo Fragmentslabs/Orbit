@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Brain, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -22,6 +22,7 @@ import { SlidesTab } from "@/src/components/slides-tab"
 import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
+import { MemoryTab } from "@/src/components/memory-tab"
 
 import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
@@ -71,7 +72,10 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
     type === "diff" ||
     type === "motion" ||
     type === "design" ||
-    type === "slides"
+    type === "slides" ||
+    // "memory" também só existe apontando para uma memória — nasce do clique
+    // na citação, dentro da conversa.
+    type === "memory"
   )
     return false
   if (mode === "code") return true
@@ -97,6 +101,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     motion: { icon: Clapperboard, label: t("panel.tabs.motion.label"), description: t("panel.tabs.motion.description") },
     design: { icon: LayoutGrid, label: t("panel.tabs.design.label"), description: t("panel.tabs.design.description") },
     slides: { icon: Presentation, label: t("panel.tabs.slides.label"), description: t("panel.tabs.slides.description") },
+    memory: { icon: Brain, label: t("panel.tabs.memory.label"), description: t("panel.tabs.memory.description") },
   }
 }
 
@@ -303,6 +308,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <SourcesTab sessionId={tab.sessionId ?? sessionId} />
+        </div>
+      )
+    case "memory":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <MemoryTab memoryId={tab.memoryId} sessionId={tab.sessionId ?? sessionId} />
         </div>
       )
     case "source":

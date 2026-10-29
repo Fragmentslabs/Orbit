@@ -294,6 +294,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             key={segment.id}
             part={segment.part}
             label={segment.part.tool}
+            sessionId={sessionId}
             subtitle={
               typeof segment.part.input?.command === "string" ? segment.part.input.command : undefined
             }
