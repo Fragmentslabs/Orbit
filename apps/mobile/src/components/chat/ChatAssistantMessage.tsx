@@ -27,6 +27,7 @@ import type {
   ImagePart,
   FilePart,
 } from '@orbit/shared'
+import { MemoryChip } from '~/components/memories/MemoryChip'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
@@ -47,7 +48,7 @@ import {
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
-import { parseMessageReply } from '@orbit/shared'
+import { parseMessageReply, splitMemoryIds } from '@orbit/shared'
 import { useReplyLabel } from '~/components/chat/ReplyBar'
 
 interface ChatAssistantMessageProps {
@@ -363,7 +364,15 @@ function ToolActionRow({ part }: { part: ToolPart }) {
       {showOutput && detail ? (
         <ScrollView style={{ maxHeight: 160, marginTop: 6 }} nestedScrollEnabled>
           <Text style={{ fontSize: 11, fontFamily: 'monospace', color: tokens.mutedForeground, lineHeight: 16 }}>
-            {detail}
+            {/* A saída das tools lista as memórias como "#mem_xxx": o id cru não
+                diz nada, então vira o mesmo chip da conversa. */}
+            {splitMemoryIds(detail).map((part, i) =>
+              typeof part === 'string' ? (
+                <Text key={i}>{part}</Text>
+              ) : (
+                <MemoryChip key={i} memoryId={part.memoryId} size={11} />
+              ),
+            )}
           </Text>
         </ScrollView>
       ) : null}

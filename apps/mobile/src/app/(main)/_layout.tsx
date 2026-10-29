@@ -2,6 +2,7 @@ import { View } from 'react-native'
 import { Stack } from 'expo-router'
 import { Sidebar } from '~/components/layout/Sidebar'
 import { RightPanel } from '~/components/chat/RightPanel'
+import { MemorySheet } from '~/components/memories/MemorySheet'
 import { useBreakpoint } from '~/components/layout/ResponsiveContainer'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSidebarSwipe } from '~/components/layout/useSidebarSwipe'
@@ -63,6 +64,12 @@ export default function MainLayout() {
       </View>
 
       <Sidebar />
+
+      {/* Folha da memória citada: montada UMA vez para o app inteiro (como a
+          Sidebar) — os chips de qualquer tela só apontam o id no store. Se
+          ficasse dentro do ChatScreen, um chip na tela de Memórias não abriria
+          nada; duas cópias montadas dariam dois modais para o mesmo estado. */}
+      <MemorySheet />
     </View>
   )
 }

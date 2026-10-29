@@ -5,7 +5,7 @@
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet, InteractionManager } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory, MemoryKind } from '@orbit/shared'
@@ -38,6 +38,19 @@ export default function MemoriesScreen() {
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
   const [tab, setTab] = useState<'list' | 'graph'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Chegada por citação na conversa (`/memories?id=mem_xxx`): abre já no grafo
+  // com o nó em foco — a lista é ordenada por atividade, então a memória citada
+  // poderia estar a várias rolagens da primeira dobra. Ajuste no RENDER (não
+  // em efeito), mesmo padrão do EditModal do MemoryCard: evita o render em
+  // cascata que o efeito provocaria.
+  const { id: memoriaDaRota } = useLocalSearchParams<{ id?: string }>()
+  const [rotaAplicada, setRotaAplicada] = useState<string | null>(null)
+  if (typeof memoriaDaRota === 'string' && memoriaDaRota && memoriaDaRota !== rotaAplicada) {
+    setRotaAplicada(memoriaDaRota)
+    setSelectedId(memoriaDaRota)
+    setTab('graph')
+  }
 
   useEffect(() => {
     void fetch()

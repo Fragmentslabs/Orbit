@@ -1,7 +1,9 @@
 import { memo, useMemo } from 'react'
 import { Linking, View, Text } from 'react-native'
+import { parseMemoryHref } from '@orbit/shared'
 import { CodeBlock } from '~/components/chat/CodeBlock'
 import { NavCard } from '~/components/chat/NavCard'
+import { MemoryChip } from '~/components/memories/MemoryChip'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -21,6 +23,7 @@ type InlineSegment =
   | { type: 'italic'; text: string }
   | { type: 'code'; text: string }
   | { type: 'link'; text: string; url: string }
+  | { type: 'memory'; id: string }
 
 type ListItem = {
   depth: number
@@ -55,7 +58,11 @@ function stabilizeMarkdown(text: string): string {
 }
 
 function parseInline(text: string): InlineSegment[] {
-  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g
+  // A alternativa do id de memória vem POR ÚLTIMO: o link `[…](#orbit-memory/…)`
+  // precisa ser reconhecido quando o parser chega no "[" — antes do "mem_".
+  // Código inline já é consumido pela alternativa anterior, então um `mem_xxx`
+  // citado como exemplo continua texto.
+  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))|(#?(mem_[a-z0-9]{6,})\b)/g
   const segments: InlineSegment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -72,6 +79,8 @@ function parseInline(text: string): InlineSegment[] {
       segments.push({ type: 'code', text: match[6] })
     } else if (match[8] && match[9]) {
       segments.push({ type: 'link', text: match[8], url: match[9] })
+    } else if (match[11]) {
+      segments.push({ type: 'memory', id: match[11] })
     }
     lastIndex = match.index + match[0].length
   }
@@ -206,7 +215,11 @@ function parseMarkdown(text: string): Block[] {
           // Continuação indentada de item (sem bullet) — anexa ao último
           if (items.length > 0 && /^\s{2,}\S/.test(lines[i]) && lines[i].trim() !== '') {
             const last = items[items.length - 1]
-            const plain = last.segments.map((s) => s.text).join('')
+            // O segmento de memória não tem texto: devolve o id, para a linha
+            // continuar citando a mesma memória depois do reparse.
+            const plain = last.segments
+              .map((s) => (s.type === 'memory' ? s.id : s.text))
+              .join('')
             last.segments = parseInline(`${plain} ${lines[i].trim()}`)
             i++
             continue
@@ -321,7 +334,13 @@ const InlineText = memo(function InlineText({
                 {seg.text}
               </Text>
             )
-          case 'link':
+          case 'link': {
+            // Citação de memória chega como link `#orbit-memory/mem_xxx` — o
+            // contrato é o mesmo do desktop, só a apresentação muda.
+            const memoryId = parseMemoryHref(seg.url)
+            if (memoryId) {
+              return <MemoryChip key={i} memoryId={memoryId} label={seg.text} size={size} />
+            }
             return (
               <Text
                 key={i}
@@ -331,6 +350,9 @@ const InlineText = memo(function InlineText({
                 {seg.text}
               </Text>
             )
+          }
+          case 'memory':
+            return <MemoryChip key={i} memoryId={seg.id} label={seg.id} size={size} />
           default:
             return (
               <Text key={i} style={{ color }}>

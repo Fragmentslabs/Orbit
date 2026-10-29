@@ -632,6 +632,12 @@
     "deleteBodyDocSuffix": ", junto com o documento anexado",
     "weightMeta": "peso"
   },
+  "memorySheet": {
+    "title": "Memória",
+    "close": "Fechar",
+    "openInScreen": "Abrir na tela de memórias",
+    "notFound": "Memória não encontrada — pode ter sido excluída."
+  },
   "memoryGraph": {
     "center": "Centralizar",
     "building": "Montando o grafo…"
