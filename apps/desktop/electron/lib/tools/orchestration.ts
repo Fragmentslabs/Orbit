@@ -4,7 +4,7 @@ import type { OrchestrationTask, SendMessageInput } from '@shared/chat'
 import { SUBAGENT_EMPTY_OUTPUT, SUBAGENT_NO_FOLDER_NOTICE } from '@shared/chat'
 import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
-import { getProvider } from '../catalog'
+import { getProvider, modelSupportsVision } from '../catalog'
 import { resolveModel } from '../providers'
 import { buildProviderOptions } from '../reasoning'
 import { agentPrepareStep } from '../agent-step'
@@ -102,7 +102,9 @@ export function createSubagentTool(
       // provider do worker p/ o preparo de cada passo do tool loop (corte de
       // contexto, reasoning, cache) — o mesmo do agente principal.
       const workerProvider = await getProvider(worker.providerId)
-      const tools = buildToolSet(workerInput, workerCtx)
+      // A visão é a do MODELO DO WORKER, não a do pai: é o parâmetro (e não o
+      // ctx) que o ramo de chat consulta, e o worker pode estar noutro modelo.
+      const tools = buildToolSet(workerInput, workerCtx, undefined, modelSupportsVision(workerProvider, worker.modelId))
       const modoWorker = workerInput.options.permissionMode ?? 'ask'
       const toolApproval = createToolApproval(
         workerInput.options.followGlobalPermission ? () => modoGlobal(modoWorker) : modoWorker,

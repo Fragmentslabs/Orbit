@@ -528,7 +528,7 @@ function audioAttachmentNote(filename: string, id: string, file: string): string
     )
   }
   return (
-    `${head}\n(Attachment, not a user message. NOT transcribed: if what is SPOKEN in it matters for the request, call audio_transcribe with ref "${id}". ` +
+    `${head}\n(Attachment, not a user message. NOT transcribed: if what is SPOKEN in it matters for the request, call transcribe with sources [{ path: "${id}" }]. ` +
     'If it is music, a sound effect or audio to be used somewhere, do not transcribe it.)'
   )
 }
@@ -1032,7 +1032,7 @@ async function preprocessAttachment(
 
   // Áudio: vai para o acervo de áudio (a bolha toca o anexo pelo chip) e NÃO é
   // transcrito aqui — pode ser uma música ou um efeito para usar em algum
-  // lugar. O agente recebe a referência e decide (tool audio_transcribe). A
+  // lugar. O agente recebe a referência e decide (tool transcribe). A
   // transcrição, quando houver, volta para ESTA nota (ver
   // persistAudioTranscript): é conteúdo do anexo, não fala do usuário.
   if (isAudioFile(file.mime, filename)) {
@@ -1156,7 +1156,7 @@ async function persistImageDescription(opts: {
 }
 
 /**
- * Transcrição de um anexo de áudio (tool audio_transcribe) gravada na NOTA do
+ * Transcrição de um anexo de áudio (tool transcribe) gravada na NOTA do
  * anexo, como a descrição do modo Visão: a ToolPart não volta nos próximos
  * turnos, e sem isto o agente teria de transcrever de novo a cada pergunta
  * sobre o mesmo áudio. A nota segue com `source: 'attachment'` — o texto é
@@ -2460,13 +2460,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // Transcrição de um anexo de áudio: volta para a nota do anexo.
             // Duas formas, conforme o destino escolhido pelo agente: o texto
             // (no contexto) ou só onde ele está (documento para o usuário).
-            if (part.toolName === 'audio_transcribe') {
-              const ref = (existing?.input as { ref?: string } | undefined)?.ref ?? ''
+            if (part.toolName === 'transcribe') {
+              // A tool unificada recebe `sources`; só a transcrição de UM áudio
+              // anexado (aud_…) volta para a nota do anexo — um vídeo já tem a
+              // nota dele, com o cache.
+              const sources = (existing?.input as { sources?: { path?: string }[] } | undefined)?.sources
+              const ref = sources?.length === 1 ? (sources[0]?.path ?? '') : ''
               const audioId = audioIdFrom(ref)
               const output = part.output as { documentId?: string } | string
               const body =
-                typeof output === 'string' && output.startsWith('Transcript of the audio')
-                  ? `(Attachment, not a user message — already transcribed with audio_transcribe.)\n\n${output}`
+                typeof output === 'string' && output.startsWith('Transcript of ')
+                  ? `(Attachment, not a user message — already transcribed with transcribe.)\n\n${output}`
                   : typeof output === 'object' && output?.documentId
                     ? `(Attachment, not a user message. Its transcript was delivered to the user as document ${output.documentId} and is NOT in your context — call read_document with that id if you need it.)`
                     : null
@@ -2543,6 +2547,25 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
               }
             }
+            // video_timeline: o sheet vai SEMPRE para a galeria (é o que
+            // permite mostrá-lo depois com show_image), mas só entra na
+            // resposta quando a tool foi chamada com show: true — o padrão é a
+            // olhada interna nos pontos de decisão. Sem isto a imagem existia
+            // só no contexto do modelo e o usuário nunca via nada.
+            if (part.toolName === 'video_timeline') {
+              const output = part.output as { mediaUrl?: string; alt?: string; shown?: boolean } | string
+              if (typeof output === 'object' && output?.mediaUrl && output.shown === true) {
+                upsertPart({
+                  id: `${part.toolCallId}-img`,
+                  type: 'image',
+                  src: output.mediaUrl,
+                  alt: output.alt || undefined,
+                })
+                // Completa o registro de mídia (mesmo motivo do show_image): a
+                // tool roda no meio do turno e não conhece o id da mensagem.
+                void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
+              }
+            }
             // image_import: as imagens que o agente trouxe de um acervo aberto
             // aparecem na resposta, uma parte para cada. Ficam FORA do turnMediaUrls
             // de propósito: aquele conjunto é o dos degraus de uma edição, que
@@ -2590,7 +2613,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'create_document' ||
               part.toolName === 'update_document' ||
               // Transcrição entregue ao usuário: é um documento do chat.
-              part.toolName === 'audio_transcribe' ||
+              part.toolName === 'transcribe' ||
               // Transcrição de um vídeo por link, com deliver "user".
               part.toolName === 'ytdlp_transcript' ||
               part.toolName === 'docx_edit' ||

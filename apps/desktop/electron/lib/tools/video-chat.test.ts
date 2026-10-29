@@ -60,7 +60,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
 
   it('o chat ganha video_render e as tools de leitura, que aceitam a referência do anexo', () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
-    for (const name of ['video_render', 'video_probe', 'video_transcribe', 'video_timeline', 'motion_asset', 'motion_render']) {
+    for (const name of ['video_render', 'video_probe', 'transcribe', 'video_timeline', 'motion_asset', 'motion_render']) {
       expect(tools[name], name).toBeDefined()
     }
     // Sem render (sem ffmpeg ou modo plano) não há como produzir vídeo.
@@ -75,6 +75,37 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     expect(out).toContain('audio')
     expect(String(await run(tools, 'video_probe', { paths: ['vdo_naoexiste.mp4'] }))).toMatch(/attachment not found/)
   })
+
+  it('video_timeline guarda o sheet na galeria e só o põe na resposta com show: true', async () => {
+    const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
+
+    const hidden = (await run(tools, 'video_timeline', { path: refA, start: 0, end: 1.5, frames: 3 })) as {
+      message: string
+      mediaUrl: string
+      shown: boolean
+    }
+    // A imagem existe fora do contexto do modelo: é um item da galeria desta conversa.
+    expect(hidden.mediaUrl).toMatch(/^orbit-media:\/\//)
+    expect(hidden.shown).toBe(false)
+    expect(hidden.message).toContain("NOT in the user's chat")
+    const entry = await media.getMediaEntry(media.mediaIdFromUrl(hidden.mediaUrl)!)
+    expect(entry).toMatchObject({ kind: 'image', source: 'chat', sessionId: 'chat1' })
+
+    // Sem transcrição (trilha sem fala) não se declara silêncio: a janela
+    // inteira era reportada como silenciosa.
+    expect(hidden.message).toContain('No transcript cached')
+    expect(hidden.message).not.toContain('Silences ≥0.4s')
+
+    const shown = (await run(tools, 'video_timeline', { path: refA, start: 0, end: 1.5, frames: 3, show: true })) as {
+      message: string
+      mediaUrl: string
+      shown: boolean
+    }
+    expect(shown.shown).toBe(true)
+    expect(shown.message).toContain('attached to your reply')
+    // Cada olhada é um item próprio — a segunda não sobrescreve a primeira.
+    expect(shown.mediaUrl).not.toBe(hidden.mediaUrl)
+  }, 60_000)
 
   it('corta e junta dois anexos: a saída vai para o app, entra na galeria e some ao excluir', async () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })

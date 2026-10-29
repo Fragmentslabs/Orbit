@@ -48,7 +48,7 @@ import { isComputerAvailable, markOverlaySession } from '../computer'
 import { createComputerTools } from './computer'
 import { createComputerTaskTool } from './computer-task'
 import { createEndCallTool, createOverlayTools } from './overlay'
-import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
+import { createAudioGenerateTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createYtdlpTools } from './ytdlp'
@@ -111,14 +111,11 @@ export function buildToolSet(
   // "sou o Rafael", uma correção, e o pedido para esquecer o nome. Workers
   // ficam de fora: quem conversa com a pessoa é a sessão principal.
   if (input.orchestrationRole !== 'worker') tools.set_user_name = createUserNameTool()
-  // Áudio: sem interruptor próprio — cada metade segue a da voz nas
-  // Preferências (Fala em texto → transcrever; Texto em fala → gerar).
-  // Desligada, a tool nem existe e o prompt explica ao agente como ativar.
+  // Áudio: "Texto em fala" liga a geração aqui; a leitura (fala em texto) é a
+  // tool `transcribe`, que vive junto das tools de mídia e também só existe com
+  // o interruptor ligado — desligada, o prompt explica ao agente como ativar.
   const voice = getAppSettings().voice
   const addAudioTools = (scope: ToolContext | null) => {
-    if (voice.stt.enabled) {
-      tools.audio_transcribe = createAudioTranscribeTool({ sessionId: input.sessionId, directory: input.directory, language: input.language }, scope)
-    }
     if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, scope)
   }
   // Overlay (⇧⌘espaço): a pergunta é sobre o que está na TELA. Sem estas duas
@@ -158,7 +155,9 @@ export function buildToolSet(
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
-      Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: ctx?.modelVision !== false }))
+      // No chat `ctx` é null por construção: a visão do turno vem do parâmetro
+      // `modelVision` (é por isso que ele existe — ver o comentário acima).
+      Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: modelVision !== false }))
     }
     if (input.options.browser) {
       tools.browser_open = createBrowserOpenTool(input.sessionId)
@@ -184,7 +183,7 @@ export function buildToolSet(
     // alucinar sobre um documento que ele não leu.
     Object.assign(tools, createDocumentTools(input.sessionId))
     // Ver pagina de PDF: no chat a fonte e sempre um anexo.
-    tools.pdf_view_page = createPdfViewTool(input.sessionId, null, ctx?.modelVision !== false)
+    tools.pdf_view_page = createPdfViewTool(input.sessionId, null, modelVision !== false)
     // Consulta de planilha: no chat a fonte e sempre um anexo (nao ha pasta
     // de trabalho), por isso ctx entra como null.
     tools.sheet_query = createSheetQueryTool(input.sessionId, null)
@@ -232,8 +231,10 @@ export function buildToolSet(
         tools,
         createMotionTools({
           sessionId: input.sessionId,
-          modelVision: ctx?.modelVision !== false,
+          modelVision: modelVision !== false,
           canRender: resolveFfmpeg() !== null,
+          language: input.language,
+          sttEnabled: voice.stt.enabled,
         }),
       )
       Object.assign(tools, createDesignTools({ sessionId: input.sessionId }))
@@ -395,6 +396,10 @@ export function buildToolSet(
         sessionId: input.sessionId,
         canShow: input.orchestrationRole !== 'worker',
         readOnly: Boolean(input.options.plan),
+        language: input.language,
+        // Sem "Fala em texto" ligado o motor não transcreve: a tool nem aparece
+        // e o prompt (AUDIO_TRANSCRIBE_OFF) diz onde ligar.
+        sttEnabled: voice.stt.enabled,
       }),
     )
     // Compressão de mídia: usa o mesmo ffmpeg e o mesmo material do vídeo, mas
@@ -437,6 +442,8 @@ export function buildToolSet(
         canRender: resolveFfmpeg() !== null,
         canShow: !isWorker,
         readOnly: plan,
+        language: input.language,
+        sttEnabled: voice.stt.enabled,
       }),
     )
     // Design e slides: só a sessão principal — o painel é um recurso visível.

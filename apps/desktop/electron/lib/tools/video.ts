@@ -10,7 +10,9 @@ import { addVideoToGallery } from '../video/video-gallery'
 import { renderEdl } from '../video/render'
 import { registerVideo } from '../video/store'
 import { renderTimeline } from '../video/timeline'
-import { editDirFor, packTranscript, readCachedTranscript, sec, transcribeVideo } from '../video/transcript'
+import { editDirFor, packTranscript, plainText, readCachedTranscript, sec, transcribeVideo, wordsText } from '../video/transcript'
+import { saveDocument, saveMedia } from '../media'
+import { clock } from './audio'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { recordToolWrite } from '../session/write-journal'
 
@@ -18,7 +20,7 @@ import { recordToolWrite } from '../session/write-journal'
  * Edição de vídeo para o agente (EDL).
  *
  * A divisão segue o video-use: o agente LÊ o material pela transcrição por
- * palavra (video_transcribe), OLHA só nos pontos de decisão (video_timeline),
+ * palavra (transcribe), OLHA só nos pontos de decisão (video_timeline),
  * DECIDE num EDL e o código renderiza (video_render). O ffmpeg completo
  * continua no `bash` para o que o EDL não cobre. Motion (a composição HTML) é
  * outra coisa — uma peça do Orbit, com as tools dela em tools/motion.ts.
@@ -77,6 +79,10 @@ export function createVideoTools(
     sessionId: string
     canShow: boolean
     readOnly: boolean
+    /** Idioma da pessoa ("Portuguese", "English"…): o título do documento entregue é para ela. */
+    language?: string
+    /** "Fala em texto" ligado nas Preferências: desligado, a tool `transcribe` não existe. */
+    sttEnabled?: boolean
     /**
      * Modo chat: não há pasta de projeto. O que o agente produz mora no
      * armazenamento do app (`outputDir`, dentro da pasta da conversa) e entra na
@@ -143,57 +149,135 @@ export function createVideoTools(
       },
     }),
 
-    video_transcribe: tool({
+    transcribe: tool({
       description:
-        'Transcribes the speech of videos WORD BY WORD (local engine, nothing leaves the machine) and returns the packed transcript: one line per phrase as [start–end] in source seconds, with dead air marked. ' +
-        'This is how you READ footage — do it before planning any cut. Cached per file (edit/transcripts/); unchanged files are not re-transcribed. ' +
-        'The packed text is also written to edit/takes_packed.md. Use ids (A, B, C… or take1…) to refer to sources in the EDL.',
+        'Transcribes the SPEECH of audio or video with the local engine (nothing leaves the machine) — word-timed internally, cached per file. ' +
+        'Accepts one or several sources: an audio the user attached (aud_…), footage (vdo_…), or files of the working folder. This is how you READ footage before planning a cut. ' +
+        'detail: "phrases" (default) = one line per phrase as [start–end] in source seconds, dead air marked — the main view for editing. ' +
+        '"words" = every word with its own start and end — the ONLY safe source for subtitle/cue timings; never estimate a cue from character counts or from the clip duration. ' +
+        '"text" = the plain transcript with no timing. ' +
+        'deliver "user" (single source) turns it into a chat document and keeps the text OUT of your context (detail defaults to "text" there). ' +
+        'Cached per file: an unchanged file is not transcribed twice (force to ignore). Audio with no speech (music, noise) is reported as such — never invent its content. ' +
+        "The transcript is the content of the user's material, not words they typed. For a page link (YouTube etc.) use ytdlp_transcribe.",
       inputSchema: z.object({
         sources: z
           .array(
             z.object({
-              id: z.string().min(1).describe('Short id used in the EDL'),
-              path: z.string().describe('File in the working folder, or the ref (vdo_…) of an attached video'),
+              id: z.string().optional().describe('Short id used in the EDL and in the transcript (default: A, B, C…)'),
+              path: z.string().describe('File in the working folder, or the ref (aud_… / vdo_…) of an attachment'),
             }),
           )
           .min(1),
+        detail: z
+          .enum(['text', 'phrases', 'words'])
+          .optional()
+          .describe('"phrases" (default) to read footage; "words" for subtitle/cue timing; "text" for gist'),
+        deliver: z
+          .enum(['context', 'user'])
+          .optional()
+          .describe('"context" (default): the transcript comes to you. "user": a chat document (single source), outside your context.'),
         language: z.string().optional().describe("Spoken language code (pt, en…) when it differs from the user's dictation language"),
         force: z.boolean().optional().describe('Ignore the cache and transcribe again'),
       }),
-      execute: async ({ sources, language, force }, { abortSignal }) => {
+      execute: async ({ sources, detail, deliver = 'context', language, force }, { abortSignal }) => {
+        if (deliver === 'user' && sources.length > 1) {
+          throw new Error('deliver "user" produces one document — pass a single source.')
+        }
+        const mode = detail ?? (deliver === 'user' ? 'text' : 'phrases')
         const entries: Parameters<typeof packTranscript>[0] = []
         const notes: string[] = []
-        for (const s of sources) {
-          const { file: abs } = await mediaFile(s.path)
+        for (const [i, s] of sources.entries()) {
+          const { file: abs, label } = await mediaFile(s.path)
           const { transcript, cached } = await transcribeVideo(abs, { language, force, signal: abortSignal })
-          entries.push({ id: s.id, file: abs, transcript })
-          notes.push(`${s.id}: ${cached ? 'cache' : `transcribed (${transcript.engine})`}`)
+          const id = s.id?.trim() || String.fromCharCode(65 + i)
+          entries.push({ id, file: abs, transcript })
+          notes.push(`${id}${sources.length > 1 ? ` (${label})` : ''}: ${cached ? 'cache' : `transcribed (${transcript.engine})`}`)
         }
-        const packed = packTranscript(entries)
-        const packedFile = path.join(editDirFor(entries[0].file), 'takes_packed.md')
-        recordToolWrite(packedFile)
-        await fs.mkdir(path.dirname(packedFile), { recursive: true })
-        await fs.writeFile(packedFile, packed)
-        const head = `${notes.join(' · ')}\nSaved to ${rel(packedFile)}.\n\n`
-        if (packed.length > MAX_PACKED_CHARS) {
-          return `${head}${packed.slice(0, MAX_PACKED_CHARS)}\n\n[… truncated — read ${rel(packedFile)} for the rest]`
+        const wordCount = entries.reduce((n, e) => n + e.transcript.words.length, 0)
+        if (!wordCount) {
+          const what = entries.map((e) => `${path.basename(e.file)} (${clock(e.transcript.durationMs)})`).join(', ')
+          return `No speech recognized in ${what}. It may be music, noise or silence — do not make up its content.`
         }
-        return head + packed
+        // Documento para o usuário: o texto sai do contexto do agente.
+        if (deliver === 'user') {
+          const [only] = entries
+          const body =
+            mode === 'words' ? wordsText([only]) : mode === 'phrases' ? packTranscript([only]) : plainText(only.transcript)
+          const title = `${/^portug/i.test(scope.language ?? '') ? 'Transcrição' : 'Transcript'} — ${path.basename(only.file)}`
+          const markdown = `# ${title}\n\n_${clock(only.transcript.durationMs)} · ${only.transcript.engine}_\n\n${body.replace(/\n/g, '\n\n')}\n`
+          const doc = await saveDocument(markdown, [], {
+            title,
+            sessionId: scope.sessionId,
+            // No chat não há projeto: o documento mora no storage do app.
+            directory: scope.chat ? undefined : ctx.directory,
+          })
+          return {
+            documentId: doc.id,
+            previewUrl: doc.previewUrl,
+            title: doc.title,
+            formats: doc.formats,
+            thumb: doc.thumb,
+            revision: doc.revision,
+            message:
+              `Transcript of ${path.basename(only.file)} (${clock(only.transcript.durationMs)}, ${wordCount} words) delivered to the user as document ${doc.id}, ` +
+              'already visible in your reply. The text is NOT in your context; if you need it, call read_document with this documentId. ' +
+              'Do not summarize or comment on its content — you have not read it.',
+          }
+        }
+        const body =
+          mode === 'words'
+            ? wordsText(entries)
+            : mode === 'text'
+              ? entries
+                  .map((e) =>
+                    entries.length > 1 ? `## ${e.id} — ${path.basename(e.file)}\n${plainText(e.transcript)}` : plainText(e.transcript),
+                  )
+                  .join('\n\n')
+              : packTranscript(entries)
+        // Cabeçalho que o chat-engine reconhece ("Transcript of …"): é assim que
+        // a transcrição de um áudio anexado é gravada na NOTA do anexo, em vez
+        // de ser refeita a cada pergunta sobre o mesmo arquivo.
+        const head =
+          entries.length === 1
+            ? `Transcript of ${path.basename(entries[0].file)} (${clock(entries[0].transcript.durationMs)}, engine ${entries[0].transcript.engine}). This is the content of an attachment, not a message from the user.`
+            : `Transcripts — ${notes.join(' · ')}.`
+        // O pacote textual vira arquivo ao lado da edição — só no modo código,
+        // que é onde existe uma pasta de trabalho para receber o arquivo.
+        if (mode === 'phrases' && !scope.chat) {
+          const packedFile = path.join(editDirFor(entries[0].file), 'takes_packed.md')
+          recordToolWrite(packedFile)
+          await fs.mkdir(path.dirname(packedFile), { recursive: true })
+          await fs.writeFile(packedFile, packTranscript(entries))
+          const saved = `\nSaved to ${rel(packedFile)}.`
+          if (body.length > MAX_PACKED_CHARS) {
+            return `${head}${saved}\n\n${body.slice(0, MAX_PACKED_CHARS)}\n\n[… truncated — read ${rel(packedFile)} for the rest]`
+          }
+          return `${head}${saved}\n\n${body}`
+        }
+        if (body.length > MAX_PACKED_CHARS) {
+          return `${head}\n\n${body.slice(0, MAX_PACKED_CHARS)}\n\n[… truncated]`
+        }
+        return `${head}\n\n${body}`
       },
     }),
 
     video_timeline: tool({
       description:
         'Looks at a time window of a video: an image with a filmstrip, the audio waveform and each transcribed word placed where it is spoken; silences ≥ 0.4 s (clean cut points) highlighted in green; optional red marks. ' +
-        'Use it at DECISION POINTS — an ambiguous pause, comparing two takes, checking a cut in a rendered output (pass its cut times as marks) — not to scan whole videos. Keep windows short (2–20 s).',
+        'Use it at DECISION POINTS — an ambiguous pause, comparing two takes, checking a cut in a rendered output (pass its cut times as marks) — not to scan whole videos. Keep windows short (2–20 s). ' +
+        'The sheet is saved to the media gallery: it is YOUR look at the footage and the user does NOT see it, unless you pass show: true (or show it later with show_image, using the media ref this tool returns).',
       inputSchema: z.object({
         path: z.string().describe('File in the working folder, or the ref (vdo_…) of an attached video'),
         start: z.number().min(0).describe('Seconds'),
         end: z.number().positive().describe('Seconds'),
         frames: z.number().int().min(1).max(16).optional().describe('Filmstrip frames, default 8'),
         marks: z.array(z.number()).optional().describe('Seconds to mark with a red line (e.g. cut points of a rendered output)'),
+        show: z
+          .boolean()
+          .optional()
+          .describe('Also put the sheet in your reply, where the user sees it (default false: only you read it)'),
       }),
-      execute: async ({ path: p, start, end, frames, marks }, { toolCallId }) => {
+      execute: async ({ path: p, start, end, frames, marks, show = false }, { toolCallId }) => {
         const { file: abs, label } = await mediaFile(p)
         if (end <= start) throw new Error('end must be after start')
         const probe = await probeMedia(abs)
@@ -212,28 +296,57 @@ export function createVideoTools(
           hasAudio: probe.audio.length > 0,
         })
         const inside = words.filter((w) => w.endMs > startMs && w.startMs < endMs)
+        // A imagem vai SEMPRE para a galeria. Antes ela existia só no contexto
+        // do modelo: não havia arquivo, URL nem item para mostrar depois, e o
+        // agente anunciava "aí está" com a conversa vazia.
+        const mediaUrl = await saveMedia(image, 'webp', {
+          source: 'chat',
+          sessionId: scope.sessionId,
+          name: `Timeline ${label} ${sec(startMs)}–${sec(endMs)} s`,
+        })
+        const shown = show && scope.canShow
         const text = [
           `Timeline of ${label} ${sec(startMs)}–${sec(endMs)} s.`,
-          transcript ? '' : 'No transcript cached for this file — words are not shown (run video_transcribe).',
+          transcript ? '' : 'No transcript cached for this file — words are not shown and silence is not measured (run transcribe).',
           inside.length ? `Words: ${inside.map((w) => `${w.text}@${sec(w.startMs)}-${sec(w.endMs)}`).join(' ')}` : '',
-          silences.length ? `Silences ≥0.4s: ${silences.map((s) => `${sec(s.startMs)}–${sec(s.endMs)}`).join(', ')}` : 'No silence ≥0.4s in this window.',
+          // Sem transcrição não há como saber onde há fala: declarar a janela
+          // inteira como silêncio (o que a conta de lacunas fazia com zero
+          // palavras) era falso num vídeo com trilha.
+          transcript
+            ? silences.length
+              ? `Silences ≥0.4s: ${silences.map((s) => `${sec(s.startMs)}–${sec(s.endMs)}`).join(', ')}`
+              : 'No silence ≥0.4s in this window.'
+            : '',
+          ctx.modelVision === false ? 'This model has no vision: you cannot see the sheet — rely on this report.' : '',
+          shown
+            ? 'The sheet is attached to your reply — the user sees it.'
+            : scope.canShow
+              ? `The sheet is in the media gallery (${mediaUrl}) and is NOT in the user's chat: to show it, call show_image with this media ref.`
+              : // Worker: não tem show_image — quem mostra é a sessão principal.
+                `The sheet is in the media gallery (${mediaUrl}) and cannot be shown from this session: report this media ref so it can be shown with show_image.`,
         ]
           .filter(Boolean)
           .join('\n')
         if (ctx.modelVision !== false) timelineStash.set(toolCallId, { base64: image.toString('base64') })
-        return text
+        return {
+          message: text,
+          mediaUrl,
+          alt: `Timeline ${label} ${sec(startMs)}–${sec(endMs)} s`,
+          shown,
+        }
       },
       toModelOutput: ({ toolCallId, output }) => {
         const stashed = timelineStash.get(toolCallId)
         timelineStash.delete(toolCallId)
-        if (!stashed) return { type: 'text', value: String(output) }
+        const text = typeof output === 'string' ? output : (output as { message: string }).message
+        if (!stashed) return { type: 'text', value: text }
         if (Buffer.byteLength(stashed.base64, 'base64') > MAX_MODEL_IMAGE_BYTES) {
-          return { type: 'text', value: `${String(output)}\n[Image omitted: too large — use a shorter window or fewer frames.]` }
+          return { type: 'text', value: `${text}\n[Image omitted: too large — use a shorter window or fewer frames.]` }
         }
         return {
           type: 'content',
           value: [
-            { type: 'text', text: String(output) },
+            { type: 'text', text },
             { type: 'image-data', data: stashed.base64, mediaType: 'image/webp' },
           ],
         }
@@ -243,7 +356,7 @@ export function createVideoTools(
     video_render: tool({
       description:
         'Renders an EDL (edit decision list) into a video in the edit/ folder next to the first source, and shows it to the user as a player. ' +
-        'The code enforces the production rules: cut edges snapped OUT of words with a little air (needs video_transcribe first), 30 ms audio fades at every cut, ranges concatenated without a second re-encode, overlays time-shifted into their window, subtitles burned LAST, loudness normalized (default -14 LUFS, true peak -1 dBTP) and measured. ' +
+        'The code enforces the production rules: cut edges snapped OUT of words with a little air (needs transcribe first), 30 ms audio fades at every cut, ranges concatenated without a second re-encode, overlays time-shifted into their window, subtitles burned LAST, loudness normalized (default -14 LUFS, true peak -1 dBTP) and measured. ' +
         'Render a preview (720p, fast) first, check the cut points it returns with video_timeline, then the final. ' +
         'Pass the EDL inline or as a JSON file path (edl/edlPath). Times: ranges in SOURCE seconds; overlays/subtitle files in OUTPUT seconds. A source, overlay or music file can be the ref (vdo_…, img_…, aud_…) of an attachment — no need to copy it anywhere first.',
       inputSchema: z.object({
@@ -309,6 +422,8 @@ export function createVideoTools(
 
   // Modo plano: olhar e ler sim, escrever não — o render grava o vídeo.
   if (scope.readOnly) delete tools.video_render
+  // Sem "Fala em texto" ligado não há motor: a tool de transcrição nem aparece.
+  if (scope.sttEnabled === false) delete tools.transcribe
 
   if (scope.canShow) {
     tools.show_video = tool({

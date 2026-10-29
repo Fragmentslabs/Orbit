@@ -28,8 +28,17 @@ export interface TimelineInput {
   hasAudio: boolean
 }
 
-/** Silêncios ≥ `minMs` entre palavras dentro da janela (candidatos a corte). */
+/**
+ * Silêncios ≥ `minMs` entre palavras dentro da janela (candidatos a corte).
+ *
+ * Sem NENHUMA palavra não existe medida de silêncio: `words` vazio é o arquivo
+ * sem transcrição (música, ambiente), e a conta de lacunas devolveria a janela
+ * inteira como silêncio — falso num vídeo com trilha contínua. Janela sem
+ * palavras mas com transcrição no arquivo continua valendo: ali o silêncio é
+ * real, entre duas falas.
+ */
 export function silencesIn(words: TimedWord[], startMs: number, endMs: number, minMs = 400): { startMs: number; endMs: number }[] {
+  if (words.length === 0) return []
   const inside = words.filter((w) => w.endMs > startMs && w.startMs < endMs)
   const gaps: { startMs: number; endMs: number }[] = []
   let cursor = startMs
