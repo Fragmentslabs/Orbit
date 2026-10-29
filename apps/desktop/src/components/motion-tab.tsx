@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
   Box,
-  ChevronDown,
   CircleCheck,
   Clapperboard,
   Download,
@@ -26,21 +25,22 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react"
-import { motionSeconds, motionTimecode } from "@shared/chat"
+import { motionTimecode } from "@shared/chat"
 import { MOTION_SCHEME } from "@shared/media"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SettingSelect } from "@/src/components/settings-row"
+import { Switch } from "@/components/ui/switch"
 import { IconAction } from "@/src/components/ai/artifact-part"
-import { motionApi, type MotionLayersResult, type MotionRenderFormat } from "@/src/lib/ipc"
+import {
+  motionApi,
+  type MotionLayersResult,
+  type MotionRenderFormat,
+  type MotionRenderOptions,
+  type MotionRenderQuality,
+} from "@/src/lib/ipc"
 import {
   MOTION_AUDIO_SEEK_S,
   motionAudioRate,
@@ -65,9 +65,10 @@ import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/compo
  *                    assets (fontes que não carregaram)
  *   painel → iframe: seek(frame), play, pause, loop
  *
- * A unidade de tempo é QUADRO INTEIRO a 30 fps — a mesma do contrato do render,
- * para o que o usuário aprova aqui ser exatamente o que sai lá. Por isso o
- * transporte anda de quadro em quadro e o timecode é `mm:ss:ff`.
+ * A unidade de tempo é QUADRO INTEIRO, no fps que a COMPOSIÇÃO declara (30 é só
+ * o padrão de quem não declara) — a mesma do contrato do render, para o que o
+ * usuário aprova aqui ser exatamente o que sai lá. O transporte anda um segundo
+ * por seta (um quadro com Shift), e o timecode é `mm:ss:ff`.
  *
  * Embaixo da régua, as CAMADAS: quem entra e sai de cena, e quando — medidas no
  * main numa janela offscreen (motion:layers), porque a composição é HTML livre e
@@ -80,8 +81,8 @@ import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/compo
  * conferir, quem confere é o `event.source === contentWindow` do nosso iframe.
  */
 
-/** fps do preview — constante do contrato (o runtime também assume 30). */
-const FPS = 30
+/** fps de uma composição que não declara nenhum (o padrão do contrato). */
+const DEFAULT_FPS = 30
 
 /** Marca das mensagens da ponte (ver MOTION_SOURCE no motion-runtime do main). */
 const MOTION_SOURCE = "orbit-motion"
@@ -101,6 +102,8 @@ interface MotionSpec {
   height: number
   /** 0 = ainda não anunciado (a composição declara o comprimento). */
   durationInFrames: number
+  /** fps declarado pela composição; ausente = 30 (contrato). */
+  fps?: number
 }
 
 type MotionLayer = MotionLayersResult["layers"][number]
@@ -119,7 +122,7 @@ const LAYER_ICON: Record<MotionLayer["kind"], LucideIcon> = {
 }
 
 type RuntimeMessage =
-  | { type: "ready"; durationInFrames: number; width: number; height: number; version: number }
+  | { type: "ready"; durationInFrames: number; width: number; height: number; fps: number; version: number }
   | { type: "time"; frame: number }
   | { type: "error"; message: string; stack?: string }
   | { type: "assets"; failedFonts: string[] }
@@ -127,7 +130,7 @@ type RuntimeMessage =
 type RenderState =
   | { status: "idle" }
   | { status: "running"; frame: number; total: number }
-  | { status: "done"; path: string }
+  | { status: "done"; path: string; audioPath?: string }
   | { status: "error"; message: string }
 
 /** "Salvar projeto": o .zip da peça inteira, com manifesto (ver motion-project). */
@@ -159,6 +162,8 @@ function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
       durationInFrames: Math.max(1, Math.round(msg.durationInFrames)),
       width: typeof msg.width === "number" ? msg.width : DEFAULT_SPEC.width,
       height: typeof msg.height === "number" ? msg.height : DEFAULT_SPEC.height,
+      // Runtime antigo (ou mensagem sem o campo) cai no padrão do contrato.
+      fps: typeof msg.fps === "number" && Number.isFinite(msg.fps) && msg.fps > 0 ? msg.fps : DEFAULT_FPS,
       version: typeof msg.version === "number" ? msg.version : 0,
     }
   }
@@ -205,10 +210,10 @@ function rulerStep(seconds: number): number {
 }
 
 /**
- * Formatos que o botão Renderizar oferece, na ordem em que aparecem no menu. O
- * valor é o da união do IPC (`motion:render`) — o rótulo diz o que o arquivo é e
- * a dica, para que ele serve: a diferença entre os três é a transparência, que
- * só mov/webm carregam.
+ * Formatos que o modal de render oferece, na ordem em que aparecem. O valor é o
+ * da união do IPC (`motion:render`) — o rótulo diz o que o arquivo é e a dica,
+ * para que ele serve: a diferença entre os três é a transparência, que só
+ * mov/webm carregam.
  */
 const RENDER_FORMATS: { value: MotionRenderFormat; labelKey: string; hintKey: string }[] = [
   { value: "mp4", labelKey: "motion.formatMp4", hintKey: "motion.formatMp4Hint" },
@@ -239,6 +244,10 @@ export function MotionTab({
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([])
 
   const [spec, setSpec] = useState<MotionSpec | null>(null)
+  /** O fps DA COMPOSIÇÃO, não um 30 fixo: régua, timecode e playhead seguem ele.
+   *  Declarado aqui (e não junto do layout) porque o efeito do áudio, mais abaixo,
+   *  também converte quadro em segundos. */
+  const fps = spec?.fps ?? DEFAULT_FPS
   const [readyCount, setReadyCount] = useState(0)
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -261,6 +270,19 @@ export function MotionTab({
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [render, setRender] = useState<RenderState>({ status: "idle" })
   const [project, setProject] = useState<ProjectState>({ status: "idle" })
+  /**
+   * O modal de render. O botão do cabeçalho só ABRE; quem renderiza é o botão
+   * de dentro — assim a pessoa vê o que vai sair (formato, peso, fps, áudio)
+   * antes de pagar os minutos de captura, em vez de descobrir depois.
+   */
+  const [renderOpen, setRenderOpen] = useState(false)
+  const [renderOptions, setRenderOptions] = useState<{
+    format: MotionRenderFormat
+    quality: MotionRenderQuality
+    /** 0 = o fps da composição. */
+    fps: number
+    separateAudio: boolean
+  }>({ format: "mp4", quality: "balanced", fps: 0, separateAudio: false })
   const [layers, setLayers] = useState<LayersState>({ status: "idle" })
   const [selectedName, setSelectedName] = useState<string | null>(null)
   /** As faixas da peça, medidas no main junto com as camadas — pela MESMA
@@ -314,7 +336,7 @@ export function MotionTab({
    * loop, quando o playhead salta para o zero.
    */
   useEffect(() => {
-    const at = frame / FPS
+    const at = frame / fps
     const SEEK_EPSILON_S = 0.02
     const tracks = audio?.tracks ?? []
     tracks.forEach((track, index) => {
@@ -362,7 +384,7 @@ export function MotionTab({
       }
       if (el.paused) void el.play().catch(() => {})
     })
-  }, [audio, playing, frame, reloads, trackDuration])
+  }, [audio, fps, playing, frame, reloads, trackDuration])
   const addQuote = usePanelStore((s) => s.addQuote)
   const quotes = usePanelStore((s) => s.quotes)
   /**
@@ -447,11 +469,20 @@ export function MotionTab({
     post({ type: "play" })
   }, [pause, post, seek, total])
 
-  /** Passo de quadro: o play do runtime sobrescreveria o seek, então pausa antes. */
-  const stepFrame = useCallback(
+  /** Anda N quadros: o play do runtime sobrescreveria o seek, então pausa antes. */
+  const stepFrames = useCallback(
     (delta: number) => {
       if (playingRef.current) pause()
       seek(frameRef.current + delta)
+    },
+    [pause, seek],
+  )
+
+  /** Salta para um instante (início/fim): mesma pausa, mesmo motivo. */
+  const jump = useCallback(
+    (target: number) => {
+      if (playingRef.current) pause()
+      seek(target)
     },
     [pause, seek],
   )
@@ -493,14 +524,14 @@ export function MotionTab({
         file: entry,
         name: title,
         frame: at,
-        fps: FPS,
+        fps,
         ...(path ? { path } : {}),
         ...(layer ? { layer } : {}),
         ...(audio ? { audio } : {}),
         ...(onScreen.length ? { onScreen: onScreen.slice(0, 12) } : {}),
       })
     },
-    [addQuote, entry, title, path, selectedName, selectedAudio, layerList],
+    [addQuote, entry, title, path, selectedName, selectedAudio, layerList, fps],
   )
 
   // ------------------------------------------------------------ ponte iframe
@@ -517,6 +548,7 @@ export function MotionTab({
           width: msg.width,
           height: msg.height,
           durationInFrames: msg.durationInFrames,
+          fps: msg.fps,
         }
         specRef.current = next
         loadedRef.current = true
@@ -696,18 +728,26 @@ export function MotionTab({
         e.preventDefault()
         togglePlay()
       } else if (e.key === "ArrowLeft") {
+        // Um SEGUNDO por seta; com Shift, um quadro — o ajuste fino continua
+        // existindo, só deixou de ser o gesto padrão.
         e.preventDefault()
-        stepFrame(-1)
+        stepFrames(e.shiftKey ? -1 : -fps)
       } else if (e.key === "ArrowRight") {
         e.preventDefault()
-        stepFrame(1)
+        stepFrames(e.shiftKey ? 1 : fps)
+      } else if (e.key === "Home") {
+        e.preventDefault()
+        jump(0)
+      } else if (e.key === "End") {
+        e.preventDefault()
+        jump(Math.max(0, total - 1))
       } else if (e.key === "Escape" && fullscreen) {
         setFullscreen(false)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [togglePlay, stepFrame, fullscreen])
+  }, [togglePlay, stepFrames, jump, fps, total, fullscreen])
 
   // -------------------------------------------------------------- palco
   // O palco fica no TOPO, na proporção nativa da composição: ocupa a largura do
@@ -794,13 +834,14 @@ export function MotionTab({
   const renderError = render.status === "error" ? render.message : null
   const renderPercent = rendering && renderTotal > 0 ? Math.round((render.frame / renderTotal) * 100) : 0
 
-  /** O formato é a última decisão antes do arquivo existir: vem do clique. */
+  /** O modal é a última parada antes do arquivo existir: as escolhas vêm dele. */
   const onRender = useCallback(
-    (format: MotionRenderFormat) => {
+    (options: MotionRenderOptions) => {
       if (!motionId || rendering) return
+      setRenderOpen(false)
       setRender({ status: "running", frame: 0, total: 0 })
       motionApi
-        .render(motionId, format)
+        .render(motionId, options)
         .then((result) => {
           // O render começa por um diálogo de salvar do sistema: cancelar não é
           // falha, é a pessoa desistindo — a aba volta ao repouso.
@@ -808,7 +849,7 @@ export function MotionTab({
             setRender({ status: "idle" })
             return
           }
-          setRender({ status: "done", path: result.path })
+          setRender({ status: "done", path: result.path, ...(result.audioPath ? { audioPath: result.audioPath } : {}) })
         })
         .catch((err: unknown) =>
           setRender({ status: "error", message: err instanceof Error ? err.message : String(err) }),
@@ -853,9 +894,13 @@ export function MotionTab({
 
   const pct = (f: number) => (total > 1 ? (f / (total - 1)) * 100 : 0)
   const position = pct(frame)
-  const seconds = total / FPS
+  const seconds = total / fps
   const step = rulerStep(seconds)
   const marks = total > 0 ? Array.from({ length: Math.floor(seconds / step) + 1 }, (_, i) => i * step) : []
+  // O que o modal promete de custo: o fps escolhido muda o número de quadros
+  // capturados (a duração em segundos é a mesma), e é esse número que dói.
+  const renderFps = renderOptions.fps > 0 ? renderOptions.fps : fps
+  const renderFrames = fps > 0 ? Math.round((total / fps) * renderFps) : 0
   // A coluna do nome cresceu para caber o ÍCONE do tipo e o botão de marcar sem
   // espremer o nome. É UMA largura, usada pela régua, pelas faixas de áudio e
   // pelas camadas: é ela que mantém as três na mesma escala (playhead incluído).
@@ -900,32 +945,20 @@ export function MotionTab({
             label={t(fullscreen ? "motion.exitFullscreen" : "motion.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           />
-          {/* Renderizar: o formato é escolha do clique (menu), não um passo à
-              parte. Enquanto renderiza o trigger fica desabilitado e vira o
-              próprio indicador de progresso. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={rendering || total <= 0}
-              render={<Button variant="default" size="lg" className="ml-1 gap-1.5" />}
-            >
-              {rendering ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
-              {rendering && renderTotal > 0
-                ? t("motion.rendering", { percent: renderPercent })
-                : t("motion.render")}
-              {!rendering && <ChevronDown className="size-3 opacity-70" />}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-56">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t("motion.renderFormat")}</DropdownMenuLabel>
-                {RENDER_FORMATS.map((format) => (
-                  <DropdownMenuItem key={format.value} onClick={() => onRender(format.value)}>
-                    <span className="flex-1">{t(format.labelKey)}</span>
-                    <span className="shrink-0 text-[0.625rem] text-muted-foreground">{t(format.hintKey)}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Renderizar abre o MODAL: formato, peso, fps e áudio separado são
+              decididos antes de pagar os minutos de captura. Enquanto renderiza o
+              botão fica desabilitado e vira o próprio indicador de progresso. */}
+          <Button
+            variant="default"
+            size="lg"
+            className="ml-1 gap-1.5"
+            disabled={rendering || total <= 0}
+            onClick={() => setRenderOpen(true)}
+            title={t("motion.renderOptions")}
+          >
+            {rendering ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
+            {rendering && renderTotal > 0 ? t("motion.rendering", { percent: renderPercent }) : t("motion.render")}
+          </Button>
         </div>
       </div>
 
@@ -977,10 +1010,23 @@ export function MotionTab({
           <Alert>
             <CircleCheck className="text-emerald-500" />
             <AlertTitle>{t("motion.rendered", { file: baseName(renderedPath) })}</AlertTitle>
-            <AlertDescription className="flex items-center gap-2">
+            <AlertDescription className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => reveal(renderedPath)} title={renderedPath}>
                 {t("motion.showInFolder")}
               </Button>
+              {/* Pediu áudio separado: o WAV está ao lado do vídeo, e o botão
+                  leva direto a ele (a pasta já está aberta pelo outro). */}
+              {render.status === "done" && render.audioPath && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reveal(render.audioPath!)}
+                  title={render.audioPath}
+                >
+                  <Music className="size-3" />
+                  {baseName(render.audioPath)}
+                </Button>
+              )}
             </AlertDescription>
             <AlertAction>
               <IconAction icon={X} label={t("motion.dismiss")} onClick={() => setRender({ status: "idle" })} />
@@ -1046,7 +1092,10 @@ export function MotionTab({
               transform: `scale(${box.width > 0 ? box.width / layout.width : 1})`,
               transformOrigin: "top left",
             }}
-            className={cn("border-0 bg-transparent", !spec && "invisible")}
+            // `pointer-events-none`: o palco é só IMAGEM. Sem isso, um clique nele
+            // dava o foco de teclado ao iframe e espaço/setas paravam de chegar
+            // ao app — o atalho existia e não respondia, que é pior do que não ter.
+            className={cn("pointer-events-none border-0 bg-transparent", !spec && "invisible")}
           />
           {!spec && !runtimeError && !failed && (
             <div className="absolute inset-0 flex items-center justify-center gap-2 bg-muted/30 text-xs text-muted-foreground">
@@ -1084,21 +1133,26 @@ export function MotionTab({
         </div>
       </div>
 
-      {/* Metadados: onde o playhead está, no vocabulário do usuário e no da
-          composição; o fps medido aparece só tocando. */}
+      {/* Metadados: posição / duração (um contador, não dois tempos soltos) e o
+          formato. O fps medido só aparece TOCANDO — parado, um número de fps na
+          tela não diz nada e ainda parecia que a peça era 30 quando não é. */}
       <div className="flex shrink-0 items-center gap-x-3 px-3 pt-2 text-[10px] tabular-nums text-muted-foreground">
-        <span className="font-medium text-foreground">{motionTimecode(frame, FPS)}</span>
-        <span>{motionSeconds(frame, FPS)}</span>
+        <span className="font-medium text-foreground">
+          {motionTimecode(frame, fps)}
+          <span className="font-normal text-muted-foreground/70">
+            {" / "}
+            {motionTimecode(Math.max(0, total - 1), fps)}
+          </span>
+        </span>
         <span>
           {layout.width}×{layout.height}
         </span>
-        <span>{FPS} fps</span>
         <span className="ml-auto" title={t("motion.measuredFpsHint")}>
           {playing && measuredFps != null ? t("motion.measuredFps", { fps: measuredFps }) : ""}
         </span>
       </div>
 
-      {/* Transporte: repetir à esquerda, quadro a quadro no meio e comentar o
+      {/* Transporte: repetir à esquerda, início/play/fim no meio e comentar o
           instante à direita — os dois extremos são ações sobre o que se vê. */}
       <div className="flex shrink-0 items-center justify-between gap-2 px-2.5 py-1">
         <Button
@@ -1117,9 +1171,9 @@ export function MotionTab({
             variant="ghost"
             size="icon"
             disabled={total <= 0}
-            title={t("motion.prevFrame")}
-            aria-label={t("motion.prevFrame")}
-            onClick={() => stepFrame(-1)}
+            title={t("motion.toStart")}
+            aria-label={t("motion.toStart")}
+            onClick={() => jump(0)}
           >
             <SkipBack className="size-3.5" />
           </Button>
@@ -1137,9 +1191,9 @@ export function MotionTab({
             variant="ghost"
             size="icon"
             disabled={total <= 0}
-            title={t("motion.nextFrame")}
-            aria-label={t("motion.nextFrame")}
-            onClick={() => stepFrame(1)}
+            title={t("motion.toEnd")}
+            aria-label={t("motion.toEnd")}
+            onClick={() => jump(Math.max(0, total - 1))}
           >
             <SkipForward className="size-3.5" />
           </Button>
@@ -1190,7 +1244,7 @@ export function MotionTab({
             )}
           >
             {marks.map((s) => (
-              <div key={s} className="absolute inset-y-0" style={{ left: `${pct(s * FPS)}%` }}>
+              <div key={s} className="absolute inset-y-0" style={{ left: `${pct(s * fps)}%` }}>
                 <div className="absolute bottom-0 h-1.5 w-px bg-border" />
                 <span className="absolute top-0.5 left-1 text-[9px] tabular-nums text-muted-foreground">{s}s</span>
               </div>
@@ -1219,8 +1273,8 @@ export function MotionTab({
               o áudio está FORA da pasta da composição: vai no arquivo renderizado,
               mas o scheme não o serve e o preview fica mudo. */}
           {audioTracks.map((track, index) => {
-            const seconds = total / FPS
-            const at = frame / FPS
+            const seconds = total / fps
+            const at = frame / fps
             const from = seconds > 0 ? Math.min(100, Math.max(0, (track.start / seconds) * 100)) : 0
             // Sem `end` no manifest a barra esticava até a borda direita; agora ela
             // termina onde o arquivo realmente tem som (ver motionTrackEnd).
@@ -1384,8 +1438,8 @@ export function MotionTab({
                     first && last
                       ? t("motion.layerSpan", {
                           name: layer.name,
-                          from: motionTimecode(first[0], FPS),
-                          to: motionTimecode(last[1], FPS),
+                          from: motionTimecode(first[0], fps),
+                          to: motionTimecode(last[1], fps),
                         })
                       : layer.name
                   }
@@ -1435,6 +1489,87 @@ export function MotionTab({
           onSent={() => setChatPinned(true)}
         />
       )}
+
+      {/* O modal do render: as quatro decisões que sobravam escondidas num menu
+          (só o formato) ou fixas no código (peso, fps, áudio). O "Renderizar"
+          daqui abre o diálogo de salvar do sistema, como antes. */}
+      <Dialog open={renderOpen} onOpenChange={setRenderOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Film className="size-4" />
+              {t("motion.renderOptions")}
+            </DialogTitle>
+            <DialogDescription>{t("motion.renderOptionsHint")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">{t("motion.renderFormat")}</span>
+              <SettingSelect
+                value={renderOptions.format}
+                onChange={(format) => setRenderOptions((o) => ({ ...o, format }))}
+                options={RENDER_FORMATS.map((format) => ({ value: format.value, label: t(format.labelKey) }))}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">{t("motion.renderQuality")}</span>
+              <SettingSelect
+                value={renderOptions.quality}
+                onChange={(quality) => setRenderOptions((o) => ({ ...o, quality }))}
+                options={[
+                  { value: "high" as MotionRenderQuality, label: t("motion.qualityHigh") },
+                  { value: "balanced" as MotionRenderQuality, label: t("motion.qualityBalanced") },
+                  { value: "small" as MotionRenderQuality, label: t("motion.qualitySmall") },
+                ]}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">{t("motion.renderFps")}</span>
+              <SettingSelect
+                value={String(renderOptions.fps)}
+                onChange={(value) => setRenderOptions((o) => ({ ...o, fps: Number(value) }))}
+                options={[
+                  { value: "0", label: t("motion.fpsComposition", { fps }) },
+                  { value: "24", label: "24 fps" },
+                  { value: "30", label: "30 fps" },
+                  { value: "60", label: "60 fps" },
+                ]}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium">{t("motion.separateAudio")}</p>
+                <p className="text-[11px] leading-tight text-muted-foreground">{t("motion.separateAudioHint")}</p>
+              </div>
+              <Switch
+                checked={renderOptions.separateAudio}
+                onCheckedChange={(checked) => setRenderOptions((o) => ({ ...o, separateAudio: checked }))}
+              />
+            </div>
+            <p className="text-[11px] leading-tight text-muted-foreground">
+              {t("motion.renderCostHint", { frames: renderFrames })}
+            </p>
+          </div>
+          <DialogFooter showCloseButton>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() =>
+                onRender({
+                  format: renderOptions.format,
+                  quality: renderOptions.quality,
+                  separateAudio: renderOptions.separateAudio,
+                  // 0 = "o da composição": não manda fps nenhum.
+                  ...(renderOptions.fps > 0 ? { fps: renderOptions.fps } : {}),
+                })
+              }
+            >
+              <Film className="size-3.5" />
+              {t("motion.render")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

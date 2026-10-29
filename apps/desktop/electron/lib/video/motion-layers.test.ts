@@ -89,6 +89,28 @@ describe('pickLayers', () => {
     expect(pickLayers(phrase, 300).map((l) => l.name)).toEqual(['stage', 'phrase-1', 'phrase-2'])
   })
 
+  it('keeps MEDIA even when it never enters or leaves — it is the content, not decoration', () => {
+    // O caso real: a peça é um vídeo de fundo do primeiro ao último quadro. Sem
+    // esta regra ele sumia da lista (a regra "só quem entra ou sai" o descartava),
+    // justamente a camada que a pessoa quer selecionar e comentar.
+    const media = [
+      raw('Mimi.mp4', -1, [[0, 299]], false, { kind: 'video', tag: 'video' }),
+      raw('trilha.mp3', -1, [[0, 299]], false, { kind: 'audio', tag: 'audio' }),
+      raw('.decor', -1, [[0, 299]], false, { kind: 'other', tag: 'div' }),
+    ]
+    expect(pickLayers(media, 300).map((l) => l.name)).toEqual(['Mimi.mp4', 'trilha.mp3'])
+  })
+
+  it('does not list a <video> twice (the wrapper that CONTAINS it is not the media)', () => {
+    // O runtime marca o contêiner como "video" (tem vídeo dentro), mas a camada
+    // de verdade é o <video>: a tag separa os dois.
+    const wrapper = [
+      raw('.hero', -1, [[0, 299]], false, { kind: 'video', tag: 'div' }),
+      raw('Mimi.mp4', 0, [[0, 299]], false, { kind: 'video', tag: 'video' }),
+    ]
+    expect(pickLayers(wrapper, 300).map((l) => l.name)).toEqual(['Mimi.mp4'])
+  })
+
   it('caps the number of tracks', () => {
     const many = Array.from({ length: 60 }, (_, i) => raw(`p${i}`, -1, [[i, i + 5]]))
     expect(pickLayers(many, 300, 40)).toHaveLength(40)

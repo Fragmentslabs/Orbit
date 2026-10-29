@@ -665,11 +665,14 @@ export const artifactApi = {
  * do main). O render devolve o caminho do arquivo gerado.
  */
 export const motionApi = {
-  /** Contrato congelado com o render: `format` já diz se o arquivo sai com alfa
-   *  (mov/webm), então o renderer nunca manda `transparent` — a escolha do
-   *  usuário no menu é o formato, e só ele. */
-  render: (id: string, format: MotionRenderFormat = "mp4") =>
-    window.ipcRenderer.invoke("motion:render", { id, format }) as Promise<MotionRenderResult | MotionRenderCanceled>,
+  /** Contrato do render: `format` já diz se o arquivo sai com alfa (mov/webm),
+   *  então o renderer nunca manda `transparent` — a escolha do usuário no modal
+   *  é o formato, e só ele, para a transparência. `quality`, `fps` e
+   *  `separateAudio` são as outras decisões do mesmo modal. */
+  render: (id: string, options: MotionRenderOptions = {}) =>
+    window.ipcRenderer.invoke("motion:render", { id, ...options }) as Promise<
+      MotionRenderResult | MotionRenderCanceled
+    >,
   /**
    * Reabre uma peça já registrada. O card da galeria manda o `id` (o vínculo
    * dele é o motionId); o card do chat manda o que a tool deixou no `input` — o
@@ -850,6 +853,25 @@ export interface MotionRenderResult {
   fps: number
   duration: number
   frames: number
+  /** WAV da trilha, quando o render pediu áudio separado e a peça tem som. */
+  audioPath?: string
+}
+
+/** O peso do arquivo (CRF/preset do encoder) — espelho do main. */
+export type MotionRenderQuality = "high" | "balanced" | "small"
+
+/**
+ * O que o modal de render escolhe. O caminho e o nome do arquivo continuam
+ * sendo do main (diálogo do sistema); aqui vai só o que é decisão de quem
+ * renderiza: formato, peso, fps e se o áudio sai também sozinho.
+ */
+export interface MotionRenderOptions {
+  format?: MotionRenderFormat
+  quality?: MotionRenderQuality
+  /** fps do arquivo; ausente = o da composição. */
+  fps?: number
+  /** Escrever a trilha também sozinha, em WAV, ao lado do vídeo. */
+  separateAudio?: boolean
 }
 
 /** Documentos do agente (orbit-data/documents). O fonte é Markdown: o canvas

@@ -9,6 +9,7 @@ import { motionVideoAudioTracks, type MotionVideoFact } from './motion-video-aud
 import { lintMotionComposition } from './motion-lint-run'
 import {
   assertFrameBytes,
+  audioExtractFfmpegArgs,
   bandCount,
   concatFfmpegArgs,
   concatList,
@@ -21,6 +22,7 @@ import {
   splitBands,
   unpremultiplyBgra,
   type MotionFormat,
+  type MotionQuality,
 } from './motion-render-args'
 import { capturePageReliably } from './capture'
 import { MOTION_SPEC } from './motion-runtime'
@@ -89,6 +91,13 @@ export interface MotionOptions extends MotionSpec {
    * determinístico. Sem ele: min(4, max(1, núcleos/2)).
    */
   bands?: number
+  /** Peso do arquivo (CRF/preset); sem ele, o `balanced` de sempre. */
+  quality?: MotionQuality
+  /**
+   * Entregar também a trilha sozinha, em WAV, ao lado do vídeo. Só faz sentido
+   * quando a peça tem som — sem faixas, o render não cria arquivo nenhum.
+   */
+  separateAudio?: boolean
   /** Chamado a cada quadro CAPTURADO (não na ordem: é a contagem que subiu). */
   onProgress?: (frame: number, total: number) => void
   signal?: AbortSignal
@@ -124,6 +133,8 @@ export interface MotionResult {
   output: string
   /** Áudio muxado (explícito ou o da pasta da composição); ausente quando mudo. */
   audio?: string
+  /** WAV da trilha, quando `separateAudio` foi pedido e a peça tem som. */
+  audioPath?: string
   width: number
   height: number
   fps: number
@@ -282,6 +293,7 @@ interface BandOptions {
   height: number
   fps: number
   format: MotionFormat
+  quality?: MotionQuality
   /** Tamanho do quadro cru, fixado na sondagem — o `-s` do stdin. */
   captureWidth: number
   captureHeight: number
@@ -303,6 +315,7 @@ async function renderBand(o: BandOptions): Promise<void> {
       captureHeight: o.captureHeight,
       fps: o.fps,
       format: o.format,
+      quality: o.quality,
       output: o.target,
     }),
     { stdin: input, signal: o.signal },
@@ -465,6 +478,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
           height,
           fps,
           format,
+          quality: opts.quality,
           captureWidth: probe.width,
           captureHeight: probe.height,
           probe: index === 0 ? probe : undefined,
@@ -532,6 +546,23 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       await runFfmpeg(args, { signal: opts.signal })
     }
 
+    // "Áudio separado": extraído do ARQUIVO FINAL, para sair exatamente o som que
+    // está no vídeo (mesma mixagem, mesmo corte, mesmo acabamento) — só o áudio é
+    // codificado, a imagem não é tocada. Sem faixas, não há o que extrair: é
+    // aviso, não erro (a pessoa pediu áudio de uma peça muda).
+    let audioPath: string | undefined
+    if (opts.separateAudio) {
+      if (tracks.length === 0) {
+        warnings.push('separate audio was asked for, but the piece has no audio track — no WAV was written')
+      } else {
+        const wav = `${opts.output.replace(/\.[^./\\]+$/, '')}.wav`
+        await runFfmpeg(audioExtractFfmpegArgs({ video: path.resolve(opts.output), output: wav }), {
+          signal: opts.signal,
+        })
+        audioPath = wav
+      }
+    }
+
     const metrics: MotionMetrics = {
       frames: total,
       totalMs: ms(performance.now() - startedAt),
@@ -540,7 +571,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       encodeWrite: ms(counters.encodeWrite / total),
       msPerFrame: ms((counters.seekPaint + counters.capture + counters.encodeWrite) / total),
     }
-    return { output: opts.output, width, height, fps, duration, frames: total, metrics, warnings }
+    return { output: opts.output, width, height, fps, duration, frames: total, metrics, warnings, audioPath }
   } finally {
     opts.signal?.removeEventListener('abort', onAbort)
     for (const win of windows) if (!win.isDestroyed()) win.destroy()

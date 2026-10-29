@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_MOTION_BANDS,
   assertFrameBytes,
+  audioExtractFfmpegArgs,
   bandCount,
   concatFfmpegArgs,
   concatList,
@@ -139,6 +140,28 @@ describe('argumentos do ffmpeg', () => {
     expect(rawVideoFilters({ width: 10, height: 10, captureWidth: 10, captureHeight: 10, format: 'mp4' })).toEqual([])
     expect(rawVideoFilters({ width: 10, height: 10, captureWidth: 10, captureHeight: 10, format: 'webm' })).toEqual([])
     expect(motionEncoderArgs('webm').join(' ')).toContain('libvpx-vp9 -pix_fmt yuv420p')
+  })
+
+  it('a qualidade muda o CRF e o preset, e o padrão continua sendo o de antes', () => {
+    // `balanced` é o comportamento que sempre existiu: quem não escolhe nada não
+    // vê diferença nenhuma no arquivo.
+    expect(motionEncoderArgs('mp4').join(' ')).toBe(
+      motionEncoderArgs('mp4', 'balanced').join(' '),
+    )
+    expect(motionEncoderArgs('mp4', 'balanced').join(' ')).toContain('-preset medium -crf 18')
+    expect(motionEncoderArgs('mp4', 'high').join(' ')).toContain('-preset slow -crf 16')
+    expect(motionEncoderArgs('mp4', 'small').join(' ')).toContain('-preset fast -crf 26')
+    // VP9: só o CRF muda (o preset é o mesmo caminho).
+    expect(motionEncoderArgs('webm', 'high').join(' ')).toContain('-crf 24')
+    expect(motionEncoderArgs('webm', 'small').join(' ')).toContain('-crf 36')
+    // ProRes 4444 não tem CRF: a escolha não pode inventar um argumento inválido.
+    expect(motionEncoderArgs('mov-alpha', 'small').join(' ')).toBe(motionEncoderArgs('mov-alpha').join(' '))
+  })
+
+  it('o áudio separado extrai do ARQUIVO FINAL (sem tocar na imagem)', () => {
+    expect(audioExtractFfmpegArgs({ video: '/tmp/a.mp4', output: '/tmp/a.wav' }).join(' ')).toBe(
+      '-v error -i /tmp/a.mp4 -vn -c:a pcm_s16le -ar 48000 /tmp/a.wav',
+    )
   })
 })
 

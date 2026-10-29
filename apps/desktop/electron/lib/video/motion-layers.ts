@@ -35,6 +35,8 @@ export interface RawLayer {
   /** Posição na caminhada da página — o endereço do elemento para o realce. */
   index?: number
   kind?: LayerKind
+  /** Tag em minúsculas ("video", "div"…): diz se a camada É a mídia ou só a contém. */
+  tag?: string
 }
 
 export interface MotionLayer {
@@ -89,6 +91,16 @@ function always(spans: FrameSpan[], total: number): boolean {
   return spans.length === 1 && spans[0][0] <= 0 && spans[0][1] >= total - 1
 }
 
+/**
+ * O elemento É a mídia, e não um contêiner que tem mídia dentro: quem carrega
+ * `tag` decide por ela (o `<video>` e não a `div` em volta); sem tag (retrato
+ * montado à mão), vale o tipo medido.
+ */
+function isMediaElement(item: RawLayer): boolean {
+  if (item.tag) return item.tag === 'video' || item.tag === 'audio'
+  return item.kind === 'video' || item.kind === 'audio'
+}
+
 /** Escolhe as camadas a partir do retrato cru do runtime. Puro. */
 export function pickLayers(raw: RawLayer[], durationInFrames: number, max = MAX_LAYERS): MotionLayer[] {
   const spans = raw.map((r) => mergeSpans(r.spans))
@@ -119,6 +131,17 @@ export function pickLayers(raw: RawLayer[], durationInFrames: number, max = MAX_
     if (item.named) {
       kept[i] = true
       out.push({ name: item.name, named: true, spans: spans[i], ...address(item, i) })
+      return
+    }
+    // MÍDIA é camada por si, mesmo parada do primeiro ao último quadro: um vídeo
+    // que ocupa a peça inteira não é decoração de um texto, é o conteúdo — e sem
+    // esta regra ele sumia da lista (só entrava quem "entrava ou saía"), que é
+    // justamente a camada que a pessoa quer selecionar e marcar.
+    if (isMediaElement(item)) {
+      // Uma mídia dentro de outra já mostrada é a mesma coisa duas vezes.
+      if (ancestor >= 0 && isMediaElement(raw[ancestor])) return
+      kept[i] = true
+      out.push({ name: item.name, named: false, spans: spans[i], ...address(item, i) })
       return
     }
     // Sem nome: só quem entra/sai, e só o mais externo. Dentro de uma camada já

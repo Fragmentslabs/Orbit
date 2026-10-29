@@ -596,6 +596,14 @@ ${MOTION_TIMING_SCRIPT}
     const named = el.getAttribute('data-layer')
     if (named) return named
     if (el.id) return '#' + el.id
+    // Mídia sem nome: o ARQUIVO diz mais do que a tag ("video") ou a classe
+    // (".hero") — "Mimi.mp4" é o que a pessoa reconhece na lista de camadas.
+    // Antes do texto porque um <video> pode carregar o fallback do navegador.
+    if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') {
+      const src = String(el.currentSrc || el.getAttribute('src') || '')
+      const file = src.split(/[?#]/)[0].split(/[\\\\/]/).filter(Boolean).pop()
+      if (file) return file
+    }
     const text = (el.textContent || '').replace(/\\s+/g, ' ').trim()
     if (text) return text.length > 32 ? text.slice(0, 31) + '…' : text
     const cls = (el.getAttribute('class') || '').trim().split(/\\s+/)[0]
@@ -732,6 +740,10 @@ ${MOTION_TIMING_SCRIPT}
           // realce (o preview percorre os mesmos candidatos, na mesma ordem).
           index: i,
           kind: layerKind(item.el),
+          // A tag separa a mídia do contêiner que a envolve: um <div> com um
+          // <video> dentro também é "video" pelo tipo medido, e o host precisa
+          // saber qual dos dois é a camada de verdade (ver pickLayers).
+          tag: String(item.el.tagName || '').toLowerCase(),
         }
       }),
     }
@@ -765,6 +777,9 @@ ${MOTION_TIMING_SCRIPT}
       durationInFrames: resolved.durationInFrames,
       width: resolved.width,
       height: resolved.height,
+      // O fps da COMPOSIÇÃO vai junto: a aba desenhava tudo em 30 fixo, e uma
+      // peça de 60 fps tinha o playhead, a régua e os timecodes na metade.
+      fps: resolved.fps,
       version: VERSION,
     })
   }
@@ -837,7 +852,7 @@ export type MotionHostCommand =
 
 /** Mensagem do iframe para o host. */
 export type MotionRuntimeMessage =
-  | { type: 'ready'; durationInFrames: number; width: number; height: number; version: number }
+  | { type: 'ready'; durationInFrames: number; width: number; height: number; fps: number; version: number }
   | { type: 'time'; frame: number }
   | { type: 'error'; message: string; stack?: string }
   | { type: 'assets'; failedFonts: string[] }
@@ -877,6 +892,8 @@ export function parseMotionMessage(raw: unknown): MotionRuntimeMessage | null {
       durationInFrames: Math.max(1, Math.round(msg.durationInFrames)),
       width: typeof msg.width === 'number' ? msg.width : 1920,
       height: typeof msg.height === 'number' ? msg.height : 1080,
+      // Peça antiga (runtime anterior) não manda fps: 30 é o padrão do contrato.
+      fps: typeof msg.fps === 'number' && Number.isFinite(msg.fps) && msg.fps > 0 ? msg.fps : 30,
       version: typeof msg.version === 'number' ? msg.version : 0,
     }
   }

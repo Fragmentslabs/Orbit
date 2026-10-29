@@ -6,7 +6,13 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { MOTION_SCHEME } from '@shared/media'
 import { resolveSafePath, type ToolContext } from '../tools/context'
-import { isAlphaFormat, motionFormatExt, normalizeMotionFormat, type MotionFormatInput } from './motion-render-args'
+import {
+  isAlphaFormat,
+  motionFormatExt,
+  normalizeMotionFormat,
+  type MotionFormatInput,
+  type MotionQuality,
+} from './motion-render-args'
 import { renderMotion } from './motion'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './motion-runtime'
 import { journalPath } from '../session/media-journal'
@@ -645,6 +651,10 @@ export interface MotionRenderRequest {
   height?: number
   fps?: number
   duration?: number
+  /** Peso do arquivo (CRF/preset do encoder); sem ele, o `balanced` de sempre. */
+  quality?: MotionQuality
+  /** Escrever a trilha também sozinha, em WAV, ao lado do vídeo. */
+  separateAudio?: boolean
 }
 
 export interface MotionRenderResult {
@@ -656,6 +666,8 @@ export interface MotionRenderResult {
   fps: number
   duration: number
   frames: number
+  /** WAV da trilha, quando o render pediu áudio separado e a peça tem som. */
+  audioPath?: string
 }
 
 /**
@@ -731,6 +743,8 @@ export async function renderRegisteredMotion(
     height: req.height,
     fps: req.fps,
     duration: req.duration,
+    quality: req.quality,
+    separateAudio: req.separateAudio,
     onProgress,
   })
   return {
@@ -741,5 +755,6 @@ export async function renderRegisteredMotion(
     fps: result.fps,
     duration: result.duration,
     frames: result.frames,
+    ...(result.audioPath ? { audioPath: result.audioPath } : {}),
   }
 }

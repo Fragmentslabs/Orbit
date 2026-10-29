@@ -101,14 +101,48 @@ export function normalizeMotionFormat(raw: string | undefined, transparent = fal
   }
 }
 
+/**
+ * O quanto o arquivo pode pesar. `balanced` é o que sempre sai sem escolha —
+ * é o padrão de antes, e é ele que o botão antigo produzia.
+ */
+export type MotionQuality = 'high' | 'balanced' | 'small'
+
+/** Números por formato: CRF (menor = melhor) e preset do x264. */
+const QUALITY: Record<MotionFormat, Record<MotionQuality, { crf: number; preset: string }>> = {
+  mp4: {
+    high: { crf: 16, preset: 'slow' },
+    balanced: { crf: 18, preset: 'medium' },
+    small: { crf: 26, preset: 'fast' },
+  },
+  webm: {
+    high: { crf: 24, preset: 'medium' },
+    balanced: { crf: 30, preset: 'medium' },
+    small: { crf: 36, preset: 'medium' },
+  },
+  'webm-alpha': {
+    high: { crf: 24, preset: 'medium' },
+    balanced: { crf: 28, preset: 'medium' },
+    small: { crf: 34, preset: 'medium' },
+  },
+  // ProRes 4444 não tem CRF: a qualidade é fixa pelo perfil. A escolha é ignorada.
+  'mov-alpha': {
+    high: { crf: 0, preset: 'medium' },
+    balanced: { crf: 0, preset: 'medium' },
+    small: { crf: 0, preset: 'medium' },
+  },
+}
+
 /** Argumentos do encoder por formato (os mesmos parâmetros de antes do rawvideo). */
-export function motionEncoderArgs(format: MotionFormat): string[] {
+export function motionEncoderArgs(format: MotionFormat, quality: MotionQuality = 'balanced'): string[] {
   if (format === 'mov-alpha') return ['-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le']
+  const { crf, preset } = QUALITY[format][quality]
   if (format === 'webm-alpha') {
-    return ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '28', '-row-mt', '1']
+    return ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', String(crf), '-row-mt', '1']
   }
-  if (format === 'webm') return ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-b:v', '0', '-crf', '30', '-row-mt', '1']
-  return ['-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
+  if (format === 'webm') {
+    return ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-b:v', '0', '-crf', String(crf), '-row-mt', '1']
+  }
+  return ['-c:v', 'libx264', '-preset', preset, '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
 }
 
 /**
@@ -154,6 +188,8 @@ export function rawVideoFilters(o: RawVideoFilterOptions): string[] {
 export interface MotionFfmpegSpec extends RawVideoFilterOptions {
   fps: number
   output: string
+  /** Peso/qualidade do arquivo; sem ele, o `balanced` de sempre. */
+  quality?: MotionQuality
 }
 
 /**
@@ -166,7 +202,7 @@ export function motionFfmpegArgs(spec: MotionFfmpegSpec): string[] {
     '-v', 'error',
     ...rawVideoInputArgs(spec.captureWidth, spec.captureHeight, spec.fps),
     ...(filters.length ? ['-vf', filters.join(',')] : []),
-    ...motionEncoderArgs(spec.format),
+    ...motionEncoderArgs(spec.format, spec.quality),
     '-r', String(spec.fps),
     spec.output,
   ]
@@ -437,6 +473,17 @@ export function isPlainAudioMix(events: MotionAudioEvent[], master?: MasterFx | 
  * O gatilho do duck é a soma das faixas de frente: a cama abaixa quando QUALQUER
  * voz ou efeito está tocando, que é o que se espera de "música de fundo".
  */
+/**
+ * "Áudio separado": o arquivo leva o vídeo com som e a pessoa quer a trilha
+ * sozinha também (para editar fora ou reusar a narração). Extrair do arquivo
+ * FINAL é uma passada só, sem recodificar imagem e sem remisturar: o WAV sai
+ * com exatamente o som que está no vídeo — mixado, cortado e normalizado igual.
+ * PCM 16 bits em 48 kHz é o que qualquer editor abre sem reclamar.
+ */
+export function audioExtractFfmpegArgs(spec: { video: string; output: string }): string[] {
+  return ['-v', 'error', '-i', spec.video, '-vn', '-c:a', 'pcm_s16le', '-ar', '48000', spec.output]
+}
+
 export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
   const graph: string[] = []
   const labels = spec.events.map((event, index) => {

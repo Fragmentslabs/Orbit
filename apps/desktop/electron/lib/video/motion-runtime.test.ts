@@ -71,11 +71,14 @@ describe('parseMotionCommand (host → iframe)', () => {
 
 describe('parseMotionMessage (iframe → host)', () => {
   it('accepts ready/time/error/assets', () => {
-    expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 120.4, width: 1920, height: 1080, version: 1 })).toEqual({
+    expect(
+      parseMotionMessage({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 120.4, width: 1920, height: 1080, fps: 60, version: 1 }),
+    ).toEqual({
       type: 'ready',
       durationInFrames: 120,
       width: 1920,
       height: 1080,
+      fps: 60,
       version: 1,
     })
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'time', frame: 12.9 })).toEqual({ type: 'time', frame: 13 })
@@ -91,8 +94,9 @@ describe('parseMotionMessage (iframe → host)', () => {
   })
 
   it('falls back to sensible defaults and rejects malformed messages', () => {
+    // Sem fps na mensagem (runtime antigo), vale o padrão do contrato: 30.
     const ready = parseMotionMessage({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 90 })
-    expect(ready).toEqual({ type: 'ready', durationInFrames: 90, width: 1920, height: 1080, version: 0 })
+    expect(ready).toEqual({ type: 'ready', durationInFrames: 90, width: 1920, height: 1080, fps: 30, version: 0 })
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'ready' })).toBeNull()
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'error', message: 42 })).toBeNull()
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'seek', frame: 1 })).toBeNull() // é do outro lado
@@ -238,6 +242,7 @@ describe('MOTION_RUNTIME na página', () => {
       durationInFrames: 90,
       width: 1080,
       height: 1920,
+      fps: 30,
       version: 1,
     })
   })
@@ -338,6 +343,7 @@ describe('MOTION_RUNTIME na página', () => {
       durationInFrames: 120,
       width: 1920,
       height: 1080,
+      fps: 30,
       version: 1,
     })
   })
