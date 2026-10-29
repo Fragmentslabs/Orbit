@@ -156,6 +156,7 @@ const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageK
   'context-length': 'notif.chatError.kind.context-length',
   'context-length-turn': 'notif.chatError.kind.context-length-turn',
   'provider-config': 'notif.chatError.kind.provider-config',
+  'tool-limit': 'notif.chatError.kind.tool-limit',
 }
 
 /** Erro de chat (falha do provider, não aborto manual). */

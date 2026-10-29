@@ -93,7 +93,11 @@ import { imageRefLine, posterDataUrl, probeVideoAttachment, videoAttachmentNote 
 import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
-import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
+import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
+import { construirCatalogo } from './tools/catalogo-turno'
+import { montarMapa } from './tools/catalogo'
+import { derivarAtivas, familiasMencionadasNoTexto } from './tools/ativas'
+import { recordTurn } from './tools/metrics'
 import { hoistToolImages } from './tool-images'
 import { endActivity } from './computer/session'
 import { designNameFromInputJson, openDesignLive } from './tools/design'
@@ -2252,10 +2256,42 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
 
+    // Catálogo de tools sob demanda: o ToolSet real + as famílias. `null`
+    // quando o modelo não aceita tools — aí nada é recortado, o turno segue
+    // como antes (é também o fallback se o recorte for rejeitado).
+    const catalogo = supportsTools
+      ? construirCatalogo(input, toolContext, imageHooks, modelVision, win)
+      : null
+    const nomesExistentes = catalogo ? new Set(Object.keys(catalogo.tools)) : new Set<string>()
+    // Auto-ativação determinística (`@mcp:<servidor>` na mensagem). As
+    // heurísticas frágeis do plano (anexo, "pasta com vídeo") entram só depois
+    // de medidas — sem número, elas devolvem tools ao "oi" de graça.
+    const autoFamilias = familiasMencionadasNoTexto(input.text ?? '', catalogo?.familias ?? [])
+    const ativasIniciais = catalogo
+      ? derivarAtivas(initialMessages, catalogo.familias, nomesExistentes, { auto: autoFamilias })
+      : null
+    // Telemetria de desfecho: este é o único ponto do turno com o catálogo (a
+    // oferta) e o histórico (o uso) ao mesmo tempo. `usageFromHistory` lê as
+    // tool-calls e os tool-results do histórico já retido, então `calls` e
+    // `failed` são acumulados da sessão — para decidir família isso é melhor
+    // que o turno isolado: mostra a família que foi oferecida e nunca usada.
+    if (catalogo) {
+      void recordTurn({
+        familias: catalogo.familias,
+        offered: nomesExistentes.size,
+        mensagens: initialMessages,
+      })
+    }
+    // O mapa é o índice: famílias, o que cada uma resolve, o que está ATIVO e
+    // o que está DESATIVADO — com o motivo.
+    const mapaDoPrompt = catalogo
+      ? montarMapa(catalogo.familias, { ativas: ativasIniciais?.familias }).texto
+      : undefined
+
     for (;;) {
       const result = streamText({
         model,
-        system: await buildSystemPrompt(input, modelVision),
+        system: await buildSystemPrompt(input, modelVision, mapaDoPrompt),
         messages:
           autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0 && screenNudges === 0
             ? initialMessages
@@ -2279,7 +2315,25 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 ],
                 interleavedReasoningField(provider, primary.modelId),
               ),
-        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks, modelVision, win) : undefined,
+        tools: catalogo?.tools,
+        // O conjunto ativo vale já no step 0 (o prepareStep só roda a partir do
+        // step 1); nos demais, quem manda é o valor devolvido por ele.
+        activeTools: ativasIniciais?.nomes,
+        // Chamada a tool inativa não pode morrer o turno: vira um bounce para
+        // tools_load com a família do nome pedido. O passo seguinte já tem a
+        // família ativa e o modelo reemite a chamada.
+        repairToolCall: async ({ toolCall }) => {
+          if (!catalogo) return null
+          const familia = catalogo.familias.find(
+            (f) => !f.indisponivel && f.tools.includes(toolCall.toolName),
+          )
+          if (!familia) return null
+          return {
+            ...toolCall,
+            toolName: 'tools_load',
+            input: JSON.stringify({ family: familia.id, tools: [toolCall.toolName] }),
+          }
+        },
         toolApproval,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
@@ -2317,7 +2371,20 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // steps.length === maxSteps (isStepCount usa igualdade). Com
           // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
           // terminar numa tool call sem texto.
-          if (stepNumber < maxSteps - 1) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
+          if (stepNumber < maxSteps - 1) {
+            // Recalculado a cada passo a partir do histórico: é o que faz a
+            // família carregada AGORA valer no passo seguinte, sem estado.
+            const ativas = catalogo
+              ? derivarAtivas(preparedWithImages, catalogo.familias, nomesExistentes, { auto: autoFamilias })
+              : null
+            if (!ativas) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
+            if (ativas.cortadas.length > 0) {
+              console.warn(
+                `[tools] teto do conjunto ativo: ${ativas.cortadas.join(', ')} fora por falta de uso`,
+              )
+            }
+            return { messages: preparedWithImages, activeTools: ativas.nomes }
+          }
           return {
             activeTools: [],
             toolChoice: 'none' as const,

@@ -96,6 +96,20 @@ const CONTEXT_LENGTH_PATTERNS = [
 ]
 
 /**
+ * Excesso de TOOLS no request. O Groq recusa acima de 128 e derruba a chamada
+ * inteira; a mensagem costuma conter a palavra "limit" e cairia em rate-limit,
+ * que é rotacionável e manda trocar de modelo — conselho errado, porque o teto
+ * é do endpoint. Precisa vir ANTES de rate-limit.
+ */
+const TOOL_LIMIT_PATTERNS = [
+  /too many tools/i,
+  /maximum (of )?\d+ tools/i,
+  /tools? .{0,40}(must|can|cannot).{0,30}(at most|no more than|exceed) \d+/i,
+  /number of tools? .{0,30}(exceed|limit)/i,
+  /tools? (count|length) .{0,30}(exceed|limit)/i,
+]
+
+/**
  * Limite de uso/requisições do provedor ou gateway. Cobre o 429 clássico
  * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), o Zen do OpenCode
  * (`FreeUsageLimitError` — teto de uso gratuito por conta, janela rolante) e
@@ -235,6 +249,9 @@ export function classifyProviderError(value: unknown): ClassifiedError {
     return { kind: 'model-unavailable', detail }
   }
   if (SESSION_ROUTING_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
+  // Excesso de tools antes de rate-limit: a mensagem traz "limit" e cairia no
+  // kind rotacionável, que manda trocar de modelo — e o teto é do endpoint.
+  if (TOOL_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'tool-limit', detail }
   if (RATE_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'rate-limit', detail }
   if (NETWORK_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
   return { kind: 'unknown', detail }

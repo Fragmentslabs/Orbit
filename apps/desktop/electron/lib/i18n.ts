@@ -96,6 +96,10 @@ export const MESSAGES = {
     'pt-BR': 'o provedor não está configurado — verifique as Configurações',
     en: 'the provider is not configured — check Settings',
   },
+  'notif.chatError.kind.tool-limit': {
+    'pt-BR': 'o provedor recusou o pedido por excesso de ferramentas — o catálogo corta as menos usadas e vale na próxima',
+    en: 'the provider rejected the request for having too many tools — the catalog drops the least used ones for the next try',
+  },
 
   // ── Rotinas agendadas ─────────────────────────────────────────────────────
   'notif.rotina.done': {
