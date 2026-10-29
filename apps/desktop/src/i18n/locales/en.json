@@ -582,7 +582,13 @@
       "add": "Add",
       "archive": "Archive folder",
       "unarchive": "Unarchive folder",
-      "organize": "Organize chats and folders"
+      "organize": "Organize chats and folders",
+      "project": "Project (optional)",
+      "noProject": "No project",
+      "noRecentProjects": "No recent projects.",
+      "pickProject": "Choose folder…",
+      "projectEffect": "This folder's + opens in {{project}}.",
+      "projectNoneEffect": "Without a project, this folder's + follows the screen's workspace."
     },
     "session": {
       "unpin": "Unpin",

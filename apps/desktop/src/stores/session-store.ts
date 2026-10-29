@@ -187,7 +187,7 @@ interface SessionState {
   revertNotice: RevertNotice | null
   dismissRevertNotice: () => void
 
-  createFolder: (mode: SessionMode, name: string) => FolderInfo
+  createFolder: (mode: SessionMode, name: string, workspace?: string[]) => FolderInfo
   renameFolder: (id: string, name: string) => void
   toggleFolderPin: (id: string) => void
   /** Arquiva/desarquiva a pasta e, junto, todos os chats que estão nela */
@@ -966,8 +966,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  createFolder: (mode, name) => {
-    const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, archived: false, createdAt: Date.now() }
+  createFolder: (mode, name, workspace) => {
+    const folder: FolderInfo = {
+      id: nanoid(),
+      name,
+      mode,
+      pinned: false,
+      archived: false,
+      createdAt: Date.now(),
+      // Projeto escolhido no diálogo: sem isto o "+" de uma pasta recém-criada
+      // só aprende o repositório quando o primeiro chat entra nela
+      // (aprenderWorkspaceDaPasta), e até lá herda o workspace da tela.
+      workspace: workspace?.length ? workspace : undefined,
+    }
     set((state) => {
       const folders = [...state.folders, folder]
       persistFolders(folders)

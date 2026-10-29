@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
 import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
+import { NewFolderDialog } from "@/src/components/new-folder-dialog"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -1433,12 +1434,11 @@ function ChatHistory() {
         </AccordionGroup>
       )}
 
-      <PromptDialog
+      <NewFolderDialog
         open={creatingFolder}
         onOpenChange={setCreatingFolder}
-        title={t("sidebar.folder.newFolderTitle")}
-        placeholder={t("sidebar.folder.folderNamePlaceholder")}
-        onSubmit={(name) => createFolder(mode, name)}
+        mode={mode}
+        onCreate={(name, workspace) => createFolder(mode, name, workspace)}
       />
     </>
   )

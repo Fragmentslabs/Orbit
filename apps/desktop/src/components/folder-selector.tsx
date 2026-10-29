@@ -5,7 +5,9 @@ import { useWorktreeStore } from "@/src/stores/worktree-store"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
-function loadRecentFolders(): string[] {
+/** Pastas recentes do seletor (`orbit-recent-folders`), escritas pelo
+ *  code-input. Servem de candidatas ao projeto de uma pasta nova. */
+export function loadRecentFolders(): string[] {
   try {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
     if (stored) return JSON.parse(stored)

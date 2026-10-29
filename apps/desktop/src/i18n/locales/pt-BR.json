@@ -582,7 +582,13 @@
       "add": "Adicionar",
       "archive": "Arquivar pasta",
       "unarchive": "Desarquivar pasta",
-      "organize": "Organizar chats e pastas"
+      "organize": "Organizar chats e pastas",
+      "project": "Projeto (opcional)",
+      "noProject": "Nenhum projeto",
+      "noRecentProjects": "Nenhum projeto recente.",
+      "pickProject": "Escolher pasta…",
+      "projectEffect": "O + desta pasta abre em {{project}}.",
+      "projectNoneEffect": "Sem projeto, o + desta pasta segue o workspace da tela."
     },
     "session": {
       "unpin": "Desafixar",
