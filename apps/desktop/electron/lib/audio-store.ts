@@ -60,6 +60,13 @@ export function audioFilePath(id: string): string {
   return path.join(audioDir(), id)
 }
 
+/** Caminho de um áudio guardado, com o id validado (`null` = id inválido).
+ *  Para quem serve o arquivo por Range sem passar pelo readAudio — o protocolo
+ *  orbit-audio:// e o servidor HTTP do companion. */
+export function resolveAudioFile(id: string): string | null {
+  return SAFE_AUDIO_ID.test(id) ? audioFilePath(id) : null
+}
+
 /** O anexo é um áudio? Pelo MIME, ou pela extensão quando o MIME vem vazio. */
 export function isAudioFile(mime: string, filename = ''): boolean {
   return mime.startsWith('audio/') || AUDIO_EXT.test(filename)

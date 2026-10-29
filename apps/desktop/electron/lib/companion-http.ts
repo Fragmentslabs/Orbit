@@ -12,11 +12,9 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { hostname } from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import fsSync from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow } from 'electron'
@@ -31,6 +29,8 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './s
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
+import { createAssetToken, validateAssetToken } from './companion-token'
+import { serveAsset } from './companion-assets'
 
 import { transcribePcm, voiceStatus } from './voice'
 
@@ -74,54 +74,10 @@ function validateAuth(
 
 // ─── Media Tokens ─────────────────────────────────────────────────────────────
 // O <Image> do React Native não envia header Authorization de forma confiável
-// (Android ignora headers no componente Image), então o companion-server assina
-// as URLs de mídia com um token HMAC na query string. TTL de 24h: longo o
-// bastante para o cache do app sobreviver a scroll/re-render/reabrir sem
-// refetch de token, curto o bastante para uma URL vazada não valer para sempre.
-
-const MEDIA_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
-
-/** Segredo persistido em orbit-data/media-secret — tokens assinados sobrevivem a
- *  restarts do desktop (senão toda imagem já entregue ao mobile viraria 401 ao
- *  reiniciar o app). Leitura síncrona: precisa estar pronto antes do 1º token. */
-function loadMediaSecret(): string {
-  const file = path.join(app.getPath('userData'), 'orbit-data', 'media-secret')
-  try {
-    const existing = fsSync.readFileSync(file, 'utf8').trim()
-    if (existing.length === 64) return existing
-  } catch {
-    /* ainda não existe — gera abaixo */
-  }
-  const secret = randomBytes(32).toString('hex')
-  try {
-    fsSync.mkdirSync(path.dirname(file), { recursive: true })
-    fsSync.writeFileSync(file, secret, { mode: 0o600 })
-  } catch {
-    console.warn('[CompanionHTTP] Não foi possível persistir o segredo de mídia — tokens não sobrevivem a restart')
-  }
-  return secret
-}
-
-const mediaSecret = loadMediaSecret()
-
-/** Assina o id de uma imagem — chamado pelo companion-server ao reescrever URLs. */
-export function createMediaToken(id: string): string {
-  const exp = Date.now() + MEDIA_TOKEN_TTL_MS
-  const sig = createHmac('sha256', mediaSecret).update(`${id}:${exp}`).digest('hex')
-  return `${exp}.${sig}`
-}
-
-function validateMediaToken(id: string, token: string | null): boolean {
-  if (!token) return false
-  const dot = token.indexOf('.')
-  if (dot <= 0) return false
-  const exp = Number(token.slice(0, dot))
-  const sig = token.slice(dot + 1)
-  if (!Number.isFinite(exp) || exp < Date.now()) return false
-  const expected = createHmac('sha256', mediaSecret).update(`${id}:${exp}`).digest('hex')
-  if (expected.length !== sig.length) return false
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(sig))
-}
+// (Android ignora headers no componente Image), então as URLs de mídia saem
+// assinadas com um token HMAC. O segredo e a assinatura moram em
+// companion-token.ts; aqui só se usa o escopo `media`, cujo formato de token é
+// o histórico (`?t=<exp>.<sig>`) para não invalidar URL já entregue ao celular.
 
 // ─── Response Helpers ─────────────────────────────────────────────────────────
 
@@ -415,7 +371,7 @@ async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
  *  não é aceito nesta rota (ela roda antes do bloqueio global de auth). */
 async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: string) {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-  if (!validateMediaToken(id, url.searchParams.get('t'))) {
+  if (!validateAssetToken('media', id, url.searchParams.get('t'))) {
     jsonResponse(res, 401, { error: 'Token inválido ou expirado' })
     return
   }
@@ -440,7 +396,7 @@ async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: str
 
 function mediaUrlFor(req: IncomingMessage, id: string): string {
   const base = `http://${req.headers.host ?? 'localhost'}`
-  return `${base}/api/media/${id}?t=${createMediaToken(id)}`
+  return `${base}/api/media/${id}?t=${createAssetToken('media', id)}`
 }
 
 async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
@@ -784,6 +740,31 @@ function createRouter(
     // 'usage' é um endpoint do registry (listado abaixo), não um id de arquivo.
     if (mediaMatch && mediaMatch[1] !== 'usage') {
       await handleGetMedia(req, res, mediaMatch[1])
+      return
+    }
+
+    // Arquivos do desktop para o celular: áudio, vídeo, artefato, documento e
+    // as peças (motion/design/slides). Auth pelo token no CAMINHO — o
+    // <video> e o WebView também não mandam header, e é o caminho que faz o
+    // `base.css` de uma peça herdar o token do diretório. Roda antes do
+    // bloqueio global de Bearer, como a rota de imagem.
+    const assetMatch = /^(GET|HEAD) \/api\/file\/([^/]+)\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(mediaKey)
+    if (assetMatch) {
+      // O id vem percent-encoded; um `%` solto estouraria o decode e derrubaria
+      // o handler no meio. Id que não decodifica não existe — 404.
+      let assetId: string | null = null
+      try {
+        assetId = decodeURIComponent(assetMatch[3])
+      } catch {
+        assetId = null
+      }
+      if (!assetId) {
+        jsonResponse(res, 404, { error: 'Arquivo não encontrado' })
+        return
+      }
+      // O relativo NÃO é decodificado aqui: quem decodifica é o resolve*File
+      // de cada store, o mesmo contrato dos handlers de scheme.
+      await serveAsset(req, res, assetMatch[2], assetId, assetMatch[4], assetMatch[5] ?? '')
       return
     }
 

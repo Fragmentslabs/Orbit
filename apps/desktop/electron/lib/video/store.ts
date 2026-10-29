@@ -105,6 +105,17 @@ export async function unregisterVideosFor(file: string): Promise<void> {
   if (changed) await persist()
 }
 
+/**
+ * Caminho do arquivo de um vídeo registrado (`null` se o id é inválido ou o
+ * registro não existe). É o que o servidor HTTP do companion usa para servir o
+ * vídeo por Range ao celular, que não tem o scheme orbit-video://.
+ */
+export async function videoFilePath(id: string): Promise<string | null> {
+  if (!SAFE_VIDEO_ID.test(id)) return null
+  const entry = (await load())[id]
+  return entry ? entry.path : null
+}
+
 /** O <video> busca posição e lê a duração por Range — sem isso não há barra. */
 export function registerVideoProtocol(): void {
   protocol.handle(VIDEO_SCHEME, async (request) => {

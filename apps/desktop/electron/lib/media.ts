@@ -998,6 +998,28 @@ export function registerArtifactProtocol(): void {
   protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
 }
 
+/**
+ * Bytes de um arquivo de artefato/documento — a página (.html), a miniatura
+ * (.png), o fonte (.md) ou uma renderização (.pdf/.docx).
+ *
+ * Serve o servidor HTTP do companion (o celular não tem o protocolo
+ * orbit-artifact://). Sai o arquivo COMO ESTÁ: a barra de rolagem que
+ * handleArtifactRequest injeta existe para casar com a moldura do iframe no
+ * desktop, e no WebView do celular ela só atrapalharia.
+ */
+export async function readArtifactAsset(
+  id: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (!SAFE_ARTIFACT_ID.test(id)) return null
+  try {
+    const buffer = await fsp.readFile(path.join(assetFileDir(id), id))
+    const ext = id.split('.').pop() ?? ''
+    return { buffer, contentType: ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream' }
+  } catch {
+    return null
+  }
+}
+
 /** Extrai o id de uma URL orbit-artifact:// (ou devolve a entrada se já for um id). */
 export function artifactIdFromUrl(url: string): string | null {
   let id = url

@@ -89,9 +89,9 @@ import {
   stopCompanionHttpServer,
   isCompanionHttpRunning,
   HTTP_PORT as COMPANION_HTTP_PORT,
-  createMediaToken,
   getWorkerConfigCache,
 } from './companion-http'
+import { createAssetToken } from './companion-token'
 
 const execFileAsync = promisify(execFile)
 
@@ -316,11 +316,11 @@ function mediaBaseUrl(client: ConnectedClient): string {
 /** A reescrita mora no companion-media.ts (puro e testado); aqui só entra a
  *  fabrica de token, que depende do segredo persistido. */
 const rewriteMessage = (msg: ChatMessage, base: string) =>
-  rewriteMessageMedia(msg, base, createMediaToken)
+  rewriteMessageMedia(msg, base, createAssetToken)
 const rewriteMessages = (msgs: ChatMessage[], base: string) =>
-  rewriteMessagesMedia(msgs, base, createMediaToken)
+  rewriteMessagesMedia(msgs, base, createAssetToken)
 const rewriteMediaPart = (part: MessagePart, base: string) =>
-  rewriteMediaPartOne(part, base, createMediaToken)
+  rewriteMediaPartOne(part, base, createAssetToken)
 
 /** Sessões com algo em execução no main: chat, loop (entre iterações também)
  *  e orquestra. */
