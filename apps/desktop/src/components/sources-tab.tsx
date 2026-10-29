@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  FileCode2,
   FileSpreadsheet,
   FileText,
   FileType2,
@@ -30,10 +31,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { documentOpensAsFile, type MaterialView } from "@shared/media"
+import { SOURCE_DND_MIME } from "@shared/chat"
+import { documentOpensAsFile, mediaMime, MEDIA_DND_MIME, type MaterialView } from "@shared/media"
 import { docsApi, documentApi, materialsApi, mediaApi, type SourceDocument } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
-import { usePanelStore } from "@/src/stores/panel-store"
+import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { Truncate } from "@/components/ui/truncated-text"
 
@@ -69,7 +71,11 @@ import { Truncate } from "@/components/ui/truncated-text"
  * disponível em toda conversa daquele repositório.
  */
 
-const ACCEPT = ".pdf,.docx,.xlsx,.xls,.ods,.csv,image/*,video/*,audio/*,.gif,.mp4,.mov,.m4v,.webm,.mkv,.avi"
+// Markdown e texto puro entram como fonte de TEXTO (ver addSessionDocument):
+// são o material de leitura mais comum num repositório, e sem eles a única
+// forma de trazer um .md era anexá-lo numa mensagem primeiro.
+const ACCEPT =
+  ".pdf,.docx,.xlsx,.xls,.ods,.csv,.md,.markdown,.mdx,.txt,image/*,video/*,audio/*,.gif,.mp4,.mov,.m4v,.webm,.mkv,.avi"
 
 /** Arrasto interno de um MATERIAL (foto, GIF, áudio, vídeo) entre as áreas. */
 const DRAG_MIME_MATERIAL = "application/x-orbit-material"
@@ -114,9 +120,33 @@ const KIND_ICONS = {
   web: Globe,
 } as const
 
-function KindIcon({ kind, className }: { kind: SourceDocument["kind"]; className?: string }) {
-  const Icon = KIND_ICONS[kind] ?? FileText
-  return <Icon className={className} />
+/** Markdown guardado como `text` (o caminho do .md anexado) — é um documento,
+ *  não um trecho colado, e o ícone diz isso. */
+const MARKDOWN_FILE = /\.(md|markdown|mdx)$/i
+
+/** Ícone do TIPO da fonte. O `.md` ganha ícone próprio porque é o caso em que
+ *  o conteúdo é texto mas o arquivo é um documento. */
+function docIcon(doc: SourceDocument) {
+  if (doc.kind === "text" && MARKDOWN_FILE.test(doc.filename)) return FileCode2
+  return KIND_ICONS[doc.kind] ?? FileText
+}
+
+/**
+ * Tipo da fonte como a lista o mostra.
+ *
+ * A extensão em maiúsculas quando o nome tem uma — é o rótulo que a pessoa
+ * reconhece ("PDF", "MD", "XLSX") e que faltava: a linha dizia só
+ * "src1 · 12 páginas", então um .md ao lado de um .pdf ficava indistinguível
+ * até abrir. Sem extensão (texto colado, site) vale a palavra do tipo.
+ */
+function sourceType(doc: SourceDocument): string | null {
+  // Um site não tem extensão: o "nome" dele é o título da página, e um título
+  // como "Exemplo.com" sairia rotulado "COM". Aí vale a palavra do tipo.
+  if (doc.kind === "web") return null
+  // Extensão de verdade: começa com letra. "Vendas 2026.1" terminaria em "1"
+  // e o tipo apareceria como um número solto.
+  const ext = /\.([a-z][a-z0-9]{0,4})$/i.exec(doc.filename.trim())?.[1]
+  return ext ? ext.toUpperCase() : null
 }
 
 /**
@@ -144,12 +174,19 @@ function DocumentThumb({ scope, doc }: { scope: string; doc: SourceDocument }) {
     }
   }, [scope, doc.id])
 
+  const Icon = docIcon(doc)
+
   return (
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/60 bg-background">
+    <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/60 bg-background">
       {src ? (
-        <img src={src} alt="" className="size-full object-cover object-top" draggable={false} />
+        <>
+          <img src={src} alt="" className="size-full object-cover object-top" draggable={false} />
+          {/* Com capa, o tipo ainda precisa ser lido — o selo é o mesmo desenho
+              do tile da galeria e do vídeo na linha de material. */}
+          <Icon className="absolute bottom-0.5 right-0.5 size-3 rounded-sm bg-background/85 p-0.5 text-foreground" />
+        </>
       ) : (
-        <KindIcon kind={doc.kind} className="size-4 text-muted-foreground" />
+        <Icon className="size-4 text-muted-foreground" />
       )}
     </div>
   )
@@ -203,13 +240,19 @@ function DocumentRow({
       : doc.kind === "docx"
         ? t("sources.unitBlocks", { count: doc.totalPages })
         : t("sources.unitPages", { count: doc.totalPages })
+  const type = sourceType(doc) ?? t(`sources.kind.${doc.kind}`)
 
   return (
     <li
       draggable
       onDragStart={(e) => {
+        // Dois destinos no MESMO arrasto, como no tile da galeria: soltar na
+        // outra área move a fonte (docs:setShared), soltar no composer anexa a
+        // referência a esta mensagem (ver SOURCE_DND_MIME). Quem lê o payload
+        // é o destino — a linha não precisa saber para onde está indo.
+        e.dataTransfer.setData(SOURCE_DND_MIME, JSON.stringify({ id: doc.id, name: doc.filename, kind: doc.kind, type }))
         e.dataTransfer.setData(DRAG_MIME, doc.id)
-        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.effectAllowed = "copyMove"
       }}
       className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
     >
@@ -231,6 +274,8 @@ function DocumentRow({
         
           <Truncate>
             <p className="truncate text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground/75">{type}</span>
+            {" · "}
             {doc.id} · {unit}
             {doc.sourceUrl ? ` · ${hostOf(doc.sourceUrl)}` : ""}
             {doc.sizeBytes ? ` · ${formatBytes(doc.sizeBytes)}` : ""}
@@ -296,8 +341,21 @@ function MaterialRow({
     <li
       draggable
       onDragStart={(e) => {
+        // O material É um item da galeria, então o arrasto para o composer é o
+        // MESMO da aba Mídia: a referência vai como anexo e nada é copiado.
+        // Sem isto, o material era o único arquivo da aba que não virava chip.
+        e.dataTransfer.setData(
+          MEDIA_DND_MIME,
+          JSON.stringify({
+            id: material.id,
+            name: material.name,
+            kind: material.kind,
+            mime: mediaMime({ id: material.id, kind: material.kind }),
+            url: material.thumbUrl ?? material.playUrl ?? undefined,
+          }),
+        )
         e.dataTransfer.setData(DRAG_MIME_MATERIAL, material.id)
-        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.effectAllowed = "copyMove"
       }}
       className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
     >
@@ -423,10 +481,15 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
    * openDocumentInPanel, o mesmo ponto que a galeria e o card da conversa
    * usam — e ele sabe mandar de volta ao visualizador o documento que foi
    * pedido como arquivo.
+   *
+   * No CHAT NOVO ainda não há sessão, e é justamente onde a fonte mais se abre
+   * — o material é trazido antes da primeira pergunta. A aba cai no balde
+   * órfão, o mesmo das outras do rascunho, e o main resolve o escopo do
+   * rascunho a partir do sessionId vazio (ver scopesOf em session-documents).
    */
   const abrir = useCallback(
     async (doc: SourceDocument) => {
-      if (!sessionId) return
+      const key = sessionId ?? ORPHAN_KEY
       const origem = await documentApi.forSource(doc.id)
       if (origem) {
         const info = await documentApi.info(origem.documentId)
@@ -438,11 +501,11 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
         if (info && !documentOpensAsFile(info)) {
           usePanelStore
             .getState()
-            .openDocumentTab(sessionId, { documentId: origem.documentId, title: origem.title })
+            .openDocumentTab(key, { documentId: origem.documentId, title: origem.title })
           return
         }
       }
-      openSourceTab(sessionId, { docId: doc.id, page: 1, title: doc.filename })
+      openSourceTab(key, { docId: doc.id, page: 1, title: doc.filename })
     },
     [sessionId, openSourceTab],
   )
@@ -693,7 +756,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
                 MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
                 onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
-                onOpen={() => sessionId && void abrir(doc)}
+                onOpen={() => void abrir(doc)}
                 onRemove={() => void remove(doc.id)}
               />
             ))}

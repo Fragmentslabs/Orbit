@@ -17,6 +17,7 @@ import { splitDocxPages } from "@shared/page-breaks"
 import { docsApi, documentApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
 import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selection"
+import { MessageResponse } from "@/src/components/ai/message"
 import { DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { locateLines } from "@/src/lib/document-quote"
 import { cn } from "@/lib/utils"
@@ -105,6 +106,17 @@ function resolveQuoteAnchor(range: Range): QuoteAnchor {
   }
 }
 
+/**
+ * A fonte é um arquivo Markdown guardado como texto (o .md anexado no chat ou
+ * promovido a fonte)? O `.txt` NÃO entra: ali o que se espera é texto puro, e
+ * passar ou não por um renderizador de Markdown não muda nada.
+ */
+const MARKDOWN_SOURCE = /\.(md|markdown|mdx)$/i
+
+function isMarkdownSource(doc: Pick<SourceText, "kind" | "filename"> | null | undefined): boolean {
+  return !!doc && doc.kind === "text" && MARKDOWN_SOURCE.test(doc.filename)
+}
+
 export function SourceViewer({
   sessionId,
   docId,
@@ -121,7 +133,14 @@ export function SourceViewer({
   const { t } = useTranslation()
   const [data, setData] = useState<SourceText | null>(null)
   const [loading, setLoading] = useState(true)
-  const [mode, setMode] = useState<"original" | "text">("text")
+  /**
+   * Como o documento é desenhado. "doc" existe para o que é Markdown (o .md
+   * anexado ou promovido): antes ele abria no Texto, uma lista de linhas
+   * numeradas em fonte monoespaçada — o conteúdo certo com a cara errada, que
+   * é o que fazia um .md parecer um Word quebrado. A fonte do Texto continua
+   * ali para citar trecho com página e linha.
+   */
+  const [mode, setMode] = useState<"original" | "text" | "doc">("text")
   const [query, setQuery] = useState("")
   const [matchIndex, setMatchIndex] = useState(0)
   const [findOpen, setFindOpen] = useState(false)
@@ -191,6 +210,14 @@ export function SourceViewer({
    * antes de pedir o arquivo: o documento existia e nunca era lido.
    */
   const viewSession = sessionId ?? ""
+  const markdown = isMarkdownSource(data)
+  /** Rótulo do tipo no cabeçalho — a extensão quando existe, senão a palavra
+   *  do tipo. Mesma regra da lista da aba Fontes. */
+  const typeLabel = data
+    ? (data.kind !== "web"
+        ? /\.([a-z][a-z0-9]{0,4})$/i.exec(data.filename.trim())?.[1]?.toUpperCase()
+        : null) ?? t(`sources.kind.${data.kind}`)
+    : null
 
   useEffect(() => {
     let alive = true
@@ -208,7 +235,11 @@ export function SourceViewer({
       setMode(
         result?.hasOriginal && !(citadoRef.current && result.originalKind === "docx")
           ? "original"
-          : "text",
+          : // Markdown abre como documento, MENOS vindo de uma citação: a
+            // citação aponta página e linha, e só o Texto sabe marcar a linha.
+            isMarkdownSource(result) && !citadoRef.current
+            ? "doc"
+            : "text",
       )
     })
   return () => {
@@ -282,6 +313,28 @@ export function SourceViewer({
     }
     return out
   }, [data, page])
+
+  /**
+   * O Markdown inteiro para o modo Documento.
+   *
+   * Junta as páginas sintéticas (o `.md` é paginado para a LEITURA do modelo,
+   * ~3k caracteres por página) com uma linha em branco entre elas: sem isso o
+   * último parágrafo de uma página colaria no primeiro da seguinte, e um
+   * documento com página quebrada no meio de uma tabela sairia errado.
+   */
+  const markdownBody = useMemo(
+    () =>
+      data
+        ? data.pages
+            .map((p) => p.lines.join("\n"))
+            // `\pagebreak` é instrução do renderizador de documentos, não
+            // conteúdo: no visualizador ele sairia como texto solto no meio da
+            // prosa (a página sintética da fonte já não corresponde a ele).
+            .join("\n\n")
+            .replace(/^[ \t]*\\pagebreak[ \t]*$/gm, "")
+        : "",
+    [data],
+  )
 
   useLayoutEffect(() => {
     if (!data || loading || mode !== "text") return
@@ -363,6 +416,9 @@ export function SourceViewer({
           */}
           <Truncate>
             <p className="truncate text-[11px] text-muted-foreground">
+            {/* O TIPO antes do id: "src1" não diz o que é o arquivo, e é a
+                primeira coisa que se procura aqui. */}
+            {typeLabel && <span className="font-medium text-foreground/75">{typeLabel} · </span>}
             {data?.id ?? docId}
             {data?.movedFrom ? ` · ${t("sources.movedFrom", { id: data.movedFrom })}` : ""}
             {data ? ` · ${t("sources.unitPages", { count: data.totalPages })}` : ""}
@@ -370,9 +426,9 @@ export function SourceViewer({
           </Truncate>
         </div>
 
-        {data?.hasOriginal && (
+        {data && (data.hasOriginal || markdown) && (
           <div className="flex shrink-0 items-center rounded-md border border-border p-0.5">
-            {(["original", "text"] as const).map((option) => (
+            {(markdown ? (["doc", "text"] as const) : (["original", "text"] as const)).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -384,7 +440,13 @@ export function SourceViewer({
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {t(option === "original" ? "sources.modeOriginal" : "sources.modeText")}
+                {t(
+                  option === "original"
+                    ? "sources.modeOriginal"
+                    : option === "doc"
+                      ? "sources.modeDocument"
+                      : "sources.modeText",
+                )}
               </button>
             ))}
           </div>
@@ -421,7 +483,13 @@ export function SourceViewer({
         <Hint label={t("sources.find")}>
           <button
             type="button"
-            onClick={() => setFindOpen((open) => !open)}
+            onClick={() => {
+              // Localizar trabalha sobre as LINHAS numeradas: no Markdown
+              // renderizado não há o que grifar, então a busca leva junto para
+              // o modo Texto em vez de abrir uma caixa que não acha nada.
+              if (!findOpen && mode === "doc") setMode("text")
+              setFindOpen((open) => !open)
+            }}
             className={cn(iconButton, findOpen && "bg-primary/15 text-primary")}
           >
             <Search className="size-3.5" />
@@ -600,6 +668,25 @@ export function SourceViewer({
             docName={data.filename || docId}
             textPages={data.pages}
           />
+        ) : mode === "doc" ? (
+          // Markdown como documento: o mesmo desenho da aba de documento do
+          // agente, porque é o mesmo conteúdo. A citação aqui é o TEXTO (sem
+          // resolve): o renderizado não tem página nem linha, e inventar um
+          // endereço mandaria o clique para o trecho errado — quem precisa da
+          // linha exata usa o modo Texto.
+          <div
+            ref={textRef}
+            className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-4 text-sm text-foreground"
+          >
+            <QuoteSelection
+              containerRef={textRef}
+              kind="source"
+              docId={data.id || docId}
+              name={data.filename || docId}
+              readAloud
+            />
+            <MessageResponse>{markdownBody}</MessageResponse>
+          </div>
         ) : (
           <div
             ref={textRef}

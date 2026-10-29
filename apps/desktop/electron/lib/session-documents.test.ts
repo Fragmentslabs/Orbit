@@ -192,6 +192,33 @@ describe('fontes no modo código', () => {
     await docs.setDraftFolder(null)
   })
 
+  it('clique numa fonte do chat novo: sessionId vazio resolve o rascunho', async () => {
+    // A aba Fontes do rascunho vive sem sessão, e o painel abre a fonte com
+    // sessionId vazio. Antes isso virava "documento não encontrado": a lista
+    // mostrava o arquivo e o clique nele não abria nada.
+    const rascunho = await docs.addSessionText('draft', 'Notas do chat novo', 'Primeira linha', false)
+    expect(rascunho.ok).toBe(true)
+    if (!rascunho.ok) return
+
+    const leitura = await docs.readSessionDocument('', rascunho.doc.id)
+    expect(leitura?.extracted.pages.map((p) => p.text).join('\n')).toContain('Primeira linha')
+  })
+
+  it('.md/.txt entram pela aba Fontes como fonte de texto; binário disfarçado não', async () => {
+    // Sessão própria: as fontes dela não entram na conta dos testes de pasta.
+    await persistSession('convmd', null, 'chat')
+    const md = await docs.addSessionDocument('convmd', 'arquitetura.md', Buffer.from('# Título\n\nTexto.'), false)
+    expect(md.ok).toBe(true)
+    if (!md.ok) return
+    expect(md.doc.kind).toBe('text')
+    // O conteúdo passa pelo mesmo leitor das outras fontes.
+    const leitura = await docs.readSessionDocument('convmd', md.doc.id)
+    expect(leitura?.extracted.pages[0]?.text).toContain('# Título')
+
+    const binario = await docs.addSessionDocument('convmd', 'falsa.md', Buffer.from([0, 1, 2, 3]), false)
+    expect(binario.ok).toBe(false)
+  })
+
   it('apagar a pasta leva as fontes dela, e só elas', async () => {
     await docs.addSessionText('conva', 'Só desta conversa', 'texto', false)
     await docs.deleteFolderDocuments(FOLDER)

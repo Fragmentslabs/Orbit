@@ -3044,6 +3044,13 @@
     "remove": "Remove source",
     "tooBig": "{{name}}: larger than the {{size}} limit.",
     "truncated": "cut at the size limit",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "Word",
+      "spreadsheet": "Spreadsheet",
+      "text": "Text",
+      "web": "Website"
+    },
     "unitPages_one": "{{count}} page",
     "unitPages_other": "{{count}} pages",
     "unitSheets_one": "{{count}} sheet",
@@ -3074,6 +3081,7 @@
     "openInPanel": "Open in the panel",
     "modeOriginal": "Original",
     "modeText": "Text",
+    "modeDocument": "Document",
     "find": "Find in the document",
     "findPlaceholder": "Find…",
     "truncatedView": "Showing {{shown}} of {{total}} pages — the document is too large to scroll in one go. Use Original to see the rest.",

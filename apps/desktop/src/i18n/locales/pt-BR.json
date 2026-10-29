@@ -3044,6 +3044,13 @@
     "remove": "Remover fonte",
     "tooBig": "{{name}}: maior que o limite de {{size}}.",
     "truncated": "cortado no limite",
+    "kind": {
+      "pdf": "PDF",
+      "docx": "Word",
+      "spreadsheet": "Planilha",
+      "text": "Texto",
+      "web": "Site"
+    },
     "unitPages_one": "{{count}} página",
     "unitPages_other": "{{count}} páginas",
     "unitSheets_one": "{{count}} aba",
@@ -3074,6 +3081,7 @@
     "openInPanel": "Abrir no painel",
     "modeOriginal": "Original",
     "modeText": "Texto",
+    "modeDocument": "Documento",
     "find": "Localizar no documento",
     "findPlaceholder": "Localizar…",
     "truncatedView": "Mostrando {{shown}} de {{total}} páginas — o documento é grande demais para rolar inteiro de uma vez. Use o Original para ver o resto.",

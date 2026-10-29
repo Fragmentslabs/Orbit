@@ -107,7 +107,11 @@ interface Scopes {
  * pastas — mesmo motivo do resolveFolderId das tools de documento.
  */
 async function scopesOf(sessionId: string): Promise<Scopes> {
-  const session = SAFE_SCOPE.test(sessionId) ? sessionId : ''
+  // Sem sessão ainda: é o RASCUNHO. O painel abre a fonte de um chat novo com
+  // sessionId vazio (a aba vive no balde órfão, que não carrega sessão), e sem
+  // este desvio o visualizador não achava o documento que a própria aba Fontes
+  // acabou de listar — a fonte existia e o clique nela abria "não encontrada".
+  const session = SAFE_SCOPE.test(sessionId) ? sessionId : sessionId === '' ? DRAFT_SCOPE : ''
   const folderId = await documentFolderId(sessionId)
   return {
     session,
@@ -868,6 +872,22 @@ export async function sessionDocumentThumb(sessionId: string, docId: string): Pr
   return asDataUrl(thumb)
 }
 
+/**
+ * Arquivo de texto puro que a aba Fontes aceita como documento de TEXTO.
+ *
+ * Fora de `EXTENSIONS` de propósito: `.md`/`.txt` não são documentos
+ * "extraíveis" para o `read` do modo código, que tem de continuar entregando
+ * esses arquivos crus. Aqui o destino é outro — virar fonte paginada da
+ * conversa —, e o único requisito é o conteúdo ser texto de verdade.
+ */
+const TEXT_SOURCE_EXT = /\.(md|markdown|mdx|txt)$/i
+
+/** Um Buffer é texto legível? NUL é o sinal mais confiável de binário. */
+function looksLikeText(bytes: Buffer): boolean {
+  if (bytes.includes(0)) return false
+  return true
+}
+
 /** Adiciona um arquivo pela aba Fontes, sem passar por uma mensagem. */
 export async function addSessionDocument(
   sessionId: string,
@@ -875,7 +895,9 @@ export async function addSessionDocument(
   bytes: Buffer,
   shared: boolean,
 ): Promise<{ ok: true; doc: SessionDocument } | { ok: false; error: string }> {
-  const kind = documentKindOf(filename)
+  const documentKind = documentKindOf(filename)
+  const kind: DocumentKind | null =
+    documentKind ?? (TEXT_SOURCE_EXT.test(filename) && looksLikeText(bytes) ? 'text' : null)
   if (!kind) {
     return { ok: false, error: await t('sources.error.unsupportedKind', { filename }) }
   }
