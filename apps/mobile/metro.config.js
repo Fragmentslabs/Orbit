@@ -17,6 +17,11 @@ config.resolver.nodeModulesPaths = [
 // Metro trata o require() como módulo e falha com "Unable to resolve".
 config.resolver.assetExts = [...config.resolver.assetExts, "riv"];
 
+// O bundle do mermaid (3,4 MB) vai como asset, não como módulo: é lido só
+// quando um diagrama aparece e vai embutido no WebView. Importá-lo como JS faria
+// o Metro transpilar e embarcar tudo no bundle principal.
+config.resolver.assetExts = [...config.resolver.assetExts, "txt"];
+
 // Apply withNativewind FIRST so its CSS resolution chain is established,
 // then layer our custom lucide redirect on top.
 const nativeWindConfig = withNativewind(config);

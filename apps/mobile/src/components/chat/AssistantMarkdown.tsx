@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react'
 import { Linking, View, Text } from 'react-native'
-import { parseMemoryHref } from '@orbit/shared'
+import { parseMemoryHref, parseOrbitUi, type OrbitUiBlock } from '@orbit/shared'
 import { CodeBlock } from '~/components/chat/CodeBlock'
-import { NavCard } from '~/components/chat/NavCard'
+import { MermaidBlock } from '~/components/chat/MermaidBlock'
+import { OrbitUiBlocks } from '~/components/chat/OrbitUi'
 import { MemoryChip } from '~/components/memories/MemoryChip'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -41,7 +42,8 @@ type Block =
   | { type: 'hr' }
   | { type: 'blockquote'; segments: InlineSegment[] }
   | { type: 'table'; headers: InlineSegment[][]; rows: InlineSegment[][][] }
-  | { type: 'nav'; destino: string; nota?: string }
+  /** Blocos do fence orbit-ui (stats, chart, inputs, nav…), já parseados. */
+  | { type: 'orbit-ui'; blocks: OrbitUiBlock[]; pending?: boolean }
 
 /** Fecha fences/ênfases incompletas para o parse não quebrar no meio do stream. */
 function stabilizeMarkdown(text: string): string {
@@ -105,27 +107,31 @@ function listDepth(indent: string): number {
 }
 
 /**
- * Lê as linhas `{"type":"nav",…}` de um fence orbit-ui. Os outros tipos do
- * orbit-ui não têm renderer aqui ainda e são ignorados — desenhar o cartão de
- * navegação é o que tira o JSON cru da tela.
+ * ```mermaid — tolerando sufixo (`mermaid title="Fluxo"`), porque o modelo às
+ * vezes escreve assim e um diagrama que não desenha por causa de um espaço é
+ * um diagrama perdido.
  */
-function parseNavFence(codeLines: string[]): { destino: string; nota?: string }[] {
-  const items: { destino: string; nota?: string }[] = []
-  for (const raw of codeLines) {
-    const line = raw.trim()
-    if (!line.startsWith('{')) continue
-    try {
-      const parsed = JSON.parse(line) as { type?: unknown; destino?: unknown; nota?: unknown }
-      if (parsed.type !== 'nav' || typeof parsed.destino !== 'string') continue
-      items.push({
-        destino: parsed.destino,
-        nota: typeof parsed.nota === 'string' ? parsed.nota : undefined,
-      })
-    } catch {
-      /* linha ainda chegando no stream — o parse fecha quando ela completar */
-    }
-  }
-  return items
+function isMermaidFence(language: string): boolean {
+  return language.trim().toLowerCase().split(/\s+/)[0] === 'mermaid'
+}
+
+/**
+ * Lê um fence ```orbit-ui com o MESMO parser do desktop (`parseOrbitUi`, do
+ * shared) e devolve os blocos prontos para o `OrbitUiBlocks`, que desenha cada
+ * tipo como componente do chat — o `nav` inclusive, com o mesmo NavCard de
+ * antes.
+ *
+ * Tudo vai num grupo só porque as entradas do fence compartilham um escopo: um
+ * `{capital}` citado no fim precisa ver o slider que apareceu no começo, mesmo
+ * que exista um cartão no meio.
+ *
+ * Linha completa e válida vira bloco; inválida (ou ainda chegando no stream) é
+ * descartada pelo parser — a mensagem nunca quebra por causa de um JSON torto.
+ */
+function parseOrbitFence(codeLines: string[], incomplete: boolean): Block | null {
+  const { blocks, pending } = parseOrbitUi(codeLines.join('\n'), incomplete)
+  if (blocks.length === 0) return null
+  return { type: 'orbit-ui', blocks, pending }
 }
 
 function parseMarkdown(text: string): Block[] {
@@ -186,13 +192,13 @@ function parseMarkdown(text: string): Block[] {
         codeLines.push(lines[i])
         i++
       }
-      // orbit-ui: o cartão vira componente. Um fence sem `nav` nenhum continua
-      // caindo no code block de sempre — os outros tipos ainda não são
-      // desenhados aqui, e trocar isso é uma decisão à parte.
+      // orbit-ui: os blocos viram componentes do chat (ver OrbitUiBlocks). Um
+      // fence que não parseia NADA — JSON inválido, tipo desconhecido — continua
+      // caindo no code block, que é onde o autor consegue ver o que mandou.
       if (language === 'orbit-ui') {
-        const navItems = parseNavFence(codeLines)
-        if (navItems.length > 0) {
-          for (const item of navItems) blocks.push({ type: 'nav', ...item })
+        const ui = parseOrbitFence(codeLines, !closed)
+        if (ui) {
+          blocks.push(ui)
           continue
         }
       }
@@ -430,6 +436,18 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
               />
             )
           case 'codeblock':
+            // ```mermaid vira diagrama desenhado. O que não desenha — meio
+            // caminho no stream, sem rede para a lib, sintaxe inválida —
+            // continua caindo no CodeBlock, que é onde o autor vê o que mandou.
+            if (isMermaidFence(block.language)) {
+              return (
+                <MermaidBlock
+                  key={i}
+                  code={block.code}
+                  streaming={streaming || block.incomplete}
+                />
+              )
+            }
             return (
               <CodeBlock
                 key={i}
@@ -510,8 +528,8 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
             )
           case 'hr':
             return <View key={i} style={{ height: 1, marginVertical: 4, backgroundColor: tokens.border }} />
-          case 'nav':
-            return <NavCard key={i} destino={block.destino} nota={block.nota} />
+          case 'orbit-ui':
+            return <OrbitUiBlocks key={i} blocks={block.blocks} pending={block.pending} />
           default:
             return null
         }
