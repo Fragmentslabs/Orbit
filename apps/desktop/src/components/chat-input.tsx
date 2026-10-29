@@ -316,10 +316,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           }
           // Enter durante execução: com texto, enfileira; sem texto, não faz
           // NADA — parar é intencional (botão de stop ou Tab+Enter nele);
-          // nunca "resposta em branco" para cancelar.
+          // nunca "resposta em branco" para cancelar. ANEXO conta como
+          // conteúdo: texto grande colado vira arquivo e deixa o campo vazio.
           if (busy) {
             const text = message.text?.trim()
-            if (!text) return
+            if (!text && files.length === 0) return
             if (sessionId) {
               enqueueForSend(sessionId, withReplyPrefix(replyKey, resolveText(text)), buildOptions(), mode, { files })
               clearInputDraft(sessionId)
@@ -327,7 +328,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             return
           }
           const text = message.text?.trim()
-          if (!text) return
+          // Sem texto mas COM anexo ainda é mensagem: o chip sozinho é conteúdo.
+          // Continua barrando o Enter em branco, que é o caso que a trava existe
+          // para cobrir.
+          if (!text && files.length === 0) return
           if (sessionId) clearInputDraft(sessionId)
           // A citação é prependada DEPOIS do comando "/" ser resolvido: na
           // frente dela, o texto deixaria de começar com "/" e o comando

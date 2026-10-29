@@ -2727,6 +2727,7 @@
     "count_one": "{{count}} mensagem na fila",
     "count_other": "{{count}} mensagens na fila",
     "badge": "Fila",
+    "attachmentOnly": "Anexo sem texto",
     "copy": "Copiar mensagem",
     "sendFirst": "Enviar primeiro",
     "edit": "Editar mensagem",

@@ -84,7 +84,9 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                   <ListPlus className="size-3.5 shrink-0 text-muted-foreground" />
                 )}
                 <span className="line-clamp-1 text-muted-foreground">
-                  {msg.text}
+                  {/* Mensagem só de anexo não tem texto: o nome do arquivo é o
+                      que identifica o item na fila. */}
+                  {msg.text || msg.files?.[0]?.filename || t("queue.attachmentOnly")}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-1">

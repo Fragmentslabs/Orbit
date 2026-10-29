@@ -43,10 +43,10 @@ interface SendButtonGroupProps {
    */
   onOptionsBlocked?: () => void;
   /**
-   * No lugar do "Enviar" quando o campo está vazio e o agente parado (o botão
-   * de chamada). Com `emptySlotAlways` ele fica em qualquer caso — em chamada o
-   * slot é o "desligar", que não pode sumir porque alguém digitou ou o agente
-   * está respondendo.
+   * No lugar do "Enviar" quando não há nada para enviar (campo vazio e nenhum
+   * anexo) e o agente está parado (o botão de chamada). Com `emptySlotAlways`
+   * ele fica em qualquer caso — em chamada o slot é o "desligar", que não pode
+   * sumir porque alguém digitou ou o agente está respondendo.
    */
   emptySlot?: React.ReactNode;
   emptySlotAlways?: boolean;
@@ -75,6 +75,12 @@ export function SendButtonGroup({
   const { textInput, attachments } = usePromptInputController();
   const text = textInput.value.trim();
   const hasText = text.length > 0;
+  // Anexo TAMBÉM é conteúdo. Com texto grande colado virando arquivo (ou um PDF
+  // anexado sem comentário), o campo fica VAZIO e a mensagem ainda tem o que
+  // enviar: onde antes se lia "sem texto", lê-se "sem texto e sem anexo" —
+  // senão o Enviar nasce desabilitado e o chip não sai daqui.
+  const hasAttachments = attachments.files.length > 0;
+  const hasContent = hasText || hasAttachments;
 
   /**
    * Envia o texto + anexos do input. Converte blob URLs → data URLs ANTES de
@@ -85,7 +91,7 @@ export function SendButtonGroup({
   const withAttachments = useCallback(
     async (fn: (text: string, files?: QueueAttachment[]) => void) => {
       const current = textInput.value.trim();
-      if (!current) return;
+      if (!current && attachments.files.length === 0) return;
       const files = await blobUrlsToDataUrls(attachments.files);
       fn(current, files.length > 0 ? files : undefined);
       textInput.clear();
@@ -96,7 +102,7 @@ export function SendButtonGroup({
 
   const handleScheduleOpen = useCallback(async () => {
     const current = textInput.value.trim();
-    if (!current) return;
+    if (!current && attachments.files.length === 0) return;
     const files = await blobUrlsToDataUrls(attachments.files);
     setPendingFiles(files);
     setPendingText(current);
@@ -106,7 +112,8 @@ export function SendButtonGroup({
 
   const handleScheduleConfirm = useCallback(
     (timestamp: number) => {
-      if (!pendingText) return;
+      // null = não há nada pendente; "" é uma mensagem só de anexo.
+      if (pendingText === null) return;
       onSchedule(pendingText, timestamp, pendingFiles ?? undefined);
       // A conversão já aconteceu no open — seguro revogar os blob URLs agora
       if (pendingFiles && pendingFiles.length > 0) attachments.clear();
@@ -130,11 +137,11 @@ export function SendButtonGroup({
     [onOptionsBlocked],
   );
 
-  // Campo vazio com um botão próprio para esse caso (a chamada de voz).
-  if (emptySlot && (emptySlotAlways || (!hasText && !busy))) return <>{emptySlot}</>;
+  // Nada para enviar, com um botão próprio para esse caso (a chamada de voz).
+  if (emptySlot && (emptySlotAlways || (!hasContent && !busy))) return <>{emptySlot}</>;
 
-  // Apenas botão de parar (sem texto, agente rodando)
-  if (busy && !hasText) {
+  // Apenas botão de parar (nada para enviar, agente rodando)
+  if (busy && !hasContent) {
     return (
       <InputGroupButton
         aria-label={t("send.stop")}
@@ -150,8 +157,8 @@ export function SendButtonGroup({
     );
   }
 
-  // Agente rodando mas com texto no input: "Adicionar à fila" + dropdown
-  if (busy && hasText) {
+  // Agente rodando mas com conteúdo no input: "Adicionar à fila" + dropdown
+  if (busy && hasContent) {
     return (
       <>
         <div className="flex items-center -space-x-px">
@@ -214,7 +221,7 @@ export function SendButtonGroup({
           size="sm"
           variant="default"
           type="submit"
-          disabled={disabled || !text}
+          disabled={disabled || !hasContent}
           className="rounded-r-none h-7 border border-primary !transition-colors"
         >
           <Send className="size-4 mr-1" />
@@ -232,7 +239,7 @@ export function SendButtonGroup({
           <SelectTrigger
             size="default"
             className="rounded-l-none !h-7 gap-0 px-1.5 border-primary bg-primary text-primary-foreground hover:bg-primary/90 shadow dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
-            disabled={!text}
+            disabled={!hasContent}
             aria-label={t("send.moreOptions")}
           >
             <SelectValue />

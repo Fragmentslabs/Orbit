@@ -2727,6 +2727,7 @@
     "count_one": "{{count}} message queued",
     "count_other": "{{count}} messages queued",
     "badge": "Queued",
+    "attachmentOnly": "Attachment only",
     "copy": "Copy message",
     "sendFirst": "Send first",
     "edit": "Edit message",
