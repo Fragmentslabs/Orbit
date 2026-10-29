@@ -176,8 +176,11 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
 
   return (
     // z-20: o `@container` cria stacking context (layout containment), então
-    // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat
-    <div className="@container relative z-20 flex min-w-0 items-center gap-2 px-1 pb-2">
+    // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat.
+    // `bg-sidebar` + `shrink-0`: a conversa aqui não tem véu, e sem fundo
+    // próprio o que passasse por baixo do header (mensagem rolando, card)
+    // aparecia atrás do título e do chip de pasta.
+    <div className="@container relative z-20 flex min-w-0 shrink-0 items-center gap-2 bg-sidebar px-1 pb-2">
       <Truncate text={session.title}>
         <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
       </Truncate>
