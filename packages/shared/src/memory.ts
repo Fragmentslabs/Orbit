@@ -85,12 +85,6 @@ export function isCodeContext(memory: Pick<Memory, "kind" | "category">): boolea
   return memory.kind === "project" || memory.category === "learning"
 }
 
-/**
- * Scope padrão de uma memória que nasceu sem escopo explícito: ela segue o modo
- * em que foi criada. `general` é a exceção histórica — preferência de trabalho
- * sempre valeu nos dois modos —, então continua em `both` para que memória
- * antiga sem o campo não suma de um deles.
- */
 export function defaultScopeOf(kind: MemoryKind, category?: ProjectCategory): MemoryScope {
   if (kind === "project" || category === "learning") return "code"
   if (kind === "general") return "both"
@@ -150,6 +144,11 @@ export interface Memory {
   expiresAt?: number | null
   /** id da memória que originou esta via promoção */
   promotedFrom?: string
+  /**
+   * Proposta da rotina de memória: nasce para ser revisada e não entra no
+   * prompt, na busca nem na recuperação enquanto não for aceita.
+   */
+  proposed?: boolean
   // Somente quando kind === "project":
   projectId?: string
   projectName?: string
@@ -165,9 +164,9 @@ export interface Memory {
   /** Subprojeto dentro do projeto (ex.: "front", "back") — undefined = escopo raiz */
   subproject?: string
   /**
-   * Obrigatória quando kind === "project". Também aceita kind === "general"
-   * com valor "learning" — lição reutilizável entre projetos (ex.: workaround
-   * de framework), não presa a um projectId.
+   * Obrigatória quando kind === "project". Também vale para kind === "general":
+   * "learning" descreve uma lição técnica; preference, convention, decision e
+   * standard descrevem como a pessoa trabalha.
    */
   category?: ProjectCategory
   /** Área de conhecimento (gerada pelo /init) — base do grafo de memórias */

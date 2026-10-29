@@ -455,6 +455,18 @@
     "searchPlaceholder": "Search memories…",
     "allProjects": "All",
     "allProjectsFull": "All projects",
+    "allCategories": "All categories",
+    "routine": {
+      "title": "Memory routine",
+      "off": "Off",
+      "daily": "Daily — capture only",
+      "weekly": "Weekly — consolidate only",
+      "dailyWeekly": "Daily + weekly",
+      "model": "Uses the auxiliary model: {{model}}",
+      "needsModel": "Pick an auxiliary model in Preferences → General.",
+      "accept": "Keep",
+      "discard": "Discard"
+    },
     "tabList": "List",
     "tabGraph": "Graph",
     "emptyTitleQuery": "No memories found",

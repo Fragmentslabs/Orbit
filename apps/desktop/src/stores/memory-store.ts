@@ -19,7 +19,7 @@ interface MemoryState {
   initialize: () => Promise<void>
   refresh: () => Promise<void>
   openDoc: (id: string) => Promise<string | null>
-  update: (id: string, patch: Partial<Pick<Memory, "text" | "tags" | "weight">>) => Promise<void>
+  update: (id: string, patch: Partial<Pick<Memory, "text" | "tags" | "weight" | "proposed">>) => Promise<void>
   remove: (id: string) => Promise<void>
   promote: (id: string) => Promise<void>
   link: (sourceId: string, targetId: string) => Promise<void>

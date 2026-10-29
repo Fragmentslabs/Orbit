@@ -33,6 +33,13 @@ export type AutoCompactMode = 'auto' | '75' | '50'
 /** Onde abrir links clicados no app. */
 export type LinkTarget = 'integrated' | 'external'
 
+/**
+ * Rotina de memória (tela de Memórias). A captura diária lê as conversas do dia
+ * com o modelo auxiliar e propõe até 3 memórias; a consolidação semanal promove
+ * as que se repetiram. Desligada por padrão: consome tokens.
+ */
+export type MemoryRoutineMode = 'off' | 'daily' | 'weekly' | 'daily+weekly'
+
 /** Por quanto tempo o navegador integrado guarda cookies e logins. */
 export type CookieRetention = 'persistent' | 'until-quit'
 
@@ -61,6 +68,8 @@ export interface AppSettings {
   auxModel: { providerId: string; modelId: string } | null
   /** Raciocínio do modelo auxiliar. null = sem raciocínio. */
   auxReasoning: ReasoningConfig | null
+  /** Rotina de memória — rodada pelo scheduler, usando o modelo auxiliar. */
+  memoryRoutine: MemoryRoutineMode
   /**
    * Como o Orbit chama o usuário ("Olá, Desknik"). Aprendido na conversa —
    * nunca lido do sistema operacional — e editável nas Preferências. null =
@@ -148,6 +157,8 @@ export function clampSidebarWidth(width: number): number {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   auxModel: null,
   auxReasoning: null,
+  // Desligada: gasta tokens e o valor só se prova no uso.
+  memoryRoutine: 'off',
   // Sem nome até o usuário contar: a tela inicial saúda sem ele.
   userName: null,
   // Sem estilo e sem ajuste: o prompt fica exatamente como era antes da opção.
@@ -297,6 +308,7 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
   return {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
+    memoryRoutine: oneOf(value.memoryRoutine, ['off', 'daily', 'weekly', 'daily+weekly'], d.memoryRoutine),
     userName: userName || null,
     persona: (() => {
       const p = (value.persona && typeof value.persona === 'object' ? value.persona : {}) as Partial<AppSettings['persona']>

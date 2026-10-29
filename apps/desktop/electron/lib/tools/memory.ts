@@ -141,6 +141,8 @@ function createListTool(projectIdOf?: () => Promise<string>) {
       const filtradas = todas
         .filter((m) => {
           if (m.expiresAt != null && m.expiresAt < agora) return false
+          // Proposta da rotina ainda não é memória: não aparece para o agente.
+          if (m.proposed) return false
           if (kind && m.kind !== kind) return false
           if (category && m.category !== category) return false
           // Escopo do projeto quando a ferramenta roda no modo código: sem
@@ -231,7 +233,7 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   return {
     memory_save: tool({
       description:
-        'Saves a lasting memory about the user. NOT saving is the default — only use for genuinely useful information. kind: "seasonal" (expires; recent activities), "core" (permanent; personal facts), "general" (permanent; preferences that apply in all modes). Fill the search fields (title, summary, keywords, concepts) — they are what makes the memory findable later, and they never say anything the text does not.',
+        'Saves a lasting memory about the user. NOT saving is the default — only use for genuinely useful information. kind: "seasonal" (expires; recent activities), "core" (permanent; personal facts), "general" (permanent; a preference or rule with no specific context — not tied to a project). Fill the search fields (title, summary, keywords, concepts) — they are what makes the memory findable later, and they never say anything the text does not.',
       inputSchema: z.object({
         text: z.string().describe('The memory, as a short, self-contained sentence'),
         kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Default: seasonal'),
@@ -240,8 +242,16 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
           .optional()
           .describe(
             'Default "chat": the memory only exists in chat mode. Use "both" when it is about HOW TO WORK ' +
-            'and must also guide code sessions (e.g. "offer an artifact before implementing"). Personal ' +
-            'facts and conversational style stay "chat". Only meaningful for kind="general".',
+            'and must also guide code sessions (e.g. "offer an artifact before implementing"). ' +
+            'Conversational style stays "chat". Only meaningful for kind="general".',
+          ),
+        category: z
+          .enum(['preference', 'convention', 'decision', 'standard'])
+          .optional()
+          .describe(
+            'Only for kind="general": what kind of knowledge it is — preference (how he likes things ' +
+            'done), convention (a rule of the house), decision (a choice already made), standard ' +
+            '(a checklist to follow).',
           ),
         weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
         tags: z.array(z.string()).optional().describe('Keywords for future search'),
@@ -249,7 +259,7 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }. Default: related'),
         ...ENRICHMENT.shape,
       }),
-      execute: async ({ text, kind, scope, weight, tags, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
+      execute: async ({ text, kind, scope, category, weight, tags, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
         const resolvedKind = kind ?? 'seasonal'
         const result = await memory.save({
           text,
@@ -257,6 +267,8 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
           // Só "general" escolhe onde vale: core e seasonal são conversa por
           // definição, e o padrão do kind já os prende ao chat.
           scope: resolvedKind === 'general' ? (scope ?? 'chat') : undefined,
+          // E só ele carrega categoria: os outros dois não são conhecimento.
+          category: resolvedKind === 'general' ? category : undefined,
           weight,
           tags,
           relatedIds,
@@ -307,10 +319,14 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
           .enum(['chat', 'both'])
           .optional()
           .describe('Move a general memory to "both" when it turned out to guide code sessions too.'),
+        category: z
+          .enum(['preference', 'convention', 'decision', 'standard'])
+          .optional()
+          .describe('Reclassify a general memory (e.g. a preference that is really a decision).'),
       }),
-      execute: async ({ id, text, addTags, tags, weight, kind, scope }) => {
+      execute: async ({ id, text, addTags, tags, weight, kind, scope, category }) => {
         try {
-          const updated = await memory.revise(id, { text, addTags, tags, weight, kind, scope })
+          const updated = await memory.revise(id, { text, addTags, tags, weight, kind, scope, category })
           if (!updated) return `Memory #${id} not found.`
           return `Memory #${id} updated: ${describe(updated)}`
         } catch (err) {
@@ -420,8 +436,9 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           .optional()
           .describe(
             'Required when kind=project (preference | convention | structure | decision | context | database | standard). ' +
-            '"context" expires (weight <= 0.3). When kind=general, only "learning" is accepted: a technology-level ' +
-            'lesson (framework gotcha, library workaround) with NO reference to this project domain.',
+            '"context" expires (weight <= 0.3). For kind=general: "learning" for a technology-level lesson ' +
+            '(framework gotcha, library workaround) with no reference to this project domain; preference, ' +
+            'convention, decision or standard for how the user works.',
           ),
         area: z
           .enum([
@@ -454,9 +471,6 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
           return 'Error: project memories require the category field (preference | convention | structure | decision | context | database | standard).'
-        }
-        if (resolvedKind === 'general' && category && category !== 'learning') {
-          return 'Error: kind=general only accepts category="learning" (or no category).'
         }
         if (resolvedKind === 'project') {
           const missingParent = await requireParent(await projectId(), relatedIds)

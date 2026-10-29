@@ -8,6 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Memory } from '@shared/memory'
+import { consolidate } from './routine'
 
 const store = new Map<string, Memory>()
 const docs = new Map<string, string>()
@@ -168,6 +169,29 @@ describe('memory_search', () => {
 describe('escopo entre modos', () => {
   const ids = (list: Memory[]) => list.map((m) => m.id)
 
+  it('a categoria vale para general e para a proposta sazonal; core nunca', async () => {
+    const general = await service.save({ text: 'Prefere commits pequenos', kind: 'general', category: 'preference' })
+    const core = await service.save({ text: 'Tem um gato chamado Tofu', kind: 'core', category: 'preference' })
+    const seasonal = await service.save({ text: 'Mexeu no layout do painel', kind: 'seasonal', category: 'preference' })
+    expect(store.get(general.id)!.category).toBe('preference')
+    expect(store.get(core.id)!.category).toBeUndefined()
+    // A proposta da rotina nasce com a categoria; ela sobrevive à promoção.
+    expect(store.get(seasonal.id)!.category).toBe('preference')
+  })
+
+  it('proposta da rotina não entra no prompt nem na busca', async () => {
+    const { id } = await service.save({
+      text: 'Prefere rever o diff antes de commitar',
+      kind: 'seasonal',
+      scope: 'chat',
+      proposed: true,
+    })
+    expect(ids((await service.loadPromptContext('chat')).seasonal)).not.toContain(id)
+    expect(ids(await service.retrievalPool('chat'))).not.toContain(id)
+    const hits = await service.search({ query: 'rever diff commitar', kinds: ['seasonal'], mode: 'chat' })
+    expect(ids(hits)).not.toContain(id)
+  })
+
   it('general sem escopo gravado continua valendo nos dois modos', async () => {
     const { id } = await service.save({ text: 'Prefere respostas curtas', kind: 'general' })
     expect(store.get(id)!.scope).toBe('both')
@@ -195,6 +219,29 @@ describe('escopo entre modos', () => {
     expect(store.get(id)!.scope).toBe('chat')
     await service.save({ text: 'Prefere respostas curtas', kind: 'general', scope: 'both' })
     expect(store.get(id)!.scope).toBe('both')
+  })
+
+  it('a consolidação semanal promove o que voltou em dias diferentes', async () => {
+    const a = await service.save({
+      text: 'Prefere ver um artefato antes de implementar a tela',
+      kind: 'seasonal',
+      scope: 'chat',
+    })
+    const b = await service.save({
+      text: 'Prefere ver um artefato antes de implementar o fluxo',
+      kind: 'seasonal',
+      scope: 'chat',
+    })
+    // Dois pedidos no mesmo dia não são padrão: só a repetição em dias
+    // diferentes conta.
+    const day = 24 * 60 * 60 * 1000
+    store.get(a.id)!.createdAt = Date.now() - 3 * day
+    store.get(b.id)!.createdAt = Date.now() - 1 * day
+    const promoted = await consolidate(Date.now())
+    expect(promoted).toBeGreaterThanOrEqual(1)
+    expect(store.get(a.id)!.kind).toBe('general')
+    // A promoção herda o escopo de origem: preferência de conversa fica no chat.
+    expect(store.get(a.id)!.scope).toBe('chat')
   })
 
   it('a busca filtra pelo modo de quem procura', async () => {

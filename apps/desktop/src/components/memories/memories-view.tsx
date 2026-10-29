@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { List, Network, Search } from "lucide-react"
+import { Check, List, Network, Search, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -13,14 +14,16 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { Memory, MemoryKind } from "@shared/memory"
+import type { MemoryRoutineMode } from "@shared/app-settings"
+import type { Memory, MemoryKind, ProjectCategory } from "@shared/memory"
 import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
+import { useAppSettings } from "@/src/stores/app-settings"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
 import { MemoryDetailPanel } from "./memory-detail-panel"
 import { MemoryGraph } from "./memory-graph"
-import { lastActivity } from "./meta"
+import { CATEGORY_LABEL, lastActivity } from "./meta"
 
 /** Referência estável para memórias sem vizinhos — evita quebrar o memo. */
 const EMPTY_RELATED: Memory[] = []
@@ -36,6 +39,12 @@ const EMPTY_RELATED: Memory[] = []
  */
 
 const ALL_PROJECTS = "__all__"
+const ALL_CATEGORIES = "__all__"
+
+/** Sufixo da chave i18n de cada opção da rotina de memória. */
+function routineKey(mode: MemoryRoutineMode): string {
+  return mode === "daily+weekly" ? "dailyWeekly" : mode
+}
 /** Cards renderizados por vez — o resto entra conforme a rolagem. */
 const PAGE_SIZE = 24
 
@@ -92,8 +101,13 @@ export function MemoriesView() {
   const initialize = useMemoryStore((s) => s.initialize)
   const index = useMemoryStore((s) => s.index)
   const loading = useMemoryStore((s) => s.loading)
+  const updateMemory = useMemoryStore((s) => s.update)
+  const removeMemory = useMemoryStore((s) => s.remove)
+  const settings = useAppSettings((s) => s.settings)
+  const updateSettings = useAppSettings((s) => s.update)
   const [query, setQuery] = useState("")
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
+  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES)
   const [tab, setTab] = useState<"list" | "graph">("list")
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -116,10 +130,19 @@ export function MemoriesView() {
 
   const kinds: MemoryKind[] = mode === "chat" ? ["core", "seasonal", "general"] : ["project", "general"]
 
-  // Pool visível (modo + projeto, sem a busca) — o grafo destaca em vez de esconder
-  const pool = useMemo(() => {
+  /**
+   * Propostas da rotina. Ficam FORA do pool — não são memória ainda — e têm um
+   * bloco próprio, visível nos dois modos, até serem aceitas ou descartadas.
+   */
+  const proposals = useMemo(() => index.filter((m) => m.proposed), [index])
+
+  // Pool visível (modo + projeto, sem busca e sem categoria) — o grafo destaca
+  // em vez de esconder, e é dele que saem as contagens do filtro.
+  const basePool = useMemo(() => {
     const now = Date.now()
     return index.filter((m) => {
+      // Proposta tem bloco próprio e não entra na lista como memória.
+      if (m.proposed) return false
       if (!kinds.includes(m.kind)) return false
       // Uma regra só: a memória aparece no modo em que vale. É o que mantém
       // aprendizados fora do chat e preferência de conversa fora do código.
@@ -134,6 +157,18 @@ export function MemoriesView() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mode, projectFilter])
+
+  /** Só as categorias que existem na vista viram opção — com a contagem ao lado. */
+  const categories = useMemo(() => {
+    const counts = new Map<ProjectCategory, number>()
+    for (const m of basePool) if (m.category) counts.set(m.category, (counts.get(m.category) ?? 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [basePool])
+
+  const pool = useMemo(
+    () => (categoryFilter === ALL_CATEGORIES ? basePool : basePool.filter((m) => m.category === categoryFilter)),
+    [basePool, categoryFilter],
+  )
 
   const filtered = useMemo(() => {
     if (query.trim()) return searchMemories(pool, query, 50)
@@ -174,6 +209,14 @@ export function MemoriesView() {
     [],
   )
 
+  // Aceitar mantém a memória (e a promoção semanal pode promovê-la); descartar
+  // apaga a proposta de vez.
+  const acceptProposal = useCallback(
+    (id: string) => void updateMemory(id, { proposed: false }),
+    [updateMemory],
+  )
+  const discardProposal = useCallback((id: string) => void removeMemory(id), [removeMemory])
+
   // Rolagem infinita: renderizar 300+ cards de uma vez travava a aba.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -184,6 +227,12 @@ export function MemoriesView() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
   }, [query, projectFilter, mode, tab])
+
+  // Trocar de modo ou de projeto pode deixar a categoria escolhida fora da
+  // vista — volta para "todas" em vez de mostrar lista vazia sem motivo.
+  useEffect(() => {
+    setCategoryFilter(ALL_CATEGORIES)
+  }, [mode, projectFilter])
 
   const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
   const hasMore = visibleCount < filtered.length
@@ -205,6 +254,58 @@ export function MemoriesView() {
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
+      {/* Rotina de memória: o interruptor e, quando existem, as propostas do dia. */}
+      <div className="rounded-lg border bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium">{t("memories.routine.title")}</span>
+          <Select
+            value={settings.memoryRoutine}
+            onValueChange={(v) =>
+              updateSettings({ memoryRoutine: (v ?? "off") as MemoryRoutineMode })
+            }
+          >
+            <SelectTrigger className="h-7 w-44">
+              <SelectValue>{t(`memories.routine.${routineKey(settings.memoryRoutine)}`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value="off">{t("memories.routine.off")}</SelectItem>
+              <SelectItem value="daily">{t("memories.routine.daily")}</SelectItem>
+              <SelectItem value="weekly">{t("memories.routine.weekly")}</SelectItem>
+              <SelectItem value="daily+weekly">{t("memories.routine.dailyWeekly")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-[11px] text-muted-foreground">
+            {settings.auxModel
+              ? t("memories.routine.model", { model: settings.auxModel.modelId })
+              : t("memories.routine.needsModel")}
+          </span>
+        </div>
+        {proposals.length > 0 && (
+          <ul className="mt-2 space-y-1 border-t pt-2">
+            {proposals.map((proposal) => (
+              <li key={proposal.id} className="flex items-start gap-2 text-xs">
+                <span className="min-w-0 flex-1 leading-snug">{proposal.text}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 shrink-0 gap-1 px-1.5 text-[11px]"
+                  onClick={() => acceptProposal(proposal.id)}
+                >
+                  <Check className="size-3" /> {t("memories.routine.accept")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 shrink-0 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                  onClick={() => discardProposal(proposal.id)}
+                >
+                  <X className="size-3" /> {t("memories.routine.discard")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -226,6 +327,27 @@ export function MemoriesView() {
               <SelectItem value={ALL_PROJECTS}>{t("memories.allProjectsFull")}</SelectItem>
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {categories.length > 1 && (
+          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? ALL_CATEGORIES)}>
+            <SelectTrigger className="w-40">
+              <SelectValue>
+                {categoryFilter === ALL_CATEGORIES
+                  ? t("memories.allCategories")
+                  : t(`memories.categories.${categoryFilter}`, {
+                      defaultValue: CATEGORY_LABEL[categoryFilter as ProjectCategory],
+                    })}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value={ALL_CATEGORIES}>{t("memories.allCategories")}</SelectItem>
+              {categories.map(([category, count]) => (
+                <SelectItem key={category} value={category}>
+                  {t(`memories.categories.${category}`, { defaultValue: CATEGORY_LABEL[category] })} ({count})
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

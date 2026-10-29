@@ -2824,7 +2824,7 @@ app.whenReady().then(() => {
   // Criação manual (drop de arquivo no grafo de memórias)
   ipcMain.handle('memory:create', (_event, input: memoryService.SaveMemoryInput) =>
     memoryService.save(input))
-  ipcMain.handle('memory:update', (_event, id: string, patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight'>>) =>
+  ipcMain.handle('memory:update', (_event, id: string, patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight' | 'proposed'>>) =>
     memoryService.update(id, patch),
   )
   ipcMain.handle('memory:delete', (_event, id: string) => memoryService.remove(id))

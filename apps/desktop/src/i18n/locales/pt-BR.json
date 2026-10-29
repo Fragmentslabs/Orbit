@@ -455,6 +455,18 @@
     "searchPlaceholder": "Buscar memórias…",
     "allProjects": "Todos",
     "allProjectsFull": "Todos os projetos",
+    "allCategories": "Todas as categorias",
+    "routine": {
+      "title": "Rotina de memória",
+      "off": "Desligada",
+      "daily": "Diária — só captura",
+      "weekly": "Semanal — só consolida",
+      "dailyWeekly": "Diária + semanal",
+      "model": "Usa o modelo auxiliar: {{model}}",
+      "needsModel": "Escolha um modelo auxiliar em Preferências → Geral.",
+      "accept": "Manter",
+      "discard": "Descartar"
+    },
     "tabList": "Lista",
     "tabGraph": "Grafo",
     "emptyTitleQuery": "Nenhuma memória encontrada",

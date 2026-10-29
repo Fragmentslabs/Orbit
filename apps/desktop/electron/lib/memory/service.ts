@@ -115,6 +115,11 @@ export interface SaveMemoryInput {
    * seriam fundidos num só, sumindo com um ramo inteiro da árvore.
    */
   dedup?: boolean
+  /**
+   * Só a rotina de memória usa: a memória nasce como proposta, fora do prompt,
+   * da busca e da recuperação, até o usuário aceitá-la na tela de memórias.
+   */
+  proposed?: boolean
 }
 
 export interface SaveMemoryResult {
@@ -194,6 +199,8 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     const merged: Memory = {
       ...existing,
       scope: mergeScope(existing, scope),
+      // Uma proposta que se repete continua proposta: quem decide é o usuário.
+      proposed: existing.proposed || input.proposed || undefined,
       tags: normalizeTags([...existing.tags, ...tags]),
       weight: Math.max(existing.weight, weight),
       lastHitAt: now,
@@ -236,12 +243,11 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     subproject: input.kind === 'project' ? input.subproject : undefined,
     originProjectId,
     originProjectName,
-    // "project" sempre carrega category; "general" só quando for um aprendizado
-    // reutilizável entre projetos (category === "learning").
-    category:
-      input.kind === 'project' ? input.category
-      : input.kind === 'general' && input.category === 'learning' ? 'learning'
-      : undefined,
+    proposed: input.proposed || undefined,
+    // "project" e "general" pedem categoria; a proposta da rotina (seasonal)
+    // carrega a sua, e ela sobrevive quando o usuário promove. "core" nunca:
+    // fato pessoal não se classifica.
+    category: input.kind === 'core' ? undefined : input.category,
     area: input.kind === 'project' ? input.area : undefined,
     ...enrichmentOf(input),
   }
@@ -324,6 +330,8 @@ async function queryVector(query: string): Promise<Float32Array | undefined> {
 export async function search(input: SearchMemoryInput): Promise<Memory[]> {
   const now = Date.now()
   const pool = (await alive()).filter((m) => {
+    // Proposta ainda não é memória: só existe para a tela de revisão.
+    if (m.proposed) return false
     if (!input.kinds.includes(m.kind)) return false
     if (m.kind === 'project' && m.projectId !== input.projectId) return false
     if (input.category && m.category !== input.category) return false
@@ -462,7 +470,7 @@ export async function linkAsParent(parentId: string, childId: string): Promise<b
 /** Edição vinda da UI (texto, tags, weight). */
 export async function update(
   id: string,
-  patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight'>>,
+  patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight' | 'proposed'>>,
 ): Promise<Memory | null> {
   const memory = await repo.get(id)
   if (!memory) return null
@@ -471,6 +479,8 @@ export async function update(
     ...(patch.text != null ? { text: patch.text.trim() } : undefined),
     ...(patch.tags != null ? { tags: normalizeTags(patch.tags) } : undefined),
     ...(patch.weight != null ? { weight: clampWeight(patch.weight) } : undefined),
+    // Aceitar a proposta (proposed: false) tira a marcação de vez.
+    ...(patch.proposed != null ? { proposed: patch.proposed ? true : undefined } : undefined),
   }
   await repo.put(next)
   emit('updated', next)
@@ -536,7 +546,8 @@ export async function revise(id: string, input: ReviseMemoryInput): Promise<Memo
     }
     category = input.category
   }
-  if (kind === 'general' && category && category !== 'learning') category = undefined
+  // Fato pessoal (core) não se classifica; o resto carrega a sua categoria.
+  if (kind === 'core') category = undefined
 
   const next: Memory = {
     ...memory,
@@ -825,7 +836,8 @@ export async function loadPromptContext(
   mode: 'chat' | 'code',
   directory?: string,
 ): Promise<PromptContext> {
-  const pool = await alive()
+  // Proposta não entra no prompt: ela ainda não é memória.
+  const pool = (await alive()).filter((m) => !m.proposed)
   const byWeight = (a: Memory, b: Memory) => b.weight - a.weight
   const generalAll = pool.filter((m) => m.kind === 'general')
   const learningPool = generalAll.filter((m) => m.category === 'learning' && visibleIn(m, 'code'))
@@ -899,10 +911,18 @@ export async function loadPromptContext(
 }
 
 /** Executado pelo scheduler: expira (com cascata do doc) e promove automaticamente. */
+/** Proposta que ninguém revisou não vira memória: depois disso, sai sozinha. */
+const PROPOSAL_TTL = 14 * 24 * 60 * 60 * 1000
+
 export async function cleanup(): Promise<void> {
   const now = Date.now()
   const index = await repo.getIndex()
   for (const memory of index) {
+    // A proposta espera revisão: não expira nem promove, só envelhece.
+    if (memory.proposed) {
+      if (now - memory.createdAt > PROPOSAL_TTL) await remove(memory.id)
+      continue
+    }
     if (isExpired(memory, now)) {
       await remove(memory.id)
       continue
@@ -951,7 +971,7 @@ export async function syncMemoryIndex(): Promise<{ indexed: number; pending: num
     await syncRunning.catch(() => {})
   }
   const run = (async () => {
-    const pool = await alive()
+    const pool = (await alive()).filter((m) => !m.proposed)
     const result = await syncIndex(pool)
     return { indexed: result.indexed, pending: 0, ok: !result.failed }
   })()
@@ -973,7 +993,8 @@ export async function syncMemoryIndex(): Promise<{ indexed: number; pending: num
  * prompt, e recuperá-la de novo só gastaria token e duplicaria a mesma linha.
  */
 export async function retrievalPool(mode: 'chat' | 'code', directory?: string): Promise<Memory[]> {
-  const pool = await alive()
+  // Proposta não é recuperável: ela espera revisão na tela de memórias.
+  const pool = (await alive()).filter((m) => !m.proposed)
   if (mode === 'chat') {
     return pool.filter((m) => (m.kind === 'seasonal' || m.kind === 'general') && visibleIn(m, 'chat'))
   }
