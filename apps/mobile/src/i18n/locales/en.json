@@ -145,12 +145,25 @@
     "title": "Media",
     "searchPlaceholder": "Search by name or task",
     "refresh": "Refresh",
-    "loading": "Loading images...",
-    "empty": "No images here yet.",
+    "loading": "Loading media...",
+    "empty": "No media here yet.",
     "delete": "Delete",
     "openInChat": "Open in chat",
     "selectedCount": "{{count}} selected",
-    "usage": "{{count}} images · {{size}}",
+    "usage_one": "{{count}} item · {{size}}",
+    "usage_other": "{{count}} items · {{size}}",
+    "fileUnavailable": "File unavailable on the computer",
+    "kind": {
+      "all": "All",
+      "image": "Image",
+      "artifact": "Artifact",
+      "document": "Document",
+      "video": "Video",
+      "audio": "Audio",
+      "motion": "Motion",
+      "design": "Design",
+      "slides": "Slides"
+    },
     "source": {
       "all": "All",
       "user": "User",
@@ -294,9 +307,49 @@
       "context-length": "The conversation grew past the model's context window, so the provider refused the request. Switching models won't help — compact the conversation or start a new one.",
       "context-length-turn": "The work in this reply (tool results piling up across many steps) outgrew the model's context window. The conversation itself still fits, so compacting won't help: send a message asking it to continue — the new reply starts without this one's tool results.",
       "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
+    }
+  },
+  "parts": {
+    "preview": {
+      "empty": "Preview unavailable",
+      "loading": "Loading…",
+      "error": "Could not load this preview",
+      "expand": "Expand",
+      "retry": "Try again"
     },
-    "artifactDesktopOnly": "Artifact available on the desktop app",
-    "documentDesktopOnly": "document available on the desktop app"
+    "artifact": {
+      "empty": "Artifact preview unavailable",
+      "loading": "Loading artifact…",
+      "error": "Could not load the artifact"
+    },
+    "document": {
+      "title": "Document",
+      "open": "Open",
+      "download": "Download",
+      "openLabel": "Open document",
+      "downloadLabel": "Download document",
+      "actionFailed": "Could not open the file",
+      "empty": "Document preview unavailable",
+      "loading": "Loading document…",
+      "error": "Could not load the document"
+    },
+    "audio": {
+      "play": "Play audio",
+      "pause": "Pause audio",
+      "seek": "Audio position",
+      "error": "Could not load this audio",
+      "unavailable": "Audio unavailable"
+    },
+    "video": {
+      "error": "Could not load this video",
+      "errorWithReason": "Could not load this video — {{reason}}",
+      "unavailable": "Video unavailable"
+    },
+    "mermaid": {
+      "title": "Diagram",
+      "loading": "Drawing diagram…",
+      "error": "Could not draw the diagram"
+    }
   },
   "askCard": {
     "allowOnce": "Allow for this turn",

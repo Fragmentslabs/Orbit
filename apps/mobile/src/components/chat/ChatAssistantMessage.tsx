@@ -22,8 +22,6 @@ import type {
   ReasoningPart,
   ToolPart,
   AgentPart,
-  ArtifactPart,
-  DocumentPart,
   ImagePart,
   FilePart,
 } from '@orbit/shared'
@@ -33,6 +31,7 @@ import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
 import { ImageLightbox } from './ImageLightbox'
+import { AudioPartView, VideoPartView, ArtifactPartView, DocumentPartView } from './parts'
 import { McpProposalCard } from './McpProposalCard'
 import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
@@ -553,58 +552,6 @@ function SourcesBlock({ sources }: { sources: any[] }) {
  * excluído depois na galeria do desktop — quando a carga falha, mostramos um
  * placeholder no lugar do quadro vazio.
  */
-/**
- * Artefato HTML na resposta. O companion ainda não serve o arquivo (a página
- * mora no storage do desktop, atrás do protocolo orbit-artifact://), então
- * aqui o card só ANUNCIA o artefato — sem isto a mensagem ficaria com um
- * buraco e o texto do assistente falaria de algo invisível.
- */
-function AssistantArtifact({ part }: { part: ArtifactPart }) {
-  const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  return (
-    <View
-      className="mt-2 w-full gap-1 rounded-lg px-3 py-2"
-      style={{ borderWidth: 1, borderColor: tokens.border }}
-    >
-      <Text className="text-xs font-medium" style={{ color: tokens.foreground }}>
-        {part.title}
-      </Text>
-      <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
-        {t('chatAssistant.artifactDesktopOnly')}
-      </Text>
-    </View>
-  )
-}
-
-/**
- * Documento gerado pelo agente (PDF/DOCX).
- *
- * Sem este caso a part caía no `default: return null` e o documento virava um
- * BURACO na mensagem — o agente dizia que entregou algo e não aparecia nada.
- * É o mesmo problema que o artefato já teve, e a solução é a mesma: anunciar
- * o que foi criado e dizer onde abrir, em vez de sumir.
- */
-function AssistantDocument({ part }: { part: DocumentPart }) {
-  const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  return (
-    <View
-      className="mt-2 w-full gap-1 rounded-lg px-3 py-2"
-      style={{ borderWidth: 1, borderColor: tokens.border }}
-    >
-      <Text className="text-xs font-medium" style={{ color: tokens.foreground }}>
-        {part.title}
-      </Text>
-      <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
-        {part.formats.length > 0
-          ? `${part.formats.map((f) => f.toUpperCase()).join(' · ')} — ${t('chatAssistant.documentDesktopOnly')}`
-          : t('chatAssistant.documentDesktopOnly')}
-      </Text>
-    </View>
-  )
-}
-
 function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -810,10 +757,19 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             return <AgentPartView key={part.id} part={part} />
           case 'image':
             return <AssistantImage key={part.id} part={part} />
+          // Áudio, vídeo, artefato e documento: o desktop já reescreveu a URL
+          // deles para http assinado (companion-assets), então aqui cada um
+          // renderiza de verdade. Antes, áudio e vídeo caíam no `default` e
+          // sumiam sem aviso, e artefato/documento viravam um cartão "só no
+          // desktop".
+          case 'audio':
+            return <AudioPartView key={part.id} part={part} />
+          case 'video':
+            return <VideoPartView key={part.id} part={part} />
           case 'artifact':
-            return <AssistantArtifact key={part.id} part={part} />
+            return <ArtifactPartView key={part.id} part={part} />
           case 'document':
-            return <AssistantDocument key={part.id} part={part} />
+            return <DocumentPartView key={part.id} part={part} />
           case 'file':
             return (
               <View key={part.id} className="mt-1 w-full">

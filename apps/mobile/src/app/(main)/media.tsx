@@ -14,9 +14,23 @@ import {
   Maximize2,
   MessageSquare,
   Check,
+  Image as ImageIcon,
+  FileCode2,
+  FileText,
+  Video,
+  Music,
+  Clapperboard,
+  PenTool,
+  Presentation,
+  Play,
+  Pause,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { folderKey, normalizeFolderName, type MediaEntry, type MediaSource } from '@orbit/shared'
+import { folderKey, normalizeFolderName, type MediaEntry, type MediaKind, type MediaSource } from '@orbit/shared'
+import { VideoView, useVideoPlayer } from 'expo-video'
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio'
+import { WebView } from 'react-native-webview'
+import { KIND_KEY, KIND_ORDER, canOpen, entryTitle, kindOf } from '~/lib/media'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSessionStore } from '~/stores/session-store'
@@ -30,6 +44,7 @@ import { ImageLightbox } from '~/components/chat/ImageLightbox'
 
 type SourceFilter = 'all' | MediaSource
 type PeriodFilter = 'all' | 'today' | 'week' | 'month'
+type KindFilter = 'all' | MediaKind
 
 /** Filtro de projeto: 'all' = todos; '__none__' = mídia sem projeto conhecido. */
 const PROJECT_ALL = 'all'
@@ -56,6 +71,111 @@ function formatDate(timestamp: number, locale: string): string {
   })
 }
 
+function formatClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
+  const total = Math.floor(seconds)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** O ícone de cada tipo no cartão do tile (imagem sai na miniatura). */
+const KIND_ICON: Record<MediaKind, typeof ImageIcon> = {
+  image: ImageIcon,
+  artifact: FileCode2,
+  document: FileText,
+  video: Video,
+  audio: Music,
+  motion: Clapperboard,
+  design: PenTool,
+  slides: Presentation,
+}
+
+// ─── Visualizadores por tipo ─────────────────────────────────────────────────
+
+/** Página (artefato, documento, peça): o WebView carrega a URL já com o token. */
+function PageViewer({ url }: { url: string }) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  return (
+    <WebView
+      source={{ uri: url }}
+      style={s.pageViewer}
+      // O artefato vem do desktop, num http local: só http/https navegam aqui,
+      // nada de esquema externo (tel:, intent:) virando ação do sistema.
+      originWhitelist={['http://*', 'https://*']}
+      startInLoadingState
+      renderLoading={() => (
+        <View style={[s.pageViewer, s.pageLoading, { backgroundColor: tokens.background }]}>
+          <ActivityIndicator color={tokens.primary} />
+        </View>
+      )}
+      // Links dentro da página abrem nela mesma (o token do caminho é herdado
+      // pelos relativos: é assim que `base.css` e as fontes carregam).
+      setSupportMultipleWindows={false}
+    />
+  )
+}
+
+/** Vídeo: o player nativo do expo-video, com os controles do sistema. */
+function VideoViewer({ url }: { url: string }) {
+  const player = useVideoPlayer(url)
+  return <VideoView player={player} style={s.mediaFill} contentFit="contain" nativeControls />
+}
+
+/** Áudio: não há imagem para mostrar, então o cartão vira o player mínimo. */
+function AudioViewer({ url, title }: { url: string; title: string }) {
+  const player = useAudioPlayer(url)
+  const status = useAudioPlayerStatus(player)
+  useEffect(() => {
+    // No iOS o interruptor de silêncio mutaria o player — a galeria é para ouvir.
+    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
+  }, [])
+  return (
+    <View style={s.audioWrap}>
+      <Music size={44} color="#fff" />
+      <Text style={s.audioTitle} numberOfLines={2}>{title}</Text>
+      <Pressable
+        onPress={() => (status.playing ? player.pause() : player.play())}
+        style={s.audioPlay}
+        accessibilityRole="button"
+      >
+        {status.playing ? <Pause size={22} color="#000" /> : <Play size={22} color="#000" />}
+      </Pressable>
+      <Text style={s.audioTime}>
+        {formatClock(status.currentTime)} / {formatClock(status.duration)}
+      </Text>
+    </View>
+  )
+}
+
+/** O que abre no lugar da prévia, escolhido pelo tipo da entrada. */
+function EntryViewer({ entry, onExpand }: { entry: MediaEntry; onExpand: () => void }) {
+  const { t } = useTranslation()
+  const kind = kindOf(entry)
+  if (!canOpen(entry)) {
+    // Peça fora do registro do desktop: o item está no índice mas o arquivo não.
+    return (
+      <View style={s.pageLoading}>
+        <ImageOff size={28} color="#fff" />
+        <Text style={s.audioTime}>{t('media.fileUnavailable')}</Text>
+      </View>
+    )
+  }
+  const url = entry.url as string
+  if (kind === 'image') {
+    return (
+      <Pressable style={s.previewImgWrap} onPress={onExpand}>
+        <Image source={url} style={s.previewImg} contentFit="contain" />
+        <View style={s.expandBadge}>
+          <Maximize2 size={14} color="#fff" />
+        </View>
+      </Pressable>
+    )
+  }
+  if (kind === 'video') return <VideoViewer url={url} />
+  if (kind === 'audio') return <AudioViewer url={url} title={entryTitle(entry)} />
+  // O resto é página: artefato, documento (prévia .html) e as peças.
+  return <PageViewer url={url} />
+}
+
 export default function MediaScreen() {
   const { t, i18n } = useTranslation()
   const router = useRouter()
@@ -79,6 +199,7 @@ export default function MediaScreen() {
 
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<SourceFilter>('all')
+  const [kind, setKind] = useState<KindFilter>('all')
   const [period, setPeriod] = useState<PeriodFilter>('all')
   /** Filtro explícito do usuário; null = segue o padrão (projeto da pasta selecionada). */
   const [projectOverride, setProjectOverride] = useState<string | null>(null)
@@ -131,6 +252,12 @@ export default function MediaScreen() {
     [entries, modeSessionIds],
   )
 
+  /** Tipos presentes no escopo — só os que têm item viram chip. */
+  const kindOptions = useMemo(() => {
+    const present = new Set(scopedEntries.map((entry) => kindOf(entry)))
+    return KIND_ORDER.filter((value) => present.has(value))
+  }, [scopedEntries])
+
   /** Projetos com mídia no escopo — os chips do filtro. */
   const projectOptions = useMemo(() => {
     const byKey = new Map<string, string>()
@@ -179,6 +306,7 @@ export default function MediaScreen() {
     const since = period === 'all' ? 0 : now - PERIOD_MS[period]
     return scopedEntries.filter((entry) => {
       if (source !== 'all' && entry.source !== source) return false
+      if (kind !== 'all' && kindOf(entry) !== kind) return false
       if (project === PROJECT_NONE) {
         if (projectOf(entry)) return false
       } else if (project !== PROJECT_ALL) {
@@ -189,7 +317,7 @@ export default function MediaScreen() {
       if (!needle) return true
       return `${entry.name ?? ''} ${entry.taskId ?? ''} ${entry.id}`.toLowerCase().includes(needle)
     })
-  }, [scopedEntries, source, period, query, project, projectOf, now])
+  }, [scopedEntries, source, kind, period, query, project, projectOf, now])
 
   const selecting = selectionMode
 
@@ -238,6 +366,10 @@ export default function MediaScreen() {
 
   const renderThumb = ({ item }: { item: MediaEntry }) => {
     const isSelected = selected.has(item.id)
+    const kind = kindOf(item)
+    // Só a imagem vira miniatura: o resto não tem o que desenhar num <Image>
+    // (era o tile quebrado da galeria), então vira cartão com ícone e título.
+    const KindIcon = KIND_ICON[kind]
     return (
       <Pressable
         onPress={() => (selecting ? toggle(item.id) : setPreview(item))}
@@ -247,14 +379,24 @@ export default function MediaScreen() {
         }}
         style={[s.thumb, { borderColor: isSelected ? tokens.primary : tokens.border, backgroundColor: tokens.muted }]}
       >
-        {item.url ? (
-          <Image source={item.url} style={s.thumbImg} contentFit="cover" transition={150} />
+        {kind === 'image' ? (
+          item.url ? (
+            <Image source={item.url} style={s.thumbImg} contentFit="cover" transition={150} />
+          ) : (
+            <View style={s.thumbEmpty}>
+              <ImageOff size={18} color={tokens.mutedForeground} />
+            </View>
+          )
         ) : (
-          <View style={s.thumbEmpty}>
-            <ImageOff size={18} color={tokens.mutedForeground} />
+          <View style={s.cardBody}>
+            <KindIcon size={26} color={tokens.mutedForeground} />
+            <Text style={[s.cardKind, { color: tokens.mutedForeground }]}>{t(KIND_KEY[kind])}</Text>
+            <Text style={[s.cardTitle, { color: tokens.foreground }]} numberOfLines={2}>
+              {entryTitle(item)}
+            </Text>
           </View>
         )}
-        {item.name ? (
+        {kind === 'image' && item.name ? (
           <View style={s.thumbLabelWrap}>
             <Text style={s.thumbLabel} numberOfLines={1}>{item.name}</Text>
           </View>
@@ -355,6 +497,29 @@ export default function MediaScreen() {
             </Pressable>
           ))}
           <View style={[s.filtersDivider, { backgroundColor: tokens.border }]} />
+          {/* Tipo: a galeria guarda imagem, artefato, documento, vídeo, áudio e
+              peça — o chip é o que deixa achar um sem rolar a lista inteira. */}
+          <Pressable
+            key="kind-all"
+            onPress={() => setKind('all')}
+            style={[s.chip, { backgroundColor: kind === 'all' ? tokens.primary : tokens.border }]}
+          >
+            <Text style={[s.chipText, { color: kind === 'all' ? '#fff' : tokens.mutedForeground }]}>
+              {t('media.kind.all')}
+            </Text>
+          </Pressable>
+          {kindOptions.map((value) => (
+            <Pressable
+              key={`kind-${value}`}
+              onPress={() => setKind(value)}
+              style={[s.chip, { backgroundColor: kind === value ? tokens.primary : tokens.border }]}
+            >
+              <Text style={[s.chipText, { color: kind === value ? '#fff' : tokens.mutedForeground }]}>
+                {t(KIND_KEY[value])}
+              </Text>
+            </Pressable>
+          ))}
+          <View style={[s.filtersDivider, { backgroundColor: tokens.border }]} />
           {periodFilters.map((value) => (
             <Pressable
               key={`period-${value}`}
@@ -429,16 +594,11 @@ export default function MediaScreen() {
           </Pressable>
           {preview && (
             <>
-              <Pressable style={s.previewImgWrap} onPress={() => setFullscreen(true)}>
-                {preview.url && (
-                  <Image source={preview.url} style={s.previewImg} contentFit="contain" />
-                )}
-                <View style={s.expandBadge}>
-                  <Maximize2 size={14} color="#fff" />
-                </View>
-              </Pressable>
+              <View style={s.previewViewer}>
+                <EntryViewer entry={preview} onExpand={() => setFullscreen(true)} />
+              </View>
               <View style={[s.previewMeta, { paddingBottom: insets.bottom + 12 }]}>
-                <Text style={s.previewName} numberOfLines={1}>{preview.name || preview.id}</Text>
+                <Text style={s.previewName} numberOfLines={1}>{entryTitle(preview)}</Text>
                 <Text style={s.previewSub}>
                   {t(`media.source.${preview.source}`)} · {formatDate(preview.createdAt, i18n.language)}
                   {preview.width && preview.height ? ` · ${preview.width}×${preview.height}` : ''} · {formatBytes(preview.size)}
@@ -467,8 +627,9 @@ export default function MediaScreen() {
         </View>
       </Modal>
 
-      {/* Fullscreen com zoom (mesmo viewer do chat) */}
-      {preview?.url && (
+      {/* Fullscreen com zoom (mesmo viewer do chat) — só a imagem tem o que
+          ampliar; página, vídeo e áudio já ocupam a prévia inteira. */}
+      {preview?.url && kindOf(preview) === 'image' && (
         <ImageLightbox src={preview.url} alt={preview.name} open={fullscreen} onOpenChange={setFullscreen} />
       )}
     </SafeScreen>
@@ -527,6 +688,10 @@ const s = StyleSheet.create({
   },
   thumbImg: { flex: 1 },
   thumbEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  /** Cartão do tile para o que não é imagem: ícone + tipo + título. */
+  cardBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 10 },
+  cardKind: { fontSize: 9, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+  cardTitle: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
   thumbLabelWrap: {
     position: 'absolute',
     left: 0,
@@ -563,8 +728,23 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  previewViewer: { flex: 1, overflow: 'hidden' },
   previewImgWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   previewImg: { width: '100%', height: '100%' },
+  mediaFill: { flex: 1 },
+  pageViewer: { flex: 1, backgroundColor: 'transparent' },
+  pageLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  audioWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  audioTitle: { color: '#fff', fontSize: 15, fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
+  audioPlay: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  audioTime: { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
   expandBadge: {
     position: 'absolute',
     bottom: 16,

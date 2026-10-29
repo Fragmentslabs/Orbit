@@ -145,12 +145,25 @@
     "title": "Mídia",
     "searchPlaceholder": "Buscar por nome ou tarefa",
     "refresh": "Atualizar",
-    "loading": "Carregando imagens...",
-    "empty": "Nenhuma imagem por aqui ainda.",
+    "loading": "Carregando mídia...",
+    "empty": "Nenhuma mídia por aqui ainda.",
     "delete": "Excluir",
     "openInChat": "Abrir no chat",
     "selectedCount": "{{count}} selecionada(s)",
-    "usage": "{{count}} imagens · {{size}}",
+    "usage_one": "{{count}} item · {{size}}",
+    "usage_other": "{{count}} itens · {{size}}",
+    "fileUnavailable": "Arquivo indisponível no computador",
+    "kind": {
+      "all": "Todos",
+      "image": "Imagem",
+      "artifact": "Artefato",
+      "document": "Documento",
+      "video": "Vídeo",
+      "audio": "Áudio",
+      "motion": "Motion",
+      "design": "Design",
+      "slides": "Slides"
+    },
     "source": {
       "all": "Todas",
       "user": "Usuário",
@@ -294,9 +307,49 @@
       "context-length": "A conversa ficou maior que a janela de contexto do modelo, então o provedor recusou a requisição. Trocar de modelo não resolve — compacte a conversa ou comece uma nova.",
       "context-length-turn": "O trabalho desta resposta (resultados de ferramenta acumulados ao longo de muitos passos) passou da janela de contexto do modelo. A conversa em si ainda cabe, então compactar não resolve: mande uma mensagem pedindo para continuar — a nova resposta começa sem os resultados de ferramenta desta.",
       "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
+    }
+  },
+  "parts": {
+    "preview": {
+      "empty": "Prévia indisponível",
+      "loading": "Carregando…",
+      "error": "Não foi possível carregar esta prévia",
+      "expand": "Ampliar",
+      "retry": "Tentar de novo"
     },
-    "artifactDesktopOnly": "Artefato disponível no app desktop",
-    "documentDesktopOnly": "documento disponível no app desktop"
+    "artifact": {
+      "empty": "Prévia do artefato indisponível",
+      "loading": "Carregando artefato…",
+      "error": "Não foi possível carregar o artefato"
+    },
+    "document": {
+      "title": "Documento",
+      "open": "Abrir",
+      "download": "Baixar",
+      "openLabel": "Abrir documento",
+      "downloadLabel": "Baixar documento",
+      "actionFailed": "Não foi possível abrir o arquivo",
+      "empty": "Prévia do documento indisponível",
+      "loading": "Carregando documento…",
+      "error": "Não foi possível carregar o documento"
+    },
+    "audio": {
+      "play": "Tocar áudio",
+      "pause": "Pausar áudio",
+      "seek": "Posição do áudio",
+      "error": "Não foi possível carregar este áudio",
+      "unavailable": "Áudio indisponível"
+    },
+    "video": {
+      "error": "Não foi possível carregar este vídeo",
+      "errorWithReason": "Não foi possível carregar este vídeo — {{reason}}",
+      "unavailable": "Vídeo indisponível"
+    },
+    "mermaid": {
+      "title": "Diagrama",
+      "loading": "Desenhando diagrama…",
+      "error": "Não foi possível desenhar o diagrama"
+    }
   },
   "askCard": {
     "allowOnce": "Permitir neste turno",
