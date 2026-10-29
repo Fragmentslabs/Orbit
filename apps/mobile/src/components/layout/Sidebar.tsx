@@ -48,7 +48,7 @@ import { cn } from '~/lib/utils'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { ThemeTokens } from '~/lib/theme-tokens'
-import type { SessionInfo, FolderInfo } from '@orbit/shared'
+import { sessionActivityMap, type SessionInfo, type FolderInfo } from '@orbit/shared'
 import {
   DRAWER_WIDTH,
   animateDrawer,
@@ -400,6 +400,11 @@ export function Sidebar() {
     archivedLoose,
     routineSessions,
   } = useMemo(() => {
+    // Posição de um chat = atividade do bloco dele (ele OU o sub-chat/worker
+    // aninhado mais recente) — mesma regra do app-sidebar do desktop: mexer
+    // numa conversa lateral sobe o pai junto, sem depender só do chat principal.
+    const activity = sessionActivityMap(sessions)
+    const activityOf = (s: SessionInfo) => activity.get(s.id) ?? s.updatedAt
     // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
     // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se
     // também entrassem em "Conversas" ou nas pastas — mesmo critério do
@@ -428,15 +433,15 @@ export function Sidebar() {
     const rootSessions = activeSessions.filter(
       (s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId),
     )
-    const pinned = rootSessions.filter((s) => s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
-    const recent = rootSessions.filter((s) => !s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
+    const pinned = rootSessions.filter((s) => s.pinned).sort((a, b) => activityOf(b) - activityOf(a))
+    const recent = rootSessions.filter((s) => !s.pinned).sort((a, b) => activityOf(b) - activityOf(a))
     // Ordem das pastas segue o desktop: fixadas primeiro, depois por atividade
     // (sessão mais recente dentro da pasta) — dentre as fixadas, mais recentes
     // primeiro.
     const folderActivity = (folderId: string) =>
       activeSessions
         .filter((s) => s.folderId === folderId)
-        .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
+        .reduce((latest, s) => Math.max(latest, activityOf(s)), 0)
     const sortedFolders = [...activeFolders].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
       return folderActivity(b.id) - folderActivity(a.id)
@@ -445,7 +450,7 @@ export function Sidebar() {
       folder,
       sessions: activeSessions
         .filter((s) => s.folderId === folder.id)
-        .sort((a, b) => b.updatedAt - a.updatedAt),
+        .sort((a, b) => activityOf(b) - activityOf(a)),
     }))
 
     // ── Arquivados ──

@@ -181,6 +181,47 @@ export function folderKey(name: string): string {
     .replace(/\s+/g, " ")
 }
 
+/**
+ * Atividade de cada sessão para a ORDENAÇÃO da sidebar.
+ *
+ * A de um chat é a dele OU a do sub-chat/worker mais recente aninhado nele:
+ * mexer num filho sobe o bloco inteiro (pai + filhos) para o topo. Sem isso a
+ * posição do pai dependeria só da atividade do próprio pai, e uma conversa
+ * lateral recém-usada ficava escondida embaixo de um pai parado.
+ *
+ * Filhos arquivados não contam — eles saem da árvore visível (ficam no grupo
+ * "Arquivados"), então não podem mover o pai.
+ */
+export function sessionActivityMap(sessions: SessionInfo[]): Map<string, number> {
+  const childrenByParent = new Map<string, SessionInfo[]>()
+  for (const session of sessions) {
+    if (!session.parentId || session.archived) continue
+    const siblings = childrenByParent.get(session.parentId)
+    if (siblings) siblings.push(session)
+    else childrenByParent.set(session.parentId, [session])
+  }
+
+  const activity = new Map<string, number>()
+  const computing = new Set<string>()
+  const compute = (session: SessionInfo): number => {
+    const cached = activity.get(session.id)
+    if (cached !== undefined) return cached
+    // Ciclo de parentId não deveria existir, mas não pode virar recursão
+    // infinita se algum registro corrompido aparecer.
+    if (computing.has(session.id)) return session.updatedAt
+    computing.add(session.id)
+    let latest = session.updatedAt
+    for (const child of childrenByParent.get(session.id) ?? []) {
+      latest = Math.max(latest, compute(child))
+    }
+    computing.delete(session.id)
+    activity.set(session.id, latest)
+    return latest
+  }
+  for (const session of sessions) compute(session)
+  return activity
+}
+
 export type TextPartState = "streaming" | "done"
 
 export interface TextPart {

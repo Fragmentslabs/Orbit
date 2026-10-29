@@ -86,7 +86,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { FolderInfo, SessionInfo } from "@shared/chat"
+import { sessionActivityMap, type FolderInfo, type SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
@@ -1193,6 +1193,13 @@ function ChatHistory() {
     exitSelectionMode()
   }
 
+  // Posição de um chat na sidebar = atividade do bloco dele: a própria ou a do
+  // sub-chat/worker mais recente aninhado (sessionActivityMap). Mexer numa
+  // conversa lateral sobe o pai junto — a ordem não depende só do chat
+  // principal.
+  const activity = useMemo(() => sessionActivityMap(sessions), [sessions])
+  const activityOf = (session: SessionInfo) => activity.get(session.id) ?? session.updatedAt
+
   // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
   // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se também
   // entrassem em "Conversas" ou nas pastas.
@@ -1200,8 +1207,8 @@ function ChatHistory() {
     () =>
       sessions
         .filter((s) => s.mode === mode && !s.routineId)
-        .sort((a, b) => b.updatedAt - a.updatedAt),
-    [sessions, mode],
+        .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
+    [sessions, mode, activity],
   )
   // Grupo "Rotinas" do modo ativo: a sessão de cada execução herda o modo da
   // rotina (scheduler.ts), então a sidebar de chat só lista as rotinas de
@@ -1232,7 +1239,7 @@ function ChatHistory() {
   const archivedFolderIds = useMemo(() => new Set(archivedFolders.map((f) => f.id)), [archivedFolders])
   const folderActivity = (folderId: string) => active
     .filter((s) => s.folderId === folderId)
-    .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
+    .reduce((latest, s) => Math.max(latest, activityOf(s)), 0)
   const sortedFolders = [...activeFolders].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     return folderActivity(b.id) - folderActivity(a.id)
@@ -1245,7 +1252,7 @@ function ChatHistory() {
     // Só pastas ativas "seguram" chats na raiz: um chat desarquivado dentro
     // de uma pasta arquivada cai nos recentes (a pasta continua arquivada)
     .filter((s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId))
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .sort((a, b) => activityOf(b) - activityOf(a))
   // Arquivados soltos: os de pasta ARQUIVADA aparecem dentro dela; os de pasta
   // ATIVA ganham um agrupamento por nome logo abaixo — antes caíam soltos aqui
   // e perdiam a referência da pasta a que pertencem.
