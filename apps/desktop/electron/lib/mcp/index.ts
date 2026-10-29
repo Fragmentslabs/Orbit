@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -25,6 +26,7 @@ import {
   setOAuthInteractive,
 } from './oauth'
 import { attachSamplingHandler, samplingCapabilities } from './sampling'
+import { descriptionsState, optimizedFor, optimizeServerDescriptions } from './describe'
 
 /**
  * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
@@ -52,6 +54,13 @@ interface ServerRuntime {
   retryCount: number
   /** http com OAuth: já existe token salvo (autorizado alguma vez neste device) */
   authorized?: boolean
+  /** Falha da última re-listagem automática (notifications/tools/list_changed).
+   *  Separado de `error`: a conexão segue válida e a lista anterior continua em
+   *  uso — isto é um aviso, não um servidor fora do ar. */
+  toolListError?: string
+  /** Re-listagens em série: uma rajada de notificações não pode aplicar os
+   *  resultados fora de ordem (a lista velha sobrescrevendo a nova). */
+  toolListQueue?: Promise<void>
 }
 
 interface McpToolDef {
@@ -207,6 +216,8 @@ async function buildTransport(config: McpServerConfig) {
 async function connect(runtime: ServerRuntime, interactive = false): Promise<void> {
   runtime.state = 'connecting'
   runtime.error = undefined
+  runtime.toolListError = undefined
+  runtime.toolListQueue = undefined
   runtime.lastAttempt = Date.now()
   const url = oauthUrl(runtime.config)
   try {
@@ -246,15 +257,13 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
 
     const prefix = sanitizeName(runtime.config.name)
     runtime.client = client
-    runtime.tools = discovered.map((mcpTool) => ({
-      name: `${prefix}_${sanitizeName(mcpTool.name)}`,
-      mcpName: mcpTool.name,
-      description: mcpTool.description,
-      inputSchema: mcpTool.inputSchema,
-    }))
+    runtime.tools = toToolDefs(prefix, discovered)
     runtime.state = 'connected'
     runtime.retryCount = 0
     if (url) runtime.authorized = await hasOAuthTokens(url)
+    // A lista pode mudar com a conexão de pé (servidor que carrega tools sob
+    // demanda, plugin recarregado). O handler usa ESTE client e ESTE runtime.
+    watchToolList(runtime, client)
   } catch (err) {
     runtime.client = null
     runtime.tools = []
@@ -276,6 +285,73 @@ function isAuthFailure(err: unknown): boolean {
   if (err instanceof UnauthorizedError) return true
   const message = err instanceof Error ? err.message : String(err ?? '')
   return /oauth|unauthorized|invalid_client|invalid_grant|HTTP (401|403)/i.test(message)
+}
+
+/** Ferramenta como o tools/list a devolve — só o que o manager consome. */
+interface DiscoveredTool {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
+/** Converte o resultado do tools/list em definições do manager, com o nome
+ *  prefixado (`<prefixo>_<tool>`). O prefixo já vem sanitizado. */
+function toToolDefs(prefix: string, discovered: DiscoveredTool[]): McpToolDef[] {
+  return discovered.map((mcpTool) => ({
+    name: `${prefix}_${sanitizeName(mcpTool.name)}`,
+    mcpName: mcpTool.name,
+    description: mcpTool.description,
+    inputSchema: mcpTool.inputSchema,
+  }))
+}
+
+/**
+ * Escuta `notifications/tools/list_changed` do servidor conectado.
+ *
+ * Sem isso, um servidor que muda a própria lista de tools só seria notado no
+ * próximo connect, e o toolset do turno sairia do ar desatualizado (tool nova
+ * invisível, tool removida ainda oferecida).
+ *
+ * A conexão NÃO é refeita: `runtime` e `client` continuam os mesmos e só
+ * `runtime.tools` é trocado no lugar — o estado "connected" e o client em uso
+ * pelo ToolSet seguem válidos.
+ */
+function watchToolList(runtime: ServerRuntime, client: Client): void {
+  client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+    const next = (runtime.toolListQueue ?? Promise.resolve()).then(() =>
+      refreshToolList(runtime, client),
+    )
+    // A re-listagem já trata os próprios erros; o catch é só a rede de
+    // segurança para a fila nunca ficar rejeitada (nem virar unhandled).
+    runtime.toolListQueue = next.catch(() => {})
+    return runtime.toolListQueue
+  })
+}
+
+/** Re-lista as tools e substitui `runtime.tools` no lugar. Nunca lança. */
+async function refreshToolList(runtime: ServerRuntime, client: Client): Promise<void> {
+  // Conexão trocada/encerrada enquanto a notificação chegava: esta re-listagem
+  // é de um client morto e o resultado sobrescreveria a lista do atual.
+  if (runtime.client !== client) return
+  try {
+    const { tools: discovered } = await withTimeout(
+      client.listTools(),
+      CONNECT_TIMEOUT_MS,
+      runtime.config.name,
+    )
+    if (runtime.client !== client) return
+    runtime.tools = toToolDefs(sanitizeName(runtime.config.name), discovered)
+    runtime.toolListError = undefined
+  } catch (err) {
+    // Falha transitória (timeout, servidor ocupado, sessão HTTP caída): a lista
+    // anterior continua valendo — zerar aqui tiraria do modelo todas as tools
+    // de um servidor que segue conectado.
+    runtime.toolListError = err instanceof Error ? err.message : String(err)
+    console.warn(
+      `[mcp:${runtime.config.name}] falha ao re-listar tools após tools/list_changed:`,
+      runtime.toolListError,
+    )
+  }
 }
 
 async function disconnect(runtime: ServerRuntime): Promise<void> {
@@ -410,9 +486,12 @@ export function getMcpTools(scope: McpToolScope): ToolSet {
     if (!inScope(runtime, scope.only)) continue
     if (runtime.state !== 'connected' || !runtime.client) continue
     const client = runtime.client
+    // Descrição reescrita (botão "Otimizar") vale só enquanto a lista de tools
+    // não muda: tool nova precisa voltar com o texto do próprio servidor.
+    const rewritten = optimizedFor(runtime.config.name, runtime.tools)
     for (const def of runtime.tools) {
       merged[def.name] = tool({
-        description: `[MCP ${runtime.config.name}] ${def.description ?? def.mcpName}`,
+        description: `[MCP ${runtime.config.name}] ${rewritten?.[def.mcpName] ?? def.description ?? def.mcpName}`,
         inputSchema: jsonSchema((def.inputSchema ?? { type: 'object' }) as Record<string, unknown>),
         execute: async (input) => {
           const result = await client.callTool({
@@ -429,6 +508,38 @@ export function getMcpTools(scope: McpToolScope): ToolSet {
     }
   }
   return merged
+}
+
+function findServer(name: string): ServerRuntime | undefined {
+  return [...servers.values()].find((runtime) => runtime.config.name === name)
+}
+
+/** Estado da otimização de descrições, para o card do servidor. */
+export function mcpDescriptionsState(name: string): {
+  optimized: boolean
+  count: number
+  at?: string
+  modelId?: string
+  tools: number
+} {
+  const runtime = findServer(name)
+  if (!runtime) return { optimized: false, count: 0, tools: 0 }
+  return { ...descriptionsState(name, runtime.tools), tools: runtime.tools.length }
+}
+
+/**
+ * Botão "Otimizar" do card: reescreve as descrições do servidor com o modelo
+ * auxiliar e grava o resultado. Não é chamada por turno — só por clique.
+ */
+export async function optimizeMcpServer(name: string) {
+  const runtime = findServer(name)
+  if (!runtime) throw new Error('MCP server not found')
+  if (runtime.state !== 'connected') throw new Error('MCP server is not connected')
+  const result = await optimizeServerDescriptions(
+    name,
+    runtime.tools.map((t) => ({ name: t.mcpName, description: t.description })),
+  )
+  return { ...result, tools: runtime.tools.length }
 }
 
 /** Nomes de servidores utilizáveis (para a paleta "/" citar @mcp:<nome>). */
@@ -451,6 +562,34 @@ export function listMcpToolDescriptions(only?: string[]): string {
     lines.push(`- @mcp:${runtime.config.name}: ${names.join(', ')}`)
   }
   return lines.join('\n')
+}
+
+/**
+ * Prefixos SANITIZADOS dos servidores conectados — a chave que transforma
+ * `<prefixo>_<tool>` em família MCP no catálogo de tools sob demanda.
+ *
+ * Tem de ser o mesmo `sanitizeName` usado ao montar o nome da tool (`:247`):
+ * o nome do servidor pode ter espaço, o prefixo não.
+ */
+export function listMcpServerPrefixes(): string[] {
+  return [...servers.values()]
+    .filter((runtime) => runtime.state === 'connected' && runtime.tools.length > 0)
+    .map((runtime) => sanitizeName(runtime.config.name))
+}
+
+/**
+ * Servidores ligados que NÃO subiram, com o motivo. O catálogo os mostra como
+ * família vazia e desativada: sem isso, um servidor que falha ao conectar some
+ * do mapa, e um servidor que sumiu é indistinguível de um que nunca existiu —
+ * o modelo conclui que a capacidade não existe em vez de dizer o que aconteceu.
+ */
+export function listUnavailableMcpServers(): { prefix: string; reason: string }[] {
+  return [...servers.values()]
+    .filter((runtime) => runtime.config.enabled !== false && runtime.state === 'error')
+    .map((runtime) => ({
+      prefix: sanitizeName(runtime.config.name),
+      reason: runtime.error || 'unknown error',
+    }))
 }
 
 /** Retorna o PermissionMode override do servidor MCP para uma tool, se configurado. */

@@ -830,6 +830,56 @@ export function McpSkillsPanel() {
     }
   }
 
+  // Descrições reescritas por servidor (botão "Otimizar"). Estado próprio, e
+  // não o `busy`, porque otimizar não reconecta o servidor: o card continua
+  // utilizável enquanto o modelo auxiliar escreve.
+  const [descriptions, setDescriptions] = useState<
+    Record<string, { optimized: boolean; count: number; tools: number }>
+  >({})
+  const [optimizing, setOptimizing] = useState<string | null>(null)
+  const [optimizeError, setOptimizeError] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let alive = true
+    const targets = mcpServers.filter((s) => s.state === "connected" && s.toolNames.length > 0)
+    void Promise.all(
+      targets.map(
+        async (s) => [s.config.name, await mcpApi.descriptions(s.config.name).catch(() => null)] as const,
+      ),
+    ).then((rows) => {
+      if (!alive) return
+      const next: Record<string, { optimized: boolean; count: number; tools: number }> = {}
+      for (const [name, state] of rows) if (state) next[name] = state
+      setDescriptions(next)
+    })
+    return () => {
+      alive = false
+    }
+  }, [mcpServers])
+
+  const optimizeDescriptions = async (name: string) => {
+    setOptimizing(name)
+    setOptimizeError((current) => ({ ...current, [name]: "" }))
+    try {
+      const result = await mcpApi.optimize(name)
+      setDescriptions((current) => ({
+        ...current,
+        [name]: { optimized: true, count: result.updated, tools: result.tools },
+      }))
+      await refresh()
+    } catch (err) {
+      const message = String((err as Error)?.message ?? err)
+      // Sem modelo auxiliar o backend recusa ANTES de gastar token: o card
+      // convida a configurar em vez de mostrar o erro cru do IPC.
+      setOptimizeError((current) => ({
+        ...current,
+        [name]: /aux/i.test(message) ? t("mcp.servers.optimizeNoAux") : message,
+      }))
+    } finally {
+      setOptimizing(null)
+    }
+  }
+
   /** Liga/desliga o servidor no APP inteiro — o recorte por conversa é no
    *  popover de ferramentas do composer. */
   const toggleServer = (name: string, enabled: boolean) =>
@@ -902,6 +952,9 @@ export function McpSkillsPanel() {
                       <span className="text-sm font-medium">{server.config.name}</span>
                       <StatusBadge state={server.state} error={server.error} />
                     </div>
+                    {optimizeError[server.config.name] && (
+                      <p className="mt-1 text-[10px] text-amber-500/90">{optimizeError[server.config.name]}</p>
+                    )}
                     {server.state === "unauthorized" && server.error && (
                       <p className="mt-1 text-[10px] text-amber-500/90">{server.error}</p>
                     )}
@@ -924,6 +977,32 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    {server.state === "connected" && server.toolNames.length > 0 && (
+                      <Hint
+                        label={
+                          descriptions[server.config.name]?.optimized
+                            ? t("mcp.servers.optimizeAgain")
+                            : t("mcp.servers.optimizeHint")
+                        }
+                      >
+                        <Button
+                          size="sm"
+                          variant={descriptions[server.config.name]?.optimized ? "ghost" : "outline"}
+                          className="gap-1"
+                          disabled={optimizing === server.config.name || busy === server.config.name}
+                          onClick={() => void optimizeDescriptions(server.config.name)}
+                        >
+                          {optimizing === server.config.name ? (
+                            <LoaderCircle className="size-3 animate-spin" />
+                          ) : (
+                            <Wand2 className="size-3" />
+                          )}
+                          {descriptions[server.config.name]?.optimized
+                            ? t("mcp.servers.optimized", { count: descriptions[server.config.name].count })
+                            : t("mcp.servers.optimize")}
+                        </Button>
+                      </Hint>
+                    )}
                     <Switch
                       checked={server.config.enabled !== false}
                       disabled={busy === server.config.name}

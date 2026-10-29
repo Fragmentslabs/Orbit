@@ -512,6 +512,21 @@ export const mcpApi = {
     window.ipcRenderer.invoke("mcp:auth", name) as Promise<McpServerStatus[]>,
   /** redirect_uri do loopback OAuth, para cadastrar no app do provedor */
   oauthRedirect: () => window.ipcRenderer.invoke("mcp:oauth-redirect") as Promise<string>,
+  /** Estado das descrições reescritas do servidor (botão "Otimizar") */
+  descriptions: (name: string) =>
+    window.ipcRenderer.invoke("mcp:descriptions", name) as Promise<{
+      optimized: boolean
+      count: number
+      tools: number
+    }>,
+  /** Reescreve as descrições das tools do servidor com o modelo auxiliar */
+  optimize: (name: string) =>
+    window.ipcRenderer.invoke("mcp:optimize", name) as Promise<{
+      updated: number
+      modelId: string
+      fallback: boolean
+      tools: number
+    }>,
 }
 
 export const analyticsApi = {
