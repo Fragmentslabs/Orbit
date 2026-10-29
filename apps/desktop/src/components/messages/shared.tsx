@@ -39,6 +39,7 @@ import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { classifyMarkdownLink, linkifyMemoryIds, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
+import { chatRemarkPlugins } from "@/src/lib/remark-line-breaks"
 import { chatApi } from "@/src/lib/ipc"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -578,6 +579,54 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
 }
 
 /**
+ * Escala de BOLHA para o markdown do usuário.
+ *
+ * O streamdown foi desenhado para a resposta inteira (h1 a `text-3xl`, 16px
+ * entre blocos); numa mensagem de duas linhas isso fica desproporcional. Aqui
+ * os títulos descem para a escala do corpo e os blocos se aproximam.
+ *
+ * As classes vão LITERAIS numa string só: o Tailwind varre o texto do fonte,
+ * e variante montada em runtime não chega ao CSS gerado — a regra sumiria sem
+ * erro nenhum (mesmo motivo do IMAGE_LAYOUT em components/ai/message.tsx).
+ */
+const USER_MARKDOWN_LAYOUT = [
+  "space-y-2",
+  "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-sm [&_h4]:text-sm [&_h5]:text-sm [&_h6]:text-sm",
+  "[&_h1]:mt-2 [&_h2]:mt-2 [&_h3]:mt-2 [&_h4]:mt-2 [&_h5]:mt-2 [&_h6]:mt-2",
+  "[&_h1]:mb-1 [&_h2]:mb-1 [&_h3]:mb-1 [&_h4]:mb-1 [&_h5]:mb-1 [&_h6]:mb-1",
+  "[&_li]:py-0.5 [&_blockquote]:my-2 [&_hr]:my-3",
+].join(" ")
+
+/**
+ * Markdown da mensagem do USUÁRIO.
+ *
+ * O composer continua cru de propósito — quem digita vê os caracteres que
+ * digitou —, mas a bolha entrega o texto lido: bloco de código com highlight,
+ * tabela, lista e link. É o MESMO motor da resposta (streamdown) de propósito:
+ * o mesmo trecho colado pela pessoa e pelo modelo tem que sair igual.
+ *
+ * Duas diferenças em relação ao AssistantMarkdown:
+ * - nada de citação de fonte/memória — link digitado pelo usuário é só link;
+ * - nada de reparo de markdown de streaming (`mode="static"`): a mensagem já
+ *   está inteira, e "consertar" um `**` solto mudaria o que a pessoa escreveu.
+ *
+ * A quebra de linha simples continua valendo (ver remark-line-breaks): uma
+ * ideia por linha sai uma ideia por linha.
+ */
+function UserMessageMarkdown({ text }: { text: string }) {
+  return (
+    <MessageResponse
+      mode="static"
+      parseIncompleteMarkdown={false}
+      remarkPlugins={chatRemarkPlugins}
+      className={USER_MARKDOWN_LAYOUT}
+    >
+      {text}
+    </MessageResponse>
+  )
+}
+
+/**
  * Texto da mensagem do usuário, com a citação da mensagem respondida em
  * destaque (como no WhatsApp). O texto gravado guarda a citação junto do
  * corpo — é o que faz o modelo e a cópia da mensagem receberem as duas coisas
@@ -586,7 +635,7 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
 export function UserMessageText({ text }: { text: string }) {
   const label = useReplyLabel()
   const { reply, body } = parseMessageReply(text)
-  if (!reply) return <p className="whitespace-pre-wrap">{text}</p>
+  if (!reply) return <UserMessageMarkdown text={text} />
 
   return (
     <div className="flex flex-col gap-1">
@@ -594,7 +643,7 @@ export function UserMessageText({ text }: { text: string }) {
         <p className="text-[11px] font-medium text-primary">{label(reply.role)}</p>
         <p className="line-clamp-3 text-xs whitespace-pre-wrap text-muted-foreground">{reply.text}</p>
       </div>
-      {body.trim() && <p className="whitespace-pre-wrap">{body}</p>}
+      {body.trim() && <UserMessageMarkdown text={body} />}
     </div>
   )
 }
