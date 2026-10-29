@@ -67,6 +67,9 @@ export interface SendConfig {
   sessionId?: string
   /** Arquivos anexados à mensagem (data URLs) */
   files?: FilePart[]
+  /** Id da resposta que falhou: o turno é REFEITO sobre a mesma mensagem do
+   *  usuário, em vez de enviar uma nova (ver SendMessageInput.retryOf). */
+  retryOf?: string
 }
 
 /** Tamanho do contexto do turno em andamento (ver `liveContext`). */
@@ -1361,6 +1364,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessionId: sessionId!,
       text,
       files: config.files,
+      ...(config.retryOf ? { retryOf: config.retryOf } : {}),
       providerId: selected.providerId,
       modelId: selected.modelId,
       mode: session.mode ?? mode,

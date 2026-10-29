@@ -301,13 +301,16 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ),
       )}
       {message.error && (
+        // Refazer só faz sentido na ÚLTIMA resposta: o retry reexecuta o turno
+        // sobre a mensagem do usuário, e numa resposta antiga isso descartaria
+        // o que veio depois dela.
         <MessageError
           sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
           attempts={message.attempts}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}
-          onRetry={onRetry}
+          onRetry={isLast ? onRetry : undefined}
         />
       )}
       {!message.error && message.truncated && <MessageTruncated />}

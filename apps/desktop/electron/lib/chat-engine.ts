@@ -50,6 +50,7 @@ import { buildProviderOptions, interleavedReasoningField, normalizeMessages } fr
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
 import { bindMediaJournal, closeMediaJournal, runWithMediaJournal } from './session/media-journal'
+import { retryContextNote } from './session/retry-note'
 import { coveredBy, currentTurnWrites, runWithWriteScope } from './session/write-journal'
 import {
   attachArtifactMessage,
@@ -1594,6 +1595,33 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
   const history = await loadMessages(sessionId)
 
+  // Retry ("tentar novamente"): o turno roda DE NOVO sobre a mesma mensagem do
+  // usuário, em vez de mandar uma nova. A resposta que falhou sai do histórico
+  // — o erro já apareceu no card, e mantê-la deixava a conversa com uma bolha
+  // repetida e um card de erro permanente (cada retry empilhava mais um).
+  // O que o modelo precisa saber da tentativa anterior vai na nota, não no
+  // histórico (ver session/retry-note.ts).
+  let retriedUser: ChatMessage | null = null
+  let retriedFailed: ChatMessage | null = null
+  let retryNote = ''
+  if (input.retryOf) {
+    const failedIndex = history.findIndex((m) => m.id === input.retryOf)
+    const failed = failedIndex >= 0 ? history[failedIndex] : undefined
+    // Só a última resposta pode ser refeita: refazer uma do meio descartaria o
+    // que veio depois dela, que o usuário quis manter.
+    if (failed?.role === 'assistant' && failedIndex === history.length - 1) {
+      retriedUser = [...history.slice(0, failedIndex)].reverse().find((m) => m.role === 'user') ?? null
+      // Sem a mensagem do usuário não há turno a refazer: cai no envio normal.
+      if (retriedUser) {
+        retriedFailed = failed
+        retryNote = retryContextNote(failed)
+        history.splice(failedIndex, 1)
+        await saveMessages(sessionId, history)
+        emit(win, { type: 'messages', sessionId, messages: history })
+      }
+    }
+  }
+
   // Rotação de modelos: sequência resolvida no momento da chamada (ver
   // model-rotation.ts) — rotação escolhida no seletor para este chat; senão
   // o modelo pinado no chat; senão o default. `primaryModel` abaixo é o
@@ -1639,21 +1667,29 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     text: input.text,
     state: 'done',
   }
-  const userMessage: ChatMessage = {
-    id: newId('msg'),
-    role: 'user',
-    parts: [...(input.files ?? []), textPart],
-    createdAt: Date.now(),
-    // Metadados do turno persistidos na mensagem do usuário — a tool
-    // session_context os lê para responder "o que foi alterado no turno X?"
-    mode: input.mode,
-    permissionMode: input.options.permissionMode ?? 'ask',
-    // orchestrationRole só é preenchido pelo main: num worker, quem mandou foi
-    // o orquestrador. Sem a marca, foi o usuário digitando no chat do worker.
-    origin: input.orchestrationRole === 'worker' ? 'orchestrator' : undefined,
+  // Retry reusa a mensagem do usuário que já está no histórico: é o que evita a
+  // bolha duplicada e devolve ao turno os anexos originais (o retry manda só o
+  // texto — os parts processados continuam valendo os mesmos).
+  let userMessage: ChatMessage
+  if (retriedUser) {
+    userMessage = retriedUser
+  } else {
+    userMessage = {
+      id: newId('msg'),
+      role: 'user',
+      parts: [...(input.files ?? []), textPart],
+      createdAt: Date.now(),
+      // Metadados do turno persistidos na mensagem do usuário — a tool
+      // session_context os lê para responder "o que foi alterado no turno X?"
+      mode: input.mode,
+      permissionMode: input.options.permissionMode ?? 'ask',
+      // orchestrationRole só é preenchido pelo main: num worker, quem mandou foi
+      // o orquestrador. Sem a marca, foi o usuário digitando no chat do worker.
+      origin: input.orchestrationRole === 'worker' ? 'orchestrator' : undefined,
+    }
+    history.push(userMessage)
+    emit(win, { type: 'message', sessionId, message: userMessage })
   }
-  history.push(userMessage)
-  emit(win, { type: 'message', sessionId, message: userMessage })
 
   const assistantMessage: ChatMessage = {
     id: newId('msg'),
@@ -1662,7 +1698,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     createdAt: Date.now(),
     providerId: input.providerId,
     modelId: input.modelId,
-    simple: input.options.simple || undefined,
+    // Retry mantém a apresentação do turno original: o envio do retry não
+    // carrega as opções (só texto), e trocar de estilo no meio surpreenderia.
+    simple: (retriedFailed?.simple || input.options.simple) || undefined,
   }
   history.push(assistantMessage)
   bindMediaJournal(assistantMessage.id)
@@ -1682,7 +1720,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // Registro das imagens do turno (modo Visão): a tool describe_image lê
   // daqui sob demanda; vive só durante o turno (limpo no finally).
   const turnImages: TurnImage[] = []
-  if (files.length > 0) {
+  // Num retry os anexos já foram processados no turno original: reprocessar
+  // trocaria chips por data URLs de novo e duplicaria a nota extraída.
+  if (!retriedUser && files.length > 0) {
     const processedParts: MessagePart[] = []
     for (const file of files) {
       processedParts.push(...(await preprocessAttachment(file, {
@@ -2139,6 +2179,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             description: screenDescription,
           })
         : '',
+      // Por último de propósito: é o que o modelo precisa ter lido mais
+      // recentemente antes de responder (ver session/retry-note.ts).
+      retryNote,
     ]
       .filter(Boolean)
       .join('\n\n')
@@ -3016,6 +3059,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const kind = classified.kind === 'context-length' && turnSteps > 0 ? 'context-length-turn' : classified.kind
     assistantMessage.error = aborted ? undefined : message
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
+    // O que o turno gravou ANTES de falhar. O caminho de sucesso registra em
+    // `authored` (perto do fim do try); a falha nunca registrava — e é
+    // justamente o turno que falhou que precisa de autoria, porque é sobre ele
+    // que o retry seguinte avisa o modelo (ver session/retry-note.ts) e é o que
+    // o revert teria de isolar.
+    if (input.mode === 'code' && input.directory) {
+      const writes = currentTurnWrites(input.directory)
+      if (writes) {
+        assistantMessage.snapshot = {
+          ...(assistantMessage.snapshot ?? {}),
+          authored: writes.authored,
+          others: writes.others,
+        }
+      }
+    }
     for (const part of assistantMessage.parts) {
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
         if (part.type === 'text') part.text = stripEngineMarkers(part.text)

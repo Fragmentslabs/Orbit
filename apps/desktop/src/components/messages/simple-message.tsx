@@ -32,13 +32,15 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, bus
         <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}
       {message.error && (
+        // Só na última: o retry reexecuta o turno sobre a mensagem do usuário,
+        // e numa resposta antiga isso descartaria o que veio depois dela.
         <MessageError
           sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
           attempts={message.attempts}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}
-          onRetry={onRetry}
+          onRetry={isLast ? onRetry : undefined}
         />
       )}
     </div>

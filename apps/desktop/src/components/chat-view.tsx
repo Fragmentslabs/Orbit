@@ -166,9 +166,12 @@ const MessageItem = memo(
   const handleRetry = useCallback(() => {
     const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
     if (prevUser && sessionId) {
-      void sendMessage(mode, messageText(prevUser), { options: {}, sessionId })
+      // Refaz o turno NO LUGAR: o main descarta esta resposta que falhou e reusa
+      // a mensagem do usuário (com os anexos dela) em vez de enviar uma nova —
+      // sem bolha duplicada e sem o card de erro ficar no histórico.
+      void sendMessage(mode, messageText(prevUser), { options: {}, sessionId, retryOf: msg.id })
     }
-  }, [messages, index, mode, sessionId, sendMessage])
+  }, [messages, index, mode, sessionId, sendMessage, msg.id])
 
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")

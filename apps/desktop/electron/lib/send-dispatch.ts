@@ -51,6 +51,13 @@ export async function dispatchSend(win: BrowserWindow, input: SendMessageInput):
   // título nascia no fim do turno — e o caminho da Orquestra (runOrchestration
   // não passa por runChatTurn) nunca nomeava nada.
   await startSessionNaming(win, input, session)
+  // Retry refaz UM turno, não abre um novo: orquestração e loop criam turnos
+  // por conta própria (e não conhecem `retryOf`), então um retry sempre roda no
+  // engine simples — o mesmo que produziu a resposta que falhou.
+  if (input.retryOf) {
+    void runChat(win, input)
+    return
+  }
   // Orquestração é exclusiva do modo code
   if (input.options.orchestrate && input.mode !== 'code') {
     input = { ...input, options: { ...input.options, orchestrate: undefined } }

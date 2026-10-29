@@ -1223,6 +1223,13 @@ export interface SendMessageInput {
   text: string
   /** Arquivos anexados à mensagem do usuário */
   files?: FilePart[]
+  /**
+   * Id da resposta que falhou, quando este envio é um "tentar novamente".
+   * O turno roda DE NOVO sobre a mesma mensagem do usuário (nada de bolha
+   * duplicada): a tentativa que falhou sai do histórico e vira a nota de
+   * retomada que o modelo recebe (ver session/retry-note.ts).
+   */
+  retryOf?: string
   providerId: string
   modelId: string
   mode: SessionMode
