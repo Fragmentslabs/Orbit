@@ -1,4 +1,5 @@
 import { createContext, memo, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import {
   ArrowDownRightIcon,
   ArrowUpRightIcon,
@@ -9,8 +10,10 @@ import {
   InfoIcon,
   MinusIcon,
   SendIcon,
+  Settings2,
   TriangleAlertIcon,
 } from "lucide-react"
+import { supportsSurface, uiDestination, type DesktopPlatform } from "@shared/ui-destinations"
 import type { CustomRendererProps } from "streamdown"
 import {
   Area,
@@ -45,6 +48,9 @@ import {
   type Value,
 } from "@/src/lib/orbit-expr"
 import { INPUT_TYPES, parseOrbitUi, type OrbitUiBlock } from "@/src/lib/orbit-ui"
+import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
+import { windowApi } from "@/src/lib/ipc"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 
 /**
  * Blocos inline da resposta do assistente (fence ```orbit-ui, ver
@@ -740,6 +746,65 @@ function Buttons({ items }: Of<"buttons">) {
   )
 }
 
+/**
+ * Cartão de navegação: "isso fica aqui, quer ir?".
+ *
+ * Nada abre sozinho — o clique é o consentimento, e o cartão só existe porque o
+ * usuário perguntou onde ficava. O caminho ("Configurações → Voz") é montado com
+ * as mesmas chaves de i18n da tela, então renomear a aba renomeia o cartão.
+ */
+function NavBlock({ destino, nota }: Of<"nav">) {
+  const { t } = useTranslation()
+  const tx = useText()
+  const openSettings = useSettingsUi((state) => state.openSettings)
+  const [opened, setOpened] = useState(false)
+  const target = uiDestination(destino)
+  const tab = target?.desktop
+
+  // Sem aba no desktop não há para onde levar: um destino que só existe no
+  // celular não vira cartão, porque um cartão vazio é pior que o silêncio.
+  if (!target || !tab) return null
+
+  const path = `${t("settings.title")} → ${t(SETTINGS_TAB_LABEL_KEY[tab])}`
+
+  // A aba some nesta plataforma (Computador só tem driver no macOS/Windows,
+  // Sistema só existe no Windows): explicar é melhor que prometer.
+  if (!supportsSurface(target, "desktop", windowApi.platform as DesktopPlatform)) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-dashed border-border px-3.5 py-3">
+        <Settings2 className="mt-0.5 size-4 shrink-0 text-muted-foreground/60" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-muted-foreground">{path}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground/80">{t("orbitUi.nav.otherPlatform")}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        openSettings(tab)
+        setOpened(true)
+      }}
+      className="group flex w-full cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/50 hover:bg-secondary/40"
+    >
+      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+        {opened ? <CheckIcon className="size-4" /> : <Settings2 className="size-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{path}</span>
+        {nota && <span className="mt-0.5 block text-xs text-muted-foreground">{tx(nota)}</span>}
+      </span>
+      <span className="mt-0.5 flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+        {opened ? t("orbitUi.nav.opened") : t("orbitUi.nav.open")}
+        <ArrowUpRightIcon className="size-3.5" />
+      </span>
+    </button>
+  )
+}
+
 function Block({ block }: { block: OrbitUiBlock }) {
   switch (block.type) {
     case "stats":
@@ -774,6 +839,8 @@ function Block({ block }: { block: OrbitUiBlock }) {
       return <TextInput {...block} />
     case "buttons":
       return <Buttons {...block} />
+    case "nav":
+      return <NavBlock {...block} />
   }
 }
 

@@ -70,3 +70,20 @@ describe("blocos interativos", () => {
     expect(parseOrbitUi('{"type":"buttons","items":[{"label":"a","action":"eval"}]}', false).blocks).toHaveLength(0)
   })
 })
+
+describe("cartão de navegação", () => {
+  it("lê o destino e a nota", () => {
+    const line = '{"type":"nav","destino":"voice","nota":"Leitura em voz alta"}'
+    const { blocks } = parseOrbitUi(line, false)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ type: "nav", destino: "voice", nota: "Leitura em voz alta" })
+  })
+
+  it("não valida o destino aqui: quem resolve é a tela", () => {
+    // Um id inventado precisa chegar ao renderer para ele decidir não desenhar
+    // nada — descartar no parse esconderia o erro do modelo.
+    const { blocks } = parseOrbitUi('{"type":"nav","destino":"nao-existe"}', false)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ destino: "nao-existe" })
+  })
+})

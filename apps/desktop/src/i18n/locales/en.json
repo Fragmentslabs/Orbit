@@ -1,4 +1,11 @@
 {
+  "orbitUi": {
+    "nav": {
+      "open": "Open",
+      "opened": "Opened",
+      "otherPlatform": "Not available on this platform."
+    }
+  },
   "mermaid": {
     "failed": "Could not draw this diagram.",
     "copy": "Copy diagram code",

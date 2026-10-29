@@ -1,4 +1,11 @@
 {
+  "orbitUi": {
+    "nav": {
+      "open": "Abrir",
+      "opened": "Aberto",
+      "otherPlatform": "Não existe nesta plataforma."
+    }
+  },
   "mermaid": {
     "failed": "Não foi possível desenhar este diagrama.",
     "copy": "Copiar código do diagrama",

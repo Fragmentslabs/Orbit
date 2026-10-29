@@ -17,7 +17,8 @@ import { z } from "zod"
  * (slider, select…) têm um `id` e guardam um valor; qualquer texto pode
  * referenciar esses ids com `{expr}` e números aceitam expressões (ver
  * orbit-expr.ts); `showIf` mostra/esconde um bloco; botões enviam uma
- * mensagem, copiam um texto ou mudam um valor.
+ * mensagem, copiam um texto ou mudam um valor. O cartão `nav` leva a uma tela
+ * do próprio app — quem clica é o usuário, e nada abre sozinho.
  */
 
 const text = (max: number) => z.string().max(max)
@@ -208,6 +209,21 @@ const buttons = z.object({
     .max(6),
 })
 
+/**
+ * Convite para uma tela do app ("onde fica isso?").
+ *
+ * O modelo manda apenas o `destino` — um id do registro compartilhado
+ * (@shared/ui-destinations) —, nunca o caminho escrito à mão: o rótulo sai das
+ * mesmas chaves de i18n que a tela usa. Destino desconhecido não vira cartão, e
+ * tela que não existe na superfície vira uma explicação, não um botão morto.
+ */
+const nav = z.object({
+  type: z.literal("nav"),
+  destino: z.string().max(40),
+  /** Uma linha dizendo o que se resolve ali. */
+  nota: text(160).optional(),
+})
+
 /** Os tipos que guardam um valor e entram no escopo das expressões. */
 export const INPUT_TYPES = ["slider", "number", "select", "tabs", "toggle", "text"] as const
 
@@ -228,6 +244,7 @@ export const orbitUiBlock = z.discriminatedUnion("type", [
   toggle.extend(showIf),
   textInput.extend(showIf),
   buttons.extend(showIf),
+  nav.extend(showIf),
 ])
 
 export type OrbitUiBlock = z.infer<typeof orbitUiBlock>

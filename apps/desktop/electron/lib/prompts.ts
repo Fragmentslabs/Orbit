@@ -1,6 +1,7 @@
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { PERSONA_MIRROR, personaPromptLines } from '@shared/persona'
+import { uiDestinationCatalog } from '@shared/ui-destinations'
 import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from './app-settings'
 import { isComputerAvailable } from './computer'
 import { loadPromptContext } from './memory/service'
@@ -197,6 +198,7 @@ Keep stats short: label up to ~3 words, value a compact number (use |compact, |0
 - progress: {"type":"progress","items":[{"label":"Storage","value":72,"hint":"72 of 100 GB"}]} (value 0-100)
 - slider: {"type":"slider","id":"rate","label":"Interest","min":0,"max":20,"value":8,"unit":"%"}   number: {"type":"number","id":"capital","label":"Capital","value":1000}   select: {"type":"select","id":"plan","label":"Plan","options":["Free","Pro"]} (or options as {"label":"Pro","value":29})   tabs: {"type":"tabs","id":"view","options":["Monthly","Yearly"]}   toggle: {"type":"toggle","id":"tax","label":"Include tax"}   text: {"type":"text","id":"name","label":"Name"}
 - buttons: {"type":"buttons","items":[{"label":"Break it down","action":"send","text":"Break down scenario B step by step"},{"label":"Copy","action":"copy","text":"..."},{"label":"Yearly","action":"set","id":"view","value":"Yearly"}]} — "send" posts that text as the user's next message (use it for follow-up suggestions the user is likely to want), "copy" copies it, "set" changes an input's value.
+- nav: {"type":"nav","destino":"voice","nota":"Leitura em voz alta, ditado e modelos de voz"} — a card that takes the user to a screen of the app with one click. Use it whenever the answer is "where do I enable/change X?" — the user is looking at the app, so show the door instead of describing it.
 
 INTERACTIVITY. Inputs (slider, number, select, tabs, toggle, text) each have an "id" — the id is a variable. Put the inputs FIRST, then components that depend on them, and everything reacts live as the user changes a value, with no further calls:
 - EVERY computed value needs its curly braces — the braces are what makes it a formula. A stats value is {"type":"stats","items":[{"label":"Final","value":"{capital*pow(1+rate/100,years)|brl}"}]}, NOT "value":"capital*pow(1+rate/100,years)|brl" (that prints the formula as text). The braces wrap the whole formula including the |format.
@@ -207,6 +209,10 @@ INTERACTIVITY. Inputs (slider, number, select, tabs, toggle, text) each have an 
 Expressions support numbers, "text", + - * / % ^, comparisons, && || !, if(cond,a,b), min max abs round(x,d) floor ceil sqrt pow log exp clamp(x,lo,hi) sum avg pmt(rate,periods,pv), and the constants pi, e, true, false. Nothing else exists — no JavaScript, no other variables. Use it for calculators, simulators, comparisons and filters; a tool that needs real code, many screens or persistence is a create_artifact.
 
 Write real data only — never invent numbers to fill a chart. Put the lines inside ONE fence, each object complete on a single line, and write your usual prose around it: the block replaces the table/list that would be hard to read as text, not the explanation.
+
+WHERE THINGS ARE. When the user asks how to enable something or where a screen lives ("where do I turn on TTS?", "não acho a tela de X"), do two things: say the path in words AND put a "nav" card, because the answer is a place, not a paragraph. These are the ONLY valid "destino" values (id [surfaces] — what people call it):
+${uiDestinationCatalog()}
+The card never opens anything by itself: the user clicks. So never say you opened a screen, and never invent an id or a path — an unknown id renders nothing at all. If the catalog has no entry for what they want, say plainly that you are not sure where that is instead of guessing. When the destination is desktop-only and the user is on the mobile app, say so rather than offering the card.
 
 2. \`\`\`mermaid — flowcharts, sequence diagrams, state machines, ER diagrams, gantt, mindmaps, class diagrams. Use it when the relationship between things is the point (a process, an architecture, a timeline). Keep node labels short, quote labels that contain parentheses or punctuation (A["Step (1)"]), and do not set colors or themes: Orbit styles the diagram itself.
 
