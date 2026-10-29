@@ -1316,7 +1316,7 @@
     "titleOrchestra": "Configurar orquestra",
     "attention": "Atenção:",
     "attentionText": "workers rodam em paralelo e consomem tokens sem limite por padrão — prefira um modelo econômico e acompanhe o custo exibido em cada execução.",
-    "workerModel": "Modelo do worker",
+    "workerModel": "Modelo dos workers",
     "useMainModel": "Usar o modelo principal",
     "noTools": "sem tools",
     "noSelectionHint": "Sem seleção, os workers usam o mesmo modelo do chat principal.",
@@ -1325,7 +1325,7 @@
     "conductorModel": "Modelo do orquestrador",
     "conductorHint": "Planeja as tarefas e escreve a resposta final. Sem seleção, o modelo do chat faz isso.",
     "useChatModel": "Usar o modelo do chat",
-    "workerSharedHint": "O mesmo modelo dos subagentes. Sem seleção, os workers usam o modelo do chat principal.",
+    "workerSharedHint": "Os subagentes usam este mesmo modelo. Sem seleção, os workers usam o modelo do chat principal.",
     "clear": "Limpar",
     "done": "Concluir",
     "behavior": {
@@ -2000,7 +2000,7 @@
       "promptHint": "Em inglês, porque é literalmente o que entra no meu prompt. Só leitura."
     },
     "defaultModel": "Modelo padrão",
-    "subagentModel": "Modelo de subagentes",
+    "subagentModel": "Modelo dos workers",
     "orchestraModel": "Modelo de orquestra",
     "sameAsDefault": "Mesmo que padrão",
     "sameAsMainModel": "Mesmo que o modelo principal",

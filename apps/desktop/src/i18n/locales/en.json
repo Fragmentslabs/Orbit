@@ -1325,7 +1325,7 @@
     "conductorModel": "Orchestrator model",
     "conductorHint": "Plans the tasks and writes the final answer. Without a selection, the chat model does it.",
     "useChatModel": "Use the chat model",
-    "workerSharedHint": "The same model as the subagents. Without a selection, workers use the main chat model.",
+    "workerSharedHint": "The subagents use this same model. Without a selection, workers use the main chat model.",
     "clear": "Clear",
     "done": "Done",
     "behavior": {
@@ -2000,7 +2000,7 @@
       "promptHint": "In English, because it is literally what goes into my prompt. Read-only."
     },
     "defaultModel": "Default model",
-    "subagentModel": "Subagent model",
+    "subagentModel": "Worker model",
     "orchestraModel": "Orchestra model",
     "sameAsDefault": "Same as default",
     "sameAsMainModel": "Same as main model",
