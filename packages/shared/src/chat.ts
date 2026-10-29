@@ -358,6 +358,14 @@ export interface FilePart {
    */
   mediaId?: string
   /**
+   * O anexo é uma FONTE da conversa (`doc1`, `src2`…), arrastada da aba Fontes:
+   * o conteúdo já está guardado e endereçado, então nada é copiado e `url` fica
+   * vazio. O agente recebe o id e o nome na nota do anexo, e lê o documento com
+   * doc_read/doc_search como leria qualquer outra fonte — o chip na bolha é só
+   * o gesto de dizer "é ESTE documento", não um segundo arquivo.
+   */
+  sourceId?: string
+  /**
    * O conteúdo deste anexo vale só no TURNO EM QUE CHEGOU (visão nativa).
    *
    * A part continua na mensagem — a bolha mostra a imagem —, mas o modelo
@@ -390,6 +398,26 @@ export const BROWSER_SELECTION_MIME = "application/x-orbit-browser-selection"
  * e anexar à próxima mensagem. Um caminho paralelo só para o instante de motion
  * duplicaria chip, serialização e limpeza para divergirem depois. */
 export const DOCUMENT_QUOTE_MIME = "application/x-orbit-document-quote"
+
+/**
+ * MIME de uma FONTE arrastada da aba Fontes até o composer.
+ *
+ * O payload é só a identidade do documento ({ id, name, kind, type }): o
+ * conteúdo já está guardado no escopo da conversa e é alcançado pelo id. O
+ * anexo que nasce daí é uma REFERÊNCIA (`FilePart.sourceId`) — nada é copiado,
+ * igual ao arrasto da aba Mídia (MEDIA_DND_MIME), e a bolha mostra um chip com
+ * o nome exato do documento em vez de um "src3" solto.
+ */
+export const SOURCE_DND_MIME = "application/x-orbit-source"
+
+/** O que o arrasto de uma fonte carrega. `type` é o rótulo curto que a lista
+ *  já mostra ("PDF", "MD"), para o chip não precisar reabrir o id. */
+export interface SourceDndPayload {
+  id: string
+  name?: string
+  kind?: string
+  type?: string
+}
 
 /** O que o chip de citação carrega. `page`/`fromLine`/`toLine` só existem
  * onde a fonte tem essa noção (PDF, DOCX, planilha — tudo que passa pelo

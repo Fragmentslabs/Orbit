@@ -22,6 +22,8 @@ export interface QueueAttachment {
   url?: string;
   /** Anexo que é uma referência à galeria (aba Mídia) — ver FilePart.mediaId. */
   mediaId?: string;
+  /** Anexo que é uma FONTE da conversa (aba Fontes) — ver FilePart.sourceId. */
+  sourceId?: string;
 }
 
 interface SendButtonGroupProps {

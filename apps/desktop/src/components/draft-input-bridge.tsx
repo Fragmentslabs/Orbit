@@ -1,5 +1,9 @@
 import { useEffect } from "react"
-import { usePromptInputController, type MediaAttachmentRef } from "@/src/components/ai/prompt-input"
+import {
+  usePromptInputController,
+  type MediaAttachmentRef,
+  type SourceAttachmentRef,
+} from "@/src/components/ai/prompt-input"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { usePanelStore } from "@/src/stores/panel-store"
 import type { FilePart } from "@shared/chat"
@@ -16,11 +20,19 @@ import type { FilePart } from "@shared/chat"
 async function restoreAttachments(parts: FilePart[]): Promise<{
   files: File[]
   media: MediaAttachmentRef[]
+  sources: SourceAttachmentRef[]
 }> {
   const files: File[] = []
   const media: MediaAttachmentRef[] = []
+  const sources: SourceAttachmentRef[] = []
   await Promise.all(
     parts.map(async (part) => {
+      // Fonte da conversa: volta pelo caminho do arrasto da aba Fontes, para o
+      // reenvio continuar sendo uma REFERÊNCIA ao documento e não uma cópia.
+      if (part.sourceId) {
+        sources.push({ id: part.sourceId, name: part.filename, kind: part.mime })
+        return
+      }
       if (part.mediaId) {
         media.push({ id: part.mediaId, name: part.filename, mime: part.mime, url: part.url })
         return
@@ -33,7 +45,7 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
       }
     }),
   )
-  return { files, media }
+  return { files, media, sources }
 }
 
 export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
@@ -48,8 +60,9 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
     if (payload === null) return
     controller.textInput.setInput(payload.text)
     if (payload.files?.length) {
-      void restoreAttachments(payload.files).then(({ files, media }) => {
+      void restoreAttachments(payload.files).then(({ files, media, sources }) => {
         for (const ref of media) controller.attachments.addMedia(ref)
+        for (const ref of sources) controller.attachments.addSource(ref)
         if (files.length > 0) controller.attachments.add(files)
       })
     }

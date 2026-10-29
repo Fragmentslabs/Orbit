@@ -73,7 +73,7 @@ import {
   type DocumentKind,
   type DocumentPage,
 } from './document-pages'
-import { saveSessionDocument, type SessionDocument } from './session-documents'
+import { readSessionDocument, saveSessionDocument, type SessionDocument } from './session-documents'
 import { describeSkillAttachment } from './skills/import'
 import {
   clearTurnImages,
@@ -446,6 +446,9 @@ function attachmentChip(
     chip: true,
     ...(documentId ? { documentId } : {}),
     ...(mediaUrl ? { mediaUrl } : {}),
+    // A fonte anexada continua sendo uma referência depois de gravada: o chip
+    // da bolha mostra o nome do documento, e não um anexo sem conteúdo.
+    ...(file.sourceId ? { sourceId: file.sourceId } : {}),
   }
 }
 
@@ -760,6 +763,51 @@ async function preprocessMediaRefAttachment(
   ]
 }
 
+/**
+ * Fonte da conversa arrastada da aba Fontes até o composer.
+ *
+ * Nada é copiado: o documento JÁ está guardado e tem id (`doc1`, `src2`), então
+ * o anexo é uma referência — o chip na bolha mostra o nome exato do documento e
+ * o agente recebe a nota com o endereço que as tools dele entendem. Antes, o
+ * arrasto morria no meio do caminho (o composer não conhecia o MIME) e citar
+ * uma fonte exigia escrever "o src2" e torcer para o modelo adivinhar qual era.
+ */
+async function sourceRefAttachment(file: FilePart, sessionId: string | undefined): Promise<MessagePart[]> {
+  const id = file.sourceId ?? ''
+  const name = file.filename || id
+  const found = await readSessionDocument(sessionId ?? '', id).catch(() => null)
+  if (!found) {
+    return [
+      attachmentChip(file),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text: `[Source attached: ${name} (${id})] (it is no longer in this conversation's sources — it was removed, or moved to another chat)`,
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  }
+  const doc = found.doc
+  const unit =
+    doc.kind === 'spreadsheet' ? 'sheets' : doc.kind === 'docx' ? 'blocks' : 'pages'
+  return [
+    attachmentChip(file),
+    {
+      id: newId('prt'),
+      type: 'text',
+      text: [
+        `[Source of this conversation: ${doc.filename} — ${doc.id} (${doc.kind}, ${unit}: ${doc.totalPages})]`,
+        `The user pointed at THIS document on purpose — the file itself is already stored here, so nothing was copied and you should not ask for it again.`,
+        `Find things in it with doc_search({ docId: "${doc.id}", pattern }) — it answers with page and line — and read around a hit with doc_read({ docId: "${doc.id}", offset: <page> }).`,
+        `To cite it back in your reply: [${doc.filename}](#orbit-source/${doc.id}/p1)`,
+      ].join('\n'),
+      state: 'done',
+      source: 'attachment',
+    },
+  ]
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
  *  texto extraído (evita data URLs enormes no histórico) + um chip sem dados
  *  pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
@@ -789,6 +837,10 @@ async function preprocessAttachment(
   // o agente recebe a referência e o caminho. É o primeiro corte porque `url`
   // aqui é só o preview — nenhum dos caminhos abaixo vale para ele.
   if (file.mediaId) return preprocessMediaRefAttachment(file, deps)
+
+  // Fonte da conversa (aba Fontes): mesma ideia da galeria — referência, não
+  // cópia. O conteúdo já está guardado e endereçado no escopo da conversa.
+  if (file.sourceId) return sourceRefAttachment(file, deps.sessionId)
 
   // PROJETO de composição de motion (.zip com `orbit.json` na raiz, o que
   // "Salvar projeto" na aba Motion gera). Arrastar o arquivo aqui é o caminho

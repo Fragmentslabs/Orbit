@@ -141,17 +141,23 @@ export function speakableText(message: ChatMessage): string {
     .trim()
 }
 
+/** Anexo do composer como o conversor precisa vê-lo — o mínimo comum entre o
+ *  PromptInputFile, o QueueAttachment e o que volta de um revert. */
+export interface AttachmentLike {
+  mediaType?: string
+  filename?: string
+  url?: string
+  mediaId?: string
+  sourceId?: string
+}
+
 /** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts.
  *  `mediaId` marca o anexo que é uma referência à galeria — nesse caso `url` é
- *  só o preview e o main não copia nada (ver FilePart.mediaId). */
-export function toFileParts(
-  files: { mediaType?: string; filename?: string; url?: string; mediaId?: string }[],
-): FilePart[] {
+ *  só o preview e o main não copia nada (ver FilePart.mediaId). `sourceId` é o
+ *  mesmo para uma FONTE da conversa: `url` vazio e o conteúdo já guardado. */
+export function toFileParts(files: AttachmentLike[]): FilePart[] {
   return files
-    .filter(
-      (f): f is { mediaType?: string; filename?: string; url?: string; mediaId?: string } =>
-        Boolean(f.url) || Boolean(f.mediaId),
-    )
+    .filter((f): f is AttachmentLike => Boolean(f.url) || Boolean(f.mediaId) || Boolean(f.sourceId))
     .map((f) => ({
       id: `file_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
       type: "file" as const,
@@ -159,6 +165,7 @@ export function toFileParts(
       filename: f.filename,
       url: f.url ?? "",
       ...(f.mediaId ? { mediaId: f.mediaId } : {}),
+      ...(f.sourceId ? { sourceId: f.sourceId } : {}),
     }))
 }
 

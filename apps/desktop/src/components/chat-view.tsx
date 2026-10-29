@@ -112,10 +112,22 @@ const INTRO_TOTAL_MS = INTRO_START_MS + INTRO_STEP_MS * INTRO_STEPS
  */
 function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string }) {
   const { t } = useTranslation()
-  const openable = Boolean(sessionId) && (!!file.documentId || DOCUMENT_FILE.test(file.filename ?? ""))
+  // Fonte anexada por referência (arrastada da aba Fontes): o id JÁ é o
+  // endereço do documento, então o chip abre direto — sem passar pela lista.
+  const openable =
+    Boolean(sessionId) &&
+    (!!file.sourceId || !!file.documentId || DOCUMENT_FILE.test(file.filename ?? ""))
 
   const open = async () => {
     if (!sessionId) return
+    if (file.sourceId) {
+      usePanelStore.getState().openSourceTab(sessionId, {
+        docId: file.sourceId,
+        page: 1,
+        title: file.filename ?? file.sourceId,
+      })
+      return
+    }
     let docId = file.documentId
     const { shared, own } = await docsApi.list(sessionId)
     const docs = [...own, ...shared]

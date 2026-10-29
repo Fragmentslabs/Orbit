@@ -1,4 +1,4 @@
-import type { ChatStatus } from "@shared/chat"
+import { SOURCE_DND_MIME, type ChatStatus } from "@shared/chat"
 import { MEDIA_DND_MIME } from "@shared/media"
 import type { FileUIPart } from "ai"
 import { useTranslation } from "react-i18next"
@@ -91,6 +91,9 @@ import { Truncate } from "@/components/ui/truncated-text"
 export type PromptInputFile = FileUIPart & {
   id: string
   mediaId?: string
+  /** Fonte da conversa anexada por referência (arrastada da aba Fontes) —
+   *  ver FilePart.sourceId. `url` fica vazio: não há bytes a carregar. */
+  sourceId?: string
   /**
    * Texto de origem quando o anexo nasceu de um PASTE grande (ver
    * PASTE_AS_SOURCE_CHARS). Vive só no composer, para a prévia do hover: a
@@ -148,6 +151,20 @@ function fileAttachment(file: File): PromptInputFile {
   }
 }
 
+/**
+ * O arrasto traz algo que este composer sabe receber? Arquivo do disco, item
+ * da galeria (aba Mídia) ou fonte da conversa (aba Fontes) — cada um pelo seu
+ * MIME. É o que decide o preventDefault do dragover: sem ele o navegador trata
+ * o drop como texto e o handler nunca roda.
+ */
+function isAttachmentDrag(types: readonly string[] | undefined): boolean {
+  return (
+    !!types?.includes("Files") ||
+    !!types?.includes(MEDIA_DND_MIME) ||
+    !!types?.includes(SOURCE_DND_MIME)
+  )
+}
+
 /** O que o tile da aba Mídia manda no drop — a identidade do item, nunca bytes. */
 export interface MediaAttachmentRef {
   id: string
@@ -157,11 +174,27 @@ export interface MediaAttachmentRef {
   url?: string
 }
 
+/**
+ * O que a linha da aba Fontes manda no drop: a identidade de uma fonte da
+ * conversa (`doc1`, `src2`). É o mesmo princípio do MediaAttachmentRef — nada
+ * de bytes —, mas o destino é outro: a fonte já está guardada e é alcançada
+ * pelo id, e é isso que o agente recebe.
+ */
+export interface SourceAttachmentRef {
+  id: string
+  name?: string
+  kind?: string
+  /** Rótulo curto do tipo ("PDF", "MD") para o chip. */
+  type?: string
+}
+
 export interface AttachmentsContext {
   files: PromptInputFile[]
   add: (files: File[] | FileList) => void
   /** Anexa um item da galeria POR REFERÊNCIA — sem File e sem copiar bytes. */
   addMedia: (ref: MediaAttachmentRef) => void
+  /** Anexa uma FONTE da conversa por referência (arrastada da aba Fontes). */
+  addSource: (ref: SourceAttachmentRef) => void
   remove: (id: string) => void
   clear: () => void
   openFileDialog: () => void
@@ -295,6 +328,22 @@ export function PromptInputProvider({
     }))
   }, [])
 
+  const addSource = useCallback((ref: SourceAttachmentRef) => {
+    if (!ref.id) {
+      return
+    }
+    setAttachmentFiles(prev => prev.concat({
+      id: nanoid(),
+      type: "file" as const,
+      // Sem bytes: `url` vazio é o que diz ao main "isto é uma referência"
+      // (ver FilePart.sourceId) — o conteúdo já está guardado na conversa.
+      url: "",
+      mediaType: "",
+      filename: ref.name ?? ref.id,
+      sourceId: ref.id,
+    }))
+  }, [])
+
   const remove = useCallback((id: string) => {
     setAttachmentFiles(prev => {
       const found = prev.find(f => f.id === id)
@@ -340,12 +389,13 @@ export function PromptInputProvider({
       files: attachmentFiles,
       add,
       addMedia,
+      addSource,
       remove,
       clear,
       openFileDialog,
       fileInputRef,
     }),
-    [attachmentFiles, add, addMedia, remove, clear, openFileDialog],
+    [attachmentFiles, add, addMedia, addSource, remove, clear, openFileDialog],
   )
 
   const __registerFileInput = useCallback(
@@ -435,7 +485,10 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                                 src={data.url}
                                 width={20}
                               />
-                            ) : data.pastedText !== undefined ? (
+                            ) : data.pastedText !== undefined || data.sourceId ? (
+                              // Fonte da conversa: ícone de documento, como no
+                              // texto colado — o chip não carrega bytes, o que
+                              // se vê é o NOME do documento citado.
                               <div className="flex size-5 items-center justify-center text-muted-foreground">
                                 <FileTextIcon className="size-3" />
                               </div>
@@ -690,6 +743,20 @@ export const PromptInput = ({
     }))
   }, [])
 
+  const addSourceLocal = useCallback((ref: SourceAttachmentRef) => {
+    if (!ref.id) {
+      return
+    }
+    setItems(prev => prev.concat({
+      id: nanoid(),
+      type: "file" as const,
+      url: "",
+      mediaType: "",
+      filename: ref.name ?? ref.id,
+      sourceId: ref.id,
+    }))
+  }, [])
+
   const removeLocal = useCallback(
     (id: string) =>
       setItems(prev => {
@@ -717,6 +784,7 @@ export const PromptInput = ({
 
   const add = usingProvider ? controller.attachments.add : addLocal
   const addMedia = usingProvider ? controller.attachments.addMedia : addMediaLocal
+  const addSource = usingProvider ? controller.attachments.addSource : addSourceLocal
   const remove = usingProvider ? controller.attachments.remove : removeLocal
   const clear = usingProvider ? controller.attachments.clear : clearLocal
   const openFileDialog = usingProvider ? controller.attachments.openFileDialog : openFileDialogLocal
@@ -769,6 +837,65 @@ export const PromptInput = ({
     [addMedia],
   )
 
+  /**
+   * Fonte arrastada da aba Fontes: mesma ideia do tile da galeria, com outro
+   * destino. O payload é só a identidade (`doc1`, o nome, o tipo); o conteúdo
+   * continua guardado na conversa e o anexo é uma referência — o agente lê o
+   * documento pelo id, e a bolha mostra o nome exato do que foi citado em vez
+   * de um "src3" solto.
+   */
+  const attachSourceDrag = useCallback(
+    (payload: string) => {
+      try {
+        const parsed = JSON.parse(payload) as {
+          id?: unknown
+          name?: unknown
+          kind?: unknown
+          type?: unknown
+        }
+        if (typeof parsed.id !== "string" || !parsed.id) {
+          return
+        }
+        addSource({
+          id: parsed.id,
+          name: typeof parsed.name === "string" ? parsed.name : undefined,
+          kind: typeof parsed.kind === "string" ? parsed.kind : undefined,
+          type: typeof parsed.type === "string" ? parsed.type : undefined,
+        })
+      } catch {
+        // payload inválido — ignora o drop
+      }
+    },
+    [addSource],
+  )
+
+  /**
+   * Um drop pode trazer arquivo do disco, item da galeria ou fonte. A ordem
+   * importa: as duas referências vêm por MIME próprio, e só o que sobra é
+   * `Files`.
+   */
+  const dropAttachments = useCallback(
+    (dataTransfer: DataTransfer | null) => {
+      if (!dataTransfer) return false
+      const source = dataTransfer.getData(SOURCE_DND_MIME)
+      if (source) {
+        attachSourceDrag(source)
+        return true
+      }
+      const media = dataTransfer.getData(MEDIA_DND_MIME)
+      if (media) {
+        attachMediaDrag(media)
+        return true
+      }
+      if (dataTransfer.files && dataTransfer.files.length > 0) {
+        add(dataTransfer.files)
+        return true
+      }
+      return false
+    },
+    [add, attachMediaDrag, attachSourceDrag],
+  )
+
   // Attach drop handlers on nearest form and document (opt-in)
   useEffect(() => {
     const form = formRef.current
@@ -780,24 +907,18 @@ export const PromptInput = ({
     }
 
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types?.includes("Files") || e.dataTransfer?.types?.includes(MEDIA_DND_MIME)) {
+      // Também segura o arrasto de uma REFERÊNCIA (galeria ou fonte): sem o
+      // preventDefault o navegador trata o drop como texto e não deixa o
+      // handler rodar.
+      if (isAttachmentDrag(e.dataTransfer?.types)) {
         e.preventDefault()
       }
     }
     const onDrop = (e: DragEvent) => {
-      // Item da aba Mídia: anexa (por cima do drop nativo do <textarea>, que
-      // colaria o texto da URL no campo).
-      const media = e.dataTransfer?.getData(MEDIA_DND_MIME)
-      if (media) {
+      // Item da galeria ou fonte da conversa: anexa (por cima do drop nativo
+      // do <textarea>, que colaria o texto da URL no campo).
+      if (dropAttachments(e.dataTransfer ?? null)) {
         e.preventDefault()
-        attachMediaDrag(media)
-        return
-      }
-      if (e.dataTransfer?.types?.includes("Files")) {
-        e.preventDefault()
-      }
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files)
       }
     }
     form.addEventListener("dragover", onDragOver)
@@ -806,7 +927,7 @@ export const PromptInput = ({
       form.removeEventListener("dragover", onDragOver)
       form.removeEventListener("drop", onDrop)
     }
-  }, [add, attachMediaDrag, globalDrop])
+  }, [dropAttachments, globalDrop])
 
   useEffect(() => {
     if (!globalDrop) {
@@ -814,22 +935,13 @@ export const PromptInput = ({
     }
 
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types?.includes("Files") || e.dataTransfer?.types?.includes(MEDIA_DND_MIME)) {
+      if (isAttachmentDrag(e.dataTransfer?.types)) {
         e.preventDefault()
       }
     }
     const onDrop = (e: DragEvent) => {
-      const media = e.dataTransfer?.getData(MEDIA_DND_MIME)
-      if (media) {
+      if (dropAttachments(e.dataTransfer ?? null)) {
         e.preventDefault()
-        attachMediaDrag(media)
-        return
-      }
-      if (e.dataTransfer?.types?.includes("Files")) {
-        e.preventDefault()
-      }
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files)
       }
     }
     document.addEventListener("dragover", onDragOver)
@@ -838,7 +950,7 @@ export const PromptInput = ({
       document.removeEventListener("dragover", onDragOver)
       document.removeEventListener("drop", onDrop)
     }
-  }, [add, attachMediaDrag, globalDrop])
+  }, [dropAttachments, globalDrop])
 
   useEffect(
     () => () => {
@@ -867,12 +979,13 @@ export const PromptInput = ({
       files: files.map(item => ({ ...item, id: item.id })),
       add,
       addMedia,
+      addSource,
       remove,
       clear,
       openFileDialog,
       fileInputRef: inputRef,
     }),
-    [files, add, addMedia, remove, clear, openFileDialog],
+    [files, add, addMedia, addSource, remove, clear, openFileDialog],
   )
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = event => {
