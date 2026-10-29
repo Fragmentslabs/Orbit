@@ -64,7 +64,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
-import { chmodSync, existsSync, unlinkSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
@@ -432,6 +432,15 @@ async function getOpenWithStatus(): Promise<{ supported: boolean; registered: bo
 }
 
 // ─── Single instance + abertura de pasta via argv ───────────────────────────
+// Em dev o nome do app (package.json dentro do asar) é o mesmo do build, então
+// os dois resolveriam o mesmo userData e o lock derrubaria a segunda instância.
+// Aqui o dev ganha banco, auth e lock próprios, e convive com o app instalado.
+if (!app.isPackaged) {
+  const devProfile = path.join(app.getPath('appData'), 'Orbit Dev')
+  mkdirSync(devProfile, { recursive: true })
+  app.setPath('userData', devProfile)
+}
+
 // O lock precisa ser pedido antes do ready; a instância secundária repassa o
 // argv (caminho da pasta) para a primária via evento.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
