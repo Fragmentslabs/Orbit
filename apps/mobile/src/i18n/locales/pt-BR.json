@@ -351,6 +351,22 @@
       "error": "Não foi possível desenhar o diagrama"
     }
   },
+  "pieces": {
+    "open": "Abrir {{title}}",
+    "close": "Fechar peça",
+    "kind": {
+      "motion": "Motion",
+      "design": "Design",
+      "slides": "Slides"
+    },
+    "meta": {
+      "seconds": "{{count}}s",
+      "screens_one": "{{count}} tela",
+      "screens_other": "{{count}} telas",
+      "slides_one": "{{count}} slide",
+      "slides_other": "{{count}} slides"
+    }
+  },
   "askCard": {
     "allowOnce": "Permitir neste turno",
     "permissionRequired": "Permissão necessária",

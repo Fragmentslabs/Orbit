@@ -74,6 +74,17 @@ export interface PieceViewProps {
    * altura de que precisa.
    */
   onMessage?: (data: string) => void
+  /**
+   * Canal para falar com a página depois que ela carrega (seek, paging).
+   *
+   * Chamada a cada `onLoadEnd`, com o `injectJavaScript` do WebView que acabou
+   * de carregar: quem chama guarda o `inject` e o usa enquanto a página viver.
+   * É o único caminho de movimento de uma peça de motion — ela não tem relógio
+   * próprio e só anda quando alguém manda um quadro —, e também o de navegação
+   * de um deck, que o HTML não traz. O `inject` entregue é o da instância certa
+   * (inline ou tela cheia), então um seek nunca cai num WebView escondido.
+   */
+  onReady?: (inject: (js: string) => void) => void
 }
 
 type LoadState = 'loading' | 'ready' | 'error'
@@ -92,6 +103,7 @@ export function PieceView({
   errorLabel,
   onError,
   onMessage,
+  onReady,
 }: PieceViewProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -152,9 +164,28 @@ export function PieceView({
     [fail],
   )
 
+  // Um alvo por instância: o `inject` entregue ao `onReady` tem que falar com o
+  // WebView que acabou de carregar, não com o último que existiu. Com tela cheia
+  // aberta há dois montados e o `onLoadEnd` do de baixo chegaria com o alvo do de
+  // cima se fosse um só.
+  //
+  // O invólucro é estado, não `useRef`: o `WebView` é um componente de um pacote
+  // que o compilador do React não conhece, então entregar (ou ler) um ref dele
+  // em qualquer callback é tratado como "ref lido durante o render" pelo
+  // `react-hooks/refs`. Escrito pelo callback ref — que o React executa no
+  // commit, nunca no render — o invólucro guarda a instância sem esse risco.
+  const [web] = useState(() => ({
+    inline: null as WebView | null,
+    fullscreen: null as WebView | null,
+  }))
+
   const renderWeb = (expanded: boolean) => (
     <WebView
       key={webKey}
+      ref={(instance: WebView | null) => {
+        if (expanded) web.fullscreen = instance
+        else web.inline = instance
+      }}
       source={html ? { html } : { uri: src as string }}
       style={styles.web}
       // A página da peça puxa os próprios assets por caminho relativo (CSS,
@@ -168,7 +199,15 @@ export function PieceView({
       // janela que o RN não tem onde mostrar.
       setSupportMultipleWindows={false}
       onLoadStart={() => setState((prev) => (prev === 'error' ? prev : 'loading'))}
-      onLoadEnd={() => setState((prev) => (prev === 'error' ? prev : 'ready'))}
+      onLoadEnd={() => {
+        setState((prev) => (prev === 'error' ? prev : 'ready'))
+        if (!onReady) return
+        // O alvo é lido aqui, no evento, e a instância é capturada agora: quem
+        // recebe o `inject` fala com o WebView que acabou de carregar, e nenhum
+        // objeto mutável atravessa o render.
+        const instance = expanded ? web.fullscreen : web.inline
+        onReady((js) => instance?.injectJavaScript(js))
+      }}
       onError={handleError}
       onHttpError={handleHttpError}
       onMessage={(event) => onMessage?.(event.nativeEvent.data)}

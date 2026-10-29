@@ -32,6 +32,7 @@ import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
 import { ImageLightbox } from './ImageLightbox'
 import { AudioPartView, VideoPartView, ArtifactPartView, DocumentPartView } from './parts'
+import { PieceCard } from './pieces/PieceCard'
 import { McpProposalCard } from './McpProposalCard'
 import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
@@ -617,6 +618,15 @@ const SPECIAL_TOOLS = new Set([
   'update_artifact',
   'create_document',
   'update_document',
+  // Peças: o card padrão já mostra o que a tool fez, com a URL que o desktop
+  // anexou no part. A chamada da tool ao lado seria a mesma informação duas
+  // vezes.
+  'motion_write',
+  'motion_edit',
+  'design_write',
+  'design_edit',
+  'slides_write',
+  'slides_edit',
 ])
 
 type Segment =
@@ -739,6 +749,13 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
           case 'reasoning':
             return <ReasoningPartView key={part.id} part={part} />
           case 'tool':
+            // Peça (motion, design, slides): o desktop anexou a URL assinada no
+            // próprio part — é a única parte do caminho que o celular não
+            // consegue montar sozinho, porque o scheme do Electron não existe
+            // aqui. Um card para os três; o visualizador é que muda.
+            if (part.piece) {
+              return <PieceCard key={part.id} piece={part.piece} />
+            }
             if (part.tool === 'subagent') {
               return <SubAgentCard key={part.id} part={part} />
             }

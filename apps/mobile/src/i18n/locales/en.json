@@ -351,6 +351,22 @@
       "error": "Could not draw the diagram"
     }
   },
+  "pieces": {
+    "open": "Open {{title}}",
+    "close": "Close piece",
+    "kind": {
+      "motion": "Motion",
+      "design": "Design",
+      "slides": "Slides"
+    },
+    "meta": {
+      "seconds": "{{count}}s",
+      "screens_one": "{{count}} screen",
+      "screens_other": "{{count}} screens",
+      "slides_one": "{{count}} slide",
+      "slides_other": "{{count}} slides"
+    }
+  },
   "askCard": {
     "allowOnce": "Allow for this turn",
     "permissionRequired": "Permission required",

@@ -102,6 +102,10 @@ vi.mock('lucide-react-native', async () => {
     AlertCircle: Icon,
     Bot: Icon,
     Brain: Icon,
+    // Ícones do card de peça (motion, design, slides).
+    Film: Icon,
+    Frame: Icon,
+    Presentation: Icon,
     ChevronDown: Icon,
     ChevronRight: Icon,
     Download: Icon,
