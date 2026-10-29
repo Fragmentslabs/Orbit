@@ -13,35 +13,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useAudioPlayer, useAudioPlayerStatus, type AudioPlayer } from 'expo-audio'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Pause, Play } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { AudioPart } from '@orbit/shared'
+import { claimAudioFocus, releaseAudioFocus } from '~/lib/audio-focus'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { UnavailablePart } from './UnavailablePart'
-
-/**
- * Um player por vez na conversa. Sem isto, dois áudios tocariam juntos — e o
- * usuário não teria como saber qual pausar, porque cada bolha só conhece o
- * próprio player.
- */
-let activePlayer: AudioPlayer | null = null
-
-function claimPlayback(player: AudioPlayer) {
-  if (activePlayer && activePlayer !== player) {
-    try {
-      activePlayer.pause()
-    } catch {
-      // Player já liberado (bolha desmontada no meio): nada a pausar.
-    }
-  }
-  activePlayer = player
-}
-
-function releasePlayback(player: AudioPlayer) {
-  if (activePlayer === player) activePlayer = null
-}
 
 /** `mm:ss` — o mesmo formato do player do desktop. */
 export function formatClock(seconds: number): string {
@@ -137,7 +116,7 @@ function AudioPlayerCard({ part, src }: { part: AudioPart; src: string }) {
     released.current = false
     return () => {
       released.current = true
-      releasePlayback(player)
+      releaseAudioFocus(player)
       try {
         player.pause()
       } catch {
@@ -159,10 +138,10 @@ function AudioPlayerCard({ part, src }: { part: AudioPart; src: string }) {
     if (released.current) return
     if (status.playing) {
       player.pause()
-      releasePlayback(player)
+      releaseAudioFocus(player)
       return
     }
-    claimPlayback(player)
+    claimAudioFocus(player)
     // Terminou: tocar de novo começa do início, como qualquer player.
     if (status.didJustFinish) void player.seekTo(0)
     player.play()

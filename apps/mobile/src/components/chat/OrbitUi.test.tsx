@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+// Os `vi.mock` abaixo são içados pelo vitest acima destes imports — a ordem
+// aqui é só de leitura (o `import/first` reclama de import depois de mock).
+import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
+import { OrbitUiBlocks, OrbitUiFence } from '~/components/chat/OrbitUi'
+import { parseOrbitUi } from '@orbit/shared'
 
 /**
  * Blocos `orbit-ui` no app mobile.
@@ -47,10 +52,6 @@ const { sendMessage, session } = vi.hoisted(() => {
 vi.mock('~/stores/session-store', () => ({
   useSessionStore: Object.assign(() => session, { getState: () => session }),
 }))
-
-import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
-import { OrbitUiBlocks, OrbitUiFence } from '~/components/chat/OrbitUi'
-import { parseOrbitUi } from '@orbit/shared'
 
 afterEach(() => {
   cleanup()

@@ -1441,5 +1441,16 @@
     "maxHint": "Up to {{max}} models per rotation",
     "slotsLabel_one": "{{count}} model",
     "slotsLabel_other": "{{count}} models"
+  },
+  "voice": {
+    "tts": {
+      "speak": "Read the answer aloud",
+      "stop": "Stop reading",
+      "generating": "Generating speech…",
+      "failed": "Could not generate the speech",
+      "errorDisabled": "Read-aloud is turned off in the desktop settings (Voice)",
+      "errorUnavailable": "The desktop's voice engine isn't ready yet — the model hasn't been downloaded",
+      "offline": "No connection to the desktop — speech is generated there"
+    }
   }
 }

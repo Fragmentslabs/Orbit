@@ -1441,5 +1441,16 @@
     "maxHint": "Até {{max}} modelos por rotação",
     "slotsLabel_one": "{{count}} modelo",
     "slotsLabel_other": "{{count}} modelos"
+  },
+  "voice": {
+    "tts": {
+      "speak": "Ouvir a resposta",
+      "stop": "Parar a leitura",
+      "generating": "Gerando a voz…",
+      "failed": "Não foi possível gerar a voz",
+      "errorDisabled": "A leitura em voz alta está desligada nas preferências do desktop (Voz)",
+      "errorUnavailable": "O motor de voz do desktop ainda não está pronto — falta baixar o modelo",
+      "offline": "Sem conexão com o desktop — a voz é gerada lá"
+    }
   }
 }

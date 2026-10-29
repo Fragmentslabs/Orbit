@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioStream, requestRecordingPermissionsAsync, type AudioStreamBuffer } from 'expo-audio'
 import { useConnectionStore } from '~/stores/connection-store'
 import { bytesToBase64, concatPcm, pcmDurationMs } from '~/lib/voice-pcm'
+import { reasonFromHttpError } from '~/lib/http-error'
 import i18n from '~/i18n'
 
 const TARGET_SAMPLE_RATE = 16000
@@ -30,19 +31,6 @@ export interface Dictation {
   toggle: () => void
   /** Limpa a mensagem de erro. */
   clearError: () => void
-}
-
-/** Erro do cliente HTTP no formato `"503: {...}"` → motivo legível do desktop. */
-function reasonFromHttpError(error?: string): string | null {
-  if (!error) return null
-  const jsonStart = error.indexOf('{')
-  if (jsonStart < 0) return null
-  try {
-    const parsed = JSON.parse(error.slice(jsonStart)) as { error?: string; reason?: string }
-    return parsed.reason || parsed.error || null
-  } catch {
-    return null
-  }
 }
 
 function messageOf(err: unknown): string {
