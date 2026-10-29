@@ -29,9 +29,14 @@ export interface VideoTranscript {
   words: TimedWord[]
 }
 
-/** Pasta da edição de um vídeo: `<pasta dele>/edit` (saídas nunca no meio do material). */
+/**
+ * Pasta da edição de um vídeo: `<pasta dele>/edit` (saídas nunca no meio do
+ * material). Um arquivo que JÁ está dentro de uma pasta `edit/` usa essa pasta
+ * — sem `edit/edit/`, que era onde um áudio em edit/audio/ caía antes.
+ */
 export function editDirFor(file: string): string {
-  return path.join(path.dirname(file), 'edit')
+  const dir = path.dirname(file)
+  return path.basename(dir) === 'edit' ? dir : path.join(dir, 'edit')
 }
 
 function cacheFile(file: string): string {
@@ -147,6 +152,43 @@ export function packTranscript(entries: { id: string; file: string; transcript: 
     }
     const tail = transcript.durationMs - (transcript.words[transcript.words.length - 1]?.endMs ?? 0)
     if (phrases.length && tail >= 1000) out.push(`· silence ${(tail / 1000).toFixed(1)}s (to the end) ·`)
+    out.push('')
+  }
+  return out.join('\n')
+}
+
+/** Texto corrido, sem tempo: leitura e resumo — não serve para cortar. */
+export function plainText(transcript: VideoTranscript): string {
+  return transcript.words
+    .map((w) => w.text)
+    .join(' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+}
+
+/**
+ * Palavra a palavra com início–fim em segundos fonte (`word@012.34-012.78`).
+ * É daqui que saem cues de legenda EXATAS: dividir a duração de um clipe por
+ * quantidade de caracteres é chute, e o chute é o que dessincroniza legenda.
+ */
+export function wordsText(entries: { id: string; file: string; transcript: VideoTranscript }[]): string {
+  const out: string[] = [
+    '# Words (start–end in SOURCE seconds)',
+    '',
+    'Use these times for subtitle/cue boundaries — one cue starts where the previous word ends.',
+    '',
+  ]
+  for (const { id, file, transcript } of entries) {
+    out.push(`## ${id} — ${path.basename(file)} (${sec(transcript.durationMs)} s, ${transcript.words.length} words)`)
+    let line = ''
+    for (const w of transcript.words) {
+      const token = `${w.text}@${sec(w.startMs)}-${sec(w.endMs)}`
+      if (line && line.length + token.length + 1 > 110) {
+        out.push(line)
+        line = ''
+      }
+      line = line ? `${line} ${token}` : token
+    }
+    if (line) out.push(line)
     out.push('')
   }
   return out.join('\n')

@@ -111,7 +111,7 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
   }
   if (edl.snap !== false && used.some((id) => !words[id])) {
     warnings.push(
-      `no transcript for ${used.filter((id) => !words[id]).join(', ')}: those cuts were NOT snapped to word boundaries (run video_transcribe first)`,
+      `no transcript for ${used.filter((id) => !words[id]).join(', ')}: those cuts were NOT snapped to word boundaries (run transcribe first)`,
     )
   }
 

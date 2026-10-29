@@ -97,10 +97,9 @@ const NATIVE_TOOLS = new Set([
   'svg_create',
   'svg_info',
   'svg_edit',
-  // Áudio: transcrever lê um anexo (ou um arquivo da pasta) com o motor
-  // local; gerar grava o áudio no storage do Orbit — no projeto só com
+  // Áudio: gerar grava o áudio no storage do Orbit — no projeto só com
   // savePath, restrito ao pedido explícito. Mesma convenção das de imagem.
-  'audio_transcribe',
+  // (Transcrever é `transcribe`, listada junto das de vídeo.)
   'audio_generate',
   // Overlay: ler a tela e a seleção do app da frente é o que a pessoa pediu ao
   // abrir o painel; encerrar a chamada é o "tchau, Orbit". Nenhuma escreve.
@@ -232,7 +231,7 @@ const NATIVE_TOOLS = new Set([
   'show_video',
   'video_guide',
   'video_probe',
-  'video_transcribe',
+  'transcribe',
   'video_timeline',
   'video_render',
   // Mídia por link (yt-dlp): leitura de uma página pública e gravação no

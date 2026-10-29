@@ -17,10 +17,11 @@ const { assess } = await import('./rules')
 describe('assess — nativas x MCP', () => {
   it('as tools de áudio são nativas: não pedem permissão', () => {
     expect(assess('audio_generate', { text: 'Oi' }, null)).toBeNull()
-    expect(assess('audio_transcribe', { ref: 'aud_x.m4a' }, null)).toBeNull()
   })
 
   it('as tools de vídeo e motion são nativas: não pedem permissão', () => {
+    // A transcrição é uma só, para áudio e vídeo.
+    expect(assess('transcribe', { sources: [{ path: 'aud_x.m4a' }] }, null)).toBeNull()
     expect(assess('motion_preview', { path: 'edit/anim' }, null)).toBeNull()
     expect(assess('motion_render', { path: 'edit/anim' }, null)).toBeNull()
     expect(assess('video_render', { path: 'edit/anim' }, null)).toBeNull()

@@ -59,7 +59,7 @@ export function createDocumentTools(sessionId: string) {
     attachment_list: tool({
       description:
         'Lists the PHOTOS, GIFs, AUDIO and VIDEOS this conversation has at hand — what the user attached in the messages and what they put in the Sources tab (their own, and the ones shared by the sidebar folder) — each with its ref (img_…, aud_…, vdo_…), name and basic facts. ' +
-        'They are NOT in your context: this is only the list. Read one when the request needs it (video_probe / video_transcribe / video_timeline accept the vdo_… ref, audio_transcribe the aud_… ref, describe_image the images) and put one INTO a piece or an edit with motion_asset({ ref, … }) only when you decide to use it. ' +
+        'They are NOT in your context: this is only the list. Read one when the request needs it (video_probe / transcribe / video_timeline accept the vdo_… and aud_… refs, describe_image the images) and put one INTO a piece or an edit with motion_asset({ ref, … }) only when you decide to use it. ' +
         'Use it when the user mentions material you cannot see in the conversation ("use the video I added", "the photo from the sources").',
       inputSchema: z.object({}),
       execute: async () => {

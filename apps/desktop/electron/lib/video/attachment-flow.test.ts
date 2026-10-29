@@ -74,7 +74,7 @@ describe.skipIf(!hasFfmpeg)('vídeo anexado (ffmpeg real)', () => {
     const note = videoAttachmentNote({ filename: 'Entrevista.mp4', id: saved.id, file: saved.file, probe })
     expect(note).toContain(`ref ${saved.id}`)
     expect(note).toContain('64x64 @ 5 fps')
-    expect(note).toContain('video_transcribe')
+    expect(note).toContain('transcribe for what is SAID')
     // O original continua onde estava.
     expect(fs.existsSync(original)).toBe(true)
   })

@@ -119,7 +119,14 @@ const MAX_MODEL_IMAGE_BYTES = 300_000
 const frameStash = new Map<string, { base64: string }>()
 
 export function createMotionTools(
-  scope: PieceToolScope & { modelVision?: boolean; canRender: boolean },
+  scope: PieceToolScope & {
+    modelVision?: boolean
+    canRender: boolean
+    /** Idioma da pessoa: o título do documento entregue pelo `transcribe` é para ela. */
+    language?: string
+    /** "Fala em texto" nas Preferências: desligado, a edição não ganha o `transcribe`. */
+    sttEnabled?: boolean
+  },
 ): ToolSet {
   const root = motionPiecesDir(scope.sessionId)
   const canShow = scope.canShow !== false
@@ -275,7 +282,7 @@ export function createMotionTools(
     tools.motion_asset = tool({
       description:
         'Copies material INTO a composition so the piece can use it by relative path: a file the user ATTACHED (`ref`: vdo_…, aud_…, img_…) or, in code mode, a file of the working folder (`path`: footage, a photo, a font, a local library like node_modules/gsap/dist/gsap.min.js). ' +
-        'Call it only when you decide to USE the material in the piece; attaching does not copy it anywhere, and reading it (video_probe / video_transcribe / video_timeline, or audio_transcribe) does not need it. ' +
+        'Call it only when you decide to USE the material in the piece; attaching does not copy it anywhere, and reading it (video_probe / transcribe / video_timeline) does not need it. ' +
         'name: the composition (created later by motion_write if it does not exist yet). The result gives the file name to put in the HTML (relative: src="clip.mp4") and how to use it — timing attributes, crop, sound. The same source twice gives the same file.',
       inputSchema: z.object({
         ...ASSET_SOURCE,
@@ -454,8 +461,16 @@ export function createMotionTools(
       abort: new AbortController().signal,
       modelVision: scope.modelVision,
     }
-    const base = createVideoTools(chatCtx, { sessionId: scope.sessionId, canShow, readOnly: Boolean(scope.readOnly), chat: { outputDir: 'renders' } })
-    for (const key of ['video_probe', 'video_transcribe', 'video_timeline'] as const) {
+    const base = createVideoTools(chatCtx, {
+      sessionId: scope.sessionId,
+      canShow,
+      readOnly: Boolean(scope.readOnly),
+      language: scope.language,
+      // O mesmo interruptor do modo código: sem "Fala em texto" não há motor.
+      sttEnabled: scope.sttEnabled,
+      chat: { outputDir: 'renders' },
+    })
+    for (const key of ['video_probe', 'transcribe', 'video_timeline'] as const) {
       if (base[key]) tools[key] = base[key]
     }
     if (scope.canRender && base.video_render) tools.video_render = base.video_render

@@ -44,7 +44,7 @@ describe('videoAttachmentNote', () => {
 
   it('diz que NÃO foi assistido nem transcrito e quando ler cada coisa', () => {
     expect(note).toContain('NOT watched and NOT transcribed')
-    expect(note).toContain('video_transcribe for what is SAID')
+    expect(note).toContain('transcribe for what is SAID')
     expect(note).toContain('video_timeline')
     expect(note).toContain('motion_asset')
     expect(note).toContain('only if the request is about using this video')
@@ -52,7 +52,7 @@ describe('videoAttachmentNote', () => {
 
   it('vídeo sem áudio não oferece transcrever', () => {
     const silent = videoAttachmentNote({ filename: 'a.mp4', id: 'vdo_x.mp4', file: '/f', probe: probe({ audio: [] }) })
-    expect(silent).not.toContain('video_transcribe')
+    expect(silent).not.toContain('transcribe for what is SAID')
   })
 
   it('um problema substitui o resto: sem referência utilizável', () => {

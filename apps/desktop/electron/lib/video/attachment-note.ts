@@ -43,7 +43,7 @@ export function videoAttachmentNote(input: {
     describeVideoFacts(input.probe),
     '(Attachment, not a user message. It is NOT watched and NOT transcribed: only this description is in your context. ' +
       `Read it when the request needs it, using ref "${input.id}": video_probe for the details, ` +
-      (hasSound ? 'video_transcribe for what is SAID, ' : '') +
+      (hasSound ? 'transcribe for what is SAID, ' : '') +
       'video_timeline to look at a short window. ' +
       'To use it INSIDE a piece (a clip in a motion composition, its sound, a cut) call motion_asset with this ref — do that only if the request is about using this video.)',
   ].join('\n')

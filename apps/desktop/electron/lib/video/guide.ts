@@ -11,10 +11,10 @@
 const EDITING = `# Video editing — workflow and craft
 
 ## Principle
-You READ footage, you don't watch it. The word-timed transcript (video_transcribe) is your main view; video_timeline images are for decision points only. Decisions go into an EDL; video_render applies them deterministically.
+You READ footage, you don't watch it. The word-timed transcript (transcribe) is your main view; video_timeline images are for decision points only. Decisions go into an EDL; video_render applies them deterministically. The SAME transcript carries the exact time of every word — that is where subtitle, caption and overlay timing comes from, never from an estimate.
 
 ## Workflow (ask → confirm → execute → self-check → persist)
-1. Inventory: video_probe every source; video_transcribe all of them in one call (ids A, B, C… or take1…). Look at 2–3 video_timeline windows to know what the footage looks like (framing, light, b-roll vs talking head).
+1. Inventory: video_probe every source; transcribe all of them in one call (ids A, B, C… or take1…, detail "phrases"). Look at 2–3 video_timeline windows to know what the footage looks like (framing, light, b-roll vs talking head).
 2. Pre-scan the transcript: false starts, retakes ("let me start again"), fillers (um, uh, "like"), verbal slips, dead air (· silence ·), the best take of each idea.
 3. Converse: ask what the material calls for — target length, platform/aspect (16:9, 9:16, 1:1), pacing, subtitles or not, tone of the grade, music. Ask only what you cannot infer.
 4. Propose a strategy in 4–8 sentences (structure by beats, what goes, target duration) and WAIT for the user's OK before cutting. Never edit before approval.
@@ -30,6 +30,19 @@ You READ footage, you don't watch it. The word-timed transcript (video_transcrib
 - Keep laughs and reactions that land; give speaker handoffs 400–600 ms of air.
 - Remove: false starts, repeated takes (keep the best — usually the last clean one), fillers, dead air > ~0.7 s inside a thought.
 - A range is [start, end] in SOURCE seconds; the output is the ranges in order. Reordering is allowed (hook first).
+
+## Subtitles and cue timing
+A cue is one block of text with a start and an end. Its times come from the WORDS, never from a guess:
+- transcribe({ sources, detail: "words" }) gives every word with its own start and end (the same data is cached in edit/transcripts/<file>.json). Splitting a clip's duration by character count — or by "that sounds like half" — is what puts a subtitle 0.6 s ahead of the voice.
+- The safe default is ONE CUE PER SPOKEN CLIP: a clip of 1–4 s is in sync by construction, because the cue starts and ends exactly with the audio. When one clip carries two sentences, split at the punctuation, using the word time of the first word after it.
+- To CHECK sync you do not render: compare the cue times against the word times and against the moment of the action on screen. A render is for what only a render shows (a cut, an overlay, a burned subtitle).
+- Two ways to produce subtitles, and the choice is about EDITING COST: burned into the video (ffmpeg .ass/.srt — fast, deterministic, fixed forever, right for a final delivery) or drawn by the composition/player (editable, animatable, one line changed instead of a re-encode — the default for a motion piece). Decide before building; converting later pays the expensive step again.
+
+## Narration (TTS) and recording a demo
+- ONE CLIP PER SCENE, not one per video: each scene's narration is its own audio_generate call, so it can be placed, re-timed, re-recorded or replaced on its own — a single 60 s file has to be regenerated whole when one sentence changes.
+- YouTube pacing: a YouTube narrator speaks fast. Settle the SPEED on the first segment (1.1–1.2 is the usual landing zone), check it, then generate every other segment with the SAME speed and voice — a narrator who changes pace between scenes sounds broken.
+- Narration that must land on UI actions: generate and MEASURE the clips first, then place them (and perform or record the actions) against that timeline. The other order forces every scene to be redone.
+- RECORDING AN APP (browser_record or any screencast): ASK the user first — clean (fresh session, no caches, no leftover tabs, nothing private on screen) or exactly as it is now? A take is expensive to redo. Before recording, also clear what the app restores by itself (localStorage, previous tabs): a leftover tab with old text in it is how a whole take becomes unusable.
 
 ## EDL (video_render)
 {
@@ -53,10 +66,10 @@ You READ footage, you don't watch it. The word-timed transcript (video_transcrib
 - loudness: -14 LUFS integrated / -1 dBTP true peak by default (streaming platforms). false to skip.
 
 ## In chat mode and with attachments (no working folder)
-- A video the user attached is not a file in a folder: it is a ref (vdo_…) and a one-line description. Use the ref wherever the workflow says "path": video_probe, video_transcribe, video_timeline and the EDL sources (and overlay / music / subtitle files — img_…, aud_…) all accept it. Nothing needs to be copied first.
+- A video the user attached is not a file in a folder: it is a ref (vdo_…) and a one-line description. Use the ref wherever the workflow says "path": video_probe, transcribe, video_timeline and the EDL sources (and overlay / music / subtitle files — img_…, aud_…) all accept it. Nothing needs to be copied first.
 - Chat mode has no edit/ folder and no bash: video_render writes the result to the app (the user sees it as a player in your reply and in the Media tab, where they can delete it and free the space). Every final render is its own item; the preview is one file that each new preview replaces. Do not offer to "save into the project".
 - In code mode a ref also works as a source, but the output goes to edit/ of the project (it is the user's file). Use motion_asset only to put the file INSIDE a motion composition.
-- The workflow is the same: inventory with video_probe/video_transcribe, propose, wait for approval, preview, self-check, final.
+- The workflow is the same: inventory with video_probe/transcribe, propose, wait for approval, preview, self-check, final.
 
 ## Beyond the EDL
 The bash tool has ffmpeg and ffprobe (the app ships them). Use them for what the EDL does not cover (speed ramps, stabilization, reframing with a moving crop, exporting stills, GIFs, extracting audio). Write outputs under edit/, never over the user's sources, then show_video the result.
@@ -106,7 +119,7 @@ A <video> or a GIF <img> is an element like any other: copy the file next to ind
 - A hidden <video> still sounds if it is not muted. Give it data-start/data-end that match when it is on screen, or mute it.
 - GIFs are decoded into whole frames before the first frame is drawn (the render waits for them), so keep them small: more than ~1500 frames is refused. A large GIF is better converted once with ffmpeg to an mp4/webm and used as a <video> (smaller, and it can have sound).
 - FINDING IMAGES: when the piece needs a photo you do not have (animals, places, objects, history), image_search looks on Wikimedia Commons and Openverse and shows a numbered sheet of thumbnails — choose by looking, search in English, try a second query if the first is poor. image_import brings the chosen ones in as refs (img_…) WITH their author and license, then motion_asset puts them in the composition. Only openly licensed images are used (license "commercial" by default). The license usually requires a CREDIT: motion_asset tells you the exact line, and the piece must show it — a small caption on the image, or a credits card at the end listing every image (title, author, license). Never present a found image as your own or drop its credit.
-- ATTACHMENTS: a video, photo, GIF or audio the user attached is NOT in the composition folder and not in your context — you have a ref (vdo_…, img_…, aud_…) and a one-line description. Read it only when the request needs it (video_probe for details, video_transcribe for what is said, video_timeline for a window of frames), and when you decide to USE it in the piece, call motion_asset({ name, ref }): it copies the file next to index.html and tells you the file name and how to use it. In code mode a file of the working folder comes in the same way with motion_asset({ name, path }). Do not copy material you will not use, and do not transcribe or look at a video just because it was attached.
+- ATTACHMENTS: a video, photo, GIF or audio the user attached is NOT in the composition folder and not in your context — you have a ref (vdo_…, img_…, aud_…) and a one-line description. Read it only when the request needs it (video_probe for details, transcribe for what is said, video_timeline for a window of frames), and when you decide to USE it in the piece, call motion_asset({ name, ref }): it copies the file next to index.html and tells you the file name and how to use it. In code mode a file of the working folder comes in the same way with motion_asset({ name, path }). Do not copy material you will not use, and do not transcribe or look at a video just because it was attached.
 - To prepare a file first (trim a long clip, extract a section, scale it down, convert a GIF) — code mode — use the bash tool with ffmpeg, write the result under edit/ in the working folder and bring it in with motion_asset({ name, path }). The EDL tools cut and join whole videos; they are not part of a composition.
 
 ## Assets: images, fonts and audio
@@ -121,6 +134,12 @@ A <video> or a GIF <img> is an element like any other: copy the file next to ind
   - or, in code mode, pass a file of the working folder for a one-off: motion_render({ name, audio: "edit/voz.mp3" }) — it plays from the start, and the tab does not hear it.
 - VOICE-OVER with the native TTS: write the lines, call audio_generate with the text EXACTLY as it should be spoken (no Markdown, no lists, numbers spelled out), bring the file into the composition with motion_asset (its aud_… ref, or in code mode its savePath) so the tab plays it too, then declare it in audio.json. Write the composition to fit the voice.
 - The COMPOSITION sets the length: a track running past the end is cut there, one that ends early leaves the rest to the others. The render WARNS when a track overflows the piece — read that warning instead of guessing. The <audio> element in the page is not part of the capture and does not reach the video; the sound of a <video> does (see "Video and GIF inside a composition").
+
+## Subtitles and text that will change: keep them in the piece
+- A motion piece gets its subtitles INSIDE the composition by default — a DOM layer driven by seek — and not burned into a video beforehand. A line edited afterwards is then an exact text edit that the tab reloads in a second; burned-in text costs a full re-render for a comma.
+- Burn them into the file only when the user asks for it: a clip that will be reused elsewhere, or an overlay for the EDL.
+- The same reasoning covers anything the user will want to tweak — captions, names, prices, credits. Text stays editable; pixels do not.
+- The times for those cues still come from transcribe({ detail: "words" }) — the rule is in video_guide("editing"), "Subtitles and cue timing".
 
 ## The lint — read it
 motion_preview / motion_write / motion_edit end with a "Lint:" block, and motion_render adds the same findings to its warnings. It is read from the text of the composition and from what the page registered, before any render: wall clock (Date.now/performance.now), Math.random, setInterval, CSS transitions, infinite loops, vw/vh units, files that do not exist next to index.html (or sit outside the folder), network resources, an <audio> in the page, transitions that fall outside the piece, audio tracks that never play, fades longer than the track, and boosts with no limiter. [error] means the piece will come out wrong — fix it before anything else; [warning] is a suspicion, usually worth a look. "Lint: clean." means nothing to fix; it does not mean the piece is good.
@@ -138,7 +157,9 @@ motion_preview / motion_write / motion_edit end with a "Lint:" block, and motion
 - Name what matters with data-layer: the Motion tab draws one track per layer with the frames where it enters and leaves. Unnamed elements that appear and disappear show up with their text; naming the phrases/elements makes those tracks (and the user's notes) readable.
 
 ## Render (motion_render) — the expensive step
-- It captures and encodes every frame once. Run it after the approval, never to discover what the piece looks like.
+- It captures and encodes every frame once, and it is MINUTES per render (a 1080p30 piece runs frame by frame). Run it after the approval, never to discover what the piece looks like.
+- Never render to look: that is motion_frame's job (3–5 instants, see: true only for a real visual doubt). Never render again for a line of text or a colour — motion_edit changes it and the tab shows it live.
+- If a preview render is genuinely unavoidable, make it CHEAP: width/height at half the final size and fps 15. The user is judging cut, timing and text, not sharpness. The full-size render happens ONCE, after the approval.
 - format: "mp4" (h264, no alpha — the normal clip), "mov-alpha" (ProRes 4444) or "webm-alpha" (VP9, smaller) for an overlay that has to sit over the footage. For alpha keep html/body background transparent.
 - bands: how many parallel bands the frame range is split into; the default follows the cores. bands: 1 forces a single sequential pass — the escape hatch for a composition that cannot be pure.
 - The result reports the time per frame (msPerFrame). A high number on a simple piece means the composition is doing per-frame work it could do once (a filter, a layout, a big image redrawn every frame): fix that before rendering again instead of paying for it twice.
