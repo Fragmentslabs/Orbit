@@ -1,4 +1,4 @@
-import type { ChatMessage, MessagePart } from '@shared/chat'
+import type { ChatMessage, MessagePart, PieceKind, ToolPart } from '@shared/chat'
 
 /**
  * Endereços de arquivo reescritos para o app mobile.
@@ -26,7 +26,44 @@ const VIDEO_URL_RE = /^orbit-video:\/\/(vid_[a-z0-9]+)$/
 const ARTIFACT_URL_RE = /^orbit-artifact:\/\/([a-zA-Z0-9_-]+\.(html|png|md|pdf|docx))$/
 
 /** Escopos que o celular busca por HTTP (ver companion-assets.ts). */
-export type AssetScope = 'media' | 'artifact' | 'audio' | 'video'
+export type AssetScope =
+  | 'media'
+  | 'artifact'
+  | 'audio'
+  | 'video'
+  | 'motion'
+  | 'design'
+  | 'slides'
+
+/**
+ * Tools que escrevem peça. O que elas devolvem não é mídia: é uma UI interativa
+ * que mora numa pasta do desktop, e o celular só consegue desenhar depois de
+ * saber onde ela está — daí a URL viajar no part, e não ser montada lá.
+ */
+const PIECE_TOOLS: Record<string, PieceKind> = {
+  motion_write: 'motion',
+  motion_edit: 'motion',
+  design_write: 'design',
+  design_edit: 'design',
+  slides_write: 'slides',
+  slides_edit: 'slides',
+}
+
+/** Id da peça no resultado da tool — JSON quando dá, regex quando vem solto. */
+const PIECE_ID_RE = /\b((?:mv|dsg|sld)_[a-z0-9]+)\b/
+
+function pieceIdOf(part: ToolPart): string | undefined {
+  const output = part.output
+  if (!output) return undefined
+  try {
+    const parsed = JSON.parse(output) as { id?: unknown; piece?: { id?: unknown } }
+    const candidate = parsed.piece?.id ?? parsed.id
+    if (typeof candidate === 'string') return candidate
+  } catch {
+    // saída em texto corrido: cai no regex abaixo
+  }
+  return PIECE_ID_RE.exec(output)?.[1]
+}
 
 export type MediaTokenFactory = (scope: AssetScope, id: string) => string
 
@@ -114,6 +151,21 @@ export function rewriteMediaPart(
     if (!previewSrc) return null
     const thumb = rewriteScopedUrl(part.thumb, 'artifact', ARTIFACT_URL_RE, base, token)
     return { ...part, previewSrc, ...(thumb ? { thumb } : {}) }
+  }
+  if (part.type === 'tool') {
+    const kind = PIECE_TOOLS[part.tool]
+    if (!kind) return null
+    const id = pieceIdOf(part)
+    if (!id) return null
+    // Design não tem um HTML único: é um canvas com várias telas. O celular
+    // recebe o `canvas.json` e escolhe qual abrir; motion e slides desenham o
+    // `index.html` direto (o companion resolve a entrada padrão do escopo).
+    const url =
+      kind === 'design'
+        ? `${assetUrl('design', id, base, token)}/canvas.json`
+        : assetUrl(kind, id, base, token)
+    const title = typeof part.input?.title === 'string' ? part.input.title : part.title
+    return { ...part, piece: { kind, id, url, ...(title ? { title } : {}) } }
   }
   return null
 }

@@ -264,6 +264,32 @@ export interface ReasoningPart {
 
 export type ToolPartState = "running" | "done" | "error"
 
+export type PieceKind = "motion" | "design" | "slides"
+
+/**
+ * A peça que a tool acabou de escrever, já endereçável.
+ *
+ * Quem preenche é o companion (`companion-media`): o celular recebe a URL http
+ * assinada pronta e nunca monta uma — o scheme `orbit-motion://` que o desktop
+ * usa dentro do Electron não existe fora dele.
+ *
+ * `url` não é sempre o mesmo tipo de recurso, e isso é de propósito:
+ * motion e slides apontam para o HTML da peça (o `index.html`, que é o que se
+ * desenha); design aponta para o `canvas.json`, porque um canvas tem várias
+ * telas e quem escolhe qual abrir é o visualizador do celular.
+ */
+export interface PieceRef {
+  kind: PieceKind
+  id: string
+  /** URL http absoluta e assinada do recurso principal da peça. */
+  url: string
+  /** URL http absoluta da capa (frame, primeira tela). Sem ela o card usa o ícone do tipo. */
+  cover?: string
+  title?: string
+  /** Motion: duração em segundos. Design: quantidade de telas. Slides: quantidade de slides. */
+  count?: number
+}
+
 export interface ToolPart {
   id: string
   type: "tool"
@@ -273,6 +299,12 @@ export interface ToolPart {
   input?: Record<string, unknown>
   output?: string
   error?: string
+  /**
+   * Preenchido só pelas tools de peça (`motion_*`, `design_*`, `slides_*`), e só
+   * no caminho do companion. É o que faz a conversa do celular mostrar um card
+   * em vez de uma linha de tool.
+   */
+  piece?: PieceRef
 }
 
 /** Imagem que o assistente inclui na resposta (tool show_image) */
@@ -860,6 +892,11 @@ export type MessageErrorKind =
   | "context-length-turn"
   /** Configuração nossa, não falha do provedor: chave ausente, provedor/SDK desconhecido. */
   | "provider-config"
+  /** O provedor recusou o REQUEST por excesso de tools (o Groq recusa acima de
+   *  128 e a chamada inteira falha). Não é rotacionável: o teto é do endpoint,
+   *  e outro modelo do mesmo provedor herda o mesmo limite. O que resolve é
+   *  mandar menos tools — o catálogo sob demanda já corta (ver aplicarFreio). */
+  | "tool-limit"
   | "unknown"
 
 export interface ChatMessage {
@@ -1466,6 +1503,18 @@ export interface CatalogProvider {
    * arquivo de provedores.
    */
   hasKey?: boolean
+}
+
+/**
+ * Teto de tools por request em provedores que impõem um. O Groq recusa acima
+ * de 128 e a chamada inteira falha ("too many tools") — não é limite de
+ * modelo, é política do endpoint, por isso fica aqui e não no catálogo do
+ * models.dev. `undefined` = sem teto conhecido.
+ */
+const LIMITE_DE_TOOLS_POR_PROVEDOR: Record<string, number> = { groq: 128 }
+
+export function limiteDeTools(providerId: string): number | undefined {
+  return LIMITE_DE_TOOLS_POR_PROVEDOR[providerId]
 }
 
 /** Modelo declarado num provedor personalizado — o models.dev não o conhece. */
