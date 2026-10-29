@@ -24,7 +24,7 @@ import { planMotionBundles } from "@/src/lib/motion-bundle"
 import { useMotionBundleIndexes } from "@/src/stores/motion-bundles-store"
 import { DesignPartView } from "@/src/components/ai/design-part"
 import { SlidesPartView } from "@/src/components/ai/slides-part"
-import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool } from "@/src/lib/piece-tools"
+import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool, landPieceCard } from "@/src/lib/piece-tools"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
@@ -195,6 +195,10 @@ type Segment =
 
 function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boolean): Segment[] {
   const segments: Segment[] = []
+  // Um card por peça na MESMA mensagem: `design_write` roda uma tela por
+  // chamada, e cada uma deixaria outro card do mesmo canvas. O primeiro lugar
+  // fica, com o estado da última chamada (é ela que sabe quantas telas há).
+  const pieces = new Map<string, Extract<Segment, { kind: "part" }>>()
   for (const part of parts) {
     // Mídia que é de uma peça: fica como parte própria para dar lugar ao card
     // dela (uma imagem com card não pode virar miniatura de um grupo).
@@ -231,7 +235,8 @@ function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boo
       if (last?.kind === "image-group") last.parts.push(part)
       else segments.push({ kind: "image-group", id: part.id, parts: [part] })
     } else {
-      segments.push({ kind: "part", id: part.id, part })
+      const segment = landPieceCard(pieces, part, (p) => ({ kind: "part" as const, id: p.id, part: p }))
+      if (segment) segments.push(segment)
     }
   }
   return segments
