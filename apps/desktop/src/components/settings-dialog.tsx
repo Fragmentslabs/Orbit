@@ -31,6 +31,7 @@ import { isLocalEndpoint } from "@/src/lib/provider-endpoint"
 import { cn } from "@/lib/utils"
 
 import { useSettingsUi, type SettingsTab } from "@/src/stores/settings-ui"
+import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
 import type { DetectResult } from "@/src/lib/ipc"
 
 interface TabDef {
@@ -45,23 +46,23 @@ interface TabDef {
 function useTabs(): TabDef[] {
   const { t } = useTranslation()
   const tabs: TabDef[] = [
-    { id: "providers", label: t("settings.tabs.providers.label"), icon: KeyRound, description: t("settings.tabs.providers.description") },
-    { id: "autonomy", label: t("settings.tabs.autonomy.label"), icon: Shield, description: t("settings.tabs.autonomy.description") },
-    { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
-    { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
-    { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
-    { id: "voice", label: t("settings.tabs.voice.label"), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
+    { id: "providers", label: t(SETTINGS_TAB_LABEL_KEY.providers), icon: KeyRound, description: t("settings.tabs.providers.description") },
+    { id: "autonomy", label: t(SETTINGS_TAB_LABEL_KEY.autonomy), icon: Shield, description: t("settings.tabs.autonomy.description") },
+    { id: "howto", label: t(SETTINGS_TAB_LABEL_KEY.howto), icon: BookOpen, description: t("settings.tabs.howto.description") },
+    { id: "appearance", label: t(SETTINGS_TAB_LABEL_KEY.appearance), icon: Palette, description: t("settings.tabs.appearance.description") },
+    { id: "notifications", label: t(SETTINGS_TAB_LABEL_KEY.notifications), icon: Bell, description: t("settings.tabs.notifications.description") },
+    { id: "voice", label: t(SETTINGS_TAB_LABEL_KEY.voice), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
     // Overlay: o painel do atalho global (⇧⌘espaço). Fica ao lado da voz porque
     // "abrir em modo chamada" depende dela.
-    { id: "overlay", label: t("overlaySettings.title"), icon: AppWindow, description: t("overlaySettings.description"), beta: true },
-    { id: "browser", label: t("settings.tabs.browser.label"), icon: Globe, description: t("settings.tabs.browser.description") },
+    { id: "overlay", label: t(SETTINGS_TAB_LABEL_KEY.overlay), icon: AppWindow, description: t("overlaySettings.description"), beta: true },
+    { id: "browser", label: t(SETTINGS_TAB_LABEL_KEY.browser), icon: Globe, description: t("settings.tabs.browser.description") },
     // Computador: a v1 só tem driver no macOS — nas outras plataformas a aba não aparece.
-    { id: "computer", label: t("settings.tabs.computer.label"), icon: Monitor, description: t("settings.tabs.computer.description"), beta: true },
+    { id: "computer", label: t(SETTINGS_TAB_LABEL_KEY.computer), icon: Monitor, description: t("settings.tabs.computer.description"), beta: true },
     // Sistema só tem o "Abrir com Orbit" do Explorer, que é exclusivo do
     // Windows: em macOS/Linux a aba nem aparece (ver `visibleTabs` abaixo).
-    { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
-    { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
-    { id: "about", label: t("settings.tabs.about.label"), icon: Info, description: t("settings.tabs.about.description") },
+    { id: "system", label: t(SETTINGS_TAB_LABEL_KEY.system), icon: Settings2, description: t("settings.tabs.system.description") },
+    { id: "data", label: t(SETTINGS_TAB_LABEL_KEY.data), icon: Database, description: t("settings.tabs.data.description") },
+    { id: "about", label: t(SETTINGS_TAB_LABEL_KEY.about), icon: Info, description: t("settings.tabs.about.description") },
   ]
   return tabs.filter(
     (tab) => (tab.id !== "system" || windowApi.platform === "win32") && (tab.id !== "computer" || isComputerPlatform(windowApi.platform)),
