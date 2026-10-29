@@ -34,6 +34,8 @@ import type {
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
+  SessionPrefsSnapshot,
+  SessionPrefsChangeEvent,
   ReasoningPrefsMap,
   ReasoningPrefsChangeEvent,
   RotationChangeEvent,
@@ -707,6 +709,23 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               providerId: req.providerId,
               modelId: req.modelId,
               pref: req.pref,
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'session:prefs-select': {
+        // Thinking/autonomia de UM chat escolhidos no celular: o renderer é a
+        // fonte da verdade, então a escolha é aplicada lá — e de lá volta a
+        // todos os companions pelo 'session:prefs-change'.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:session-prefs-select', {
+              sessionId: req.sessionId ?? null,
+              reasoning: req.reasoning,
+              permission: req.permission,
             })
           }
         }
@@ -1470,6 +1489,15 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
+  }
+}
+
+/** Thinking e autonomia por chat (sessionId → preferência) empurrados aos
+ *  companions — sem isto o celular abriria todo chat no default do aparelho. */
+export function broadcastSessionPrefs(prefs: SessionPrefsSnapshot): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'session:prefs-change', prefs } satisfies SessionPrefsChangeEvent))
   }
 }
 

@@ -142,9 +142,10 @@ import {
   registerFontProtocol,
 } from './lib/fonts/store'
 import { listSystemFonts } from './lib/fonts/system'
-import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
-import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
+import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
+import { definirModosPorSessao } from './lib/permission/modo-global'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents, unregisterPanelWebContents } from './lib/panel-browser'
@@ -2143,6 +2144,15 @@ app.whenReady().then(() => {
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
+  })
+
+  // Thinking e autonomia por chat: mesma via dos modos. Além do cache HTTP e
+  // do evento, o mapa de permissão alimenta o gate das ferramentas — cada
+  // turno consulta o nível do PRÓPRIO chat, não um modo global do app.
+  ipcMain.on('companion:session-prefs', (_event, prefs: SessionPrefsSnapshot) => {
+    setSessionPrefsCache(prefs)
+    definirModosPorSessao(prefs?.permission ?? {})
+    broadcastSessionPrefs(prefs)
   })
 
   // Thinking por modelo: mesma via (cache HTTP para o connect + evento

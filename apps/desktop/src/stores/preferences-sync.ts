@@ -20,7 +20,8 @@ function snapshot(): AppPreferences {
   return {
     chatModes: modes.chatActiveModes,
     codeModes: modes.codeActiveModes,
-    permissionMode: usePermissionPrefs.getState().mode,
+    // O padrão do app (chat novo); o nível de cada chat viaja em session-prefs.
+    permissionMode: usePermissionPrefs.getState().defaultMode,
     autoCreateFolders: modes.autoCreateFolders,
   }
 }
@@ -58,8 +59,10 @@ function apply(prefs: AppPreferences) {
   if (typeof prefs.autoCreateFolders === "boolean" && prefs.autoCreateFolders !== modes.autoCreateFolders) {
     modes.setAutoCreateFolders(prefs.autoCreateFolders)
   }
-  if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().mode) {
-    usePermissionPrefs.getState().applyRemoteMode(prefs.permissionMode)
+  if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().defaultMode) {
+    // Preferência do app vinda do celular: vira o padrão de chat novo. O
+    // nível de cada chat chega pelo 'session:prefs-select', com sessão.
+    usePermissionPrefs.getState().setDefaultMode(prefs.permissionMode)
   }
 }
 

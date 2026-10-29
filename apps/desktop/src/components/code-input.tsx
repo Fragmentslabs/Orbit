@@ -53,12 +53,12 @@ import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { useComputerMode } from "@/src/stores/computer-mode"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
+import { usePermissionMode, usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
-import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSessionReasoningPref } from "@/src/stores/session-reasoning"
 import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -142,8 +142,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const brain = useBrainEnabled(sessionId, codeActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useCodeContext()
-  const permissionMode = usePermissionPrefs((s) => s.mode)
-  const setPermissionMode = usePermissionPrefs((s) => s.setMode)
+  // Autonomia POR CHAT: o seletor muda só esta conversa.
+  const permissionMode = usePermissionMode(sessionId)
+  const setPermissionMode = useCallback(
+    (id: PermissionMode) => usePermissionPrefs.getState().setMode(sessionId, id),
+    [sessionId],
+  )
   const { folders: foldersDoWorkspace, setFolders: setFoldersDoWorkspace } = useWorkspace()
   // Uma aba do painel passa as pastas da própria sessão; no resto, o workspace
   // é a fonte (é ele que o envio grava na sessão).
@@ -166,7 +170,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  // Thinking POR CHAT: sem escolha nesta conversa, vale o nível do modelo.
+  const { enabled, variantId: savedVariant, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   const suggestion = usePromptSuggestion(sessionId)
   // Nível salvo que este modelo não oferece (ex: "medium" onde só há
   // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
@@ -628,7 +633,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               </DropdownMenu>
               <QuickSettingsMenu sessionId={sessionId} showPermission />
               <div className="hidden @md:block">
-                <PermissionModePicker />
+                <PermissionModePicker sessionId={sessionId} />
               </div>
             </div>
             <div className="flex items-center gap-1">

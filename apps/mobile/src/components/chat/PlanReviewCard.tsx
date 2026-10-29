@@ -23,7 +23,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { PlanReview, PermissionMode } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
-import { usePermissionPrefs } from '~/stores/permission-prefs'
+import { usePermissionMode } from '~/stores/permission-prefs'
 import { useConnectionStore } from '~/stores/connection-store'
 import { getThemeTokens, withAlpha, type ThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -114,7 +114,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
   const [reviewHeight, setReviewHeight] = useState(REVIEW_MIN_HEIGHT)
   // Sugere o modo de permissão selecionado agora (igual ao desktop); num
   // plano já aceito, o modo com que ele foi aceito.
-  const activeMode = usePermissionPrefs((s) => s.mode)
+  const activeMode = usePermissionMode(sessionId)
   const currentMode: PermissionMode = review.permissionMode ?? activeMode
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
 

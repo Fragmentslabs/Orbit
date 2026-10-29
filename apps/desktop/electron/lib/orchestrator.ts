@@ -516,7 +516,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // As escritas passam pelo mesmo gate de permissões de um turno normal.
     const permissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = createToolApproval(
-      input.options.followGlobalPermission ? () => modoGlobal(permissionMode) : permissionMode,
+      input.options.followGlobalPermission ? () => modoGlobal(sessionId, permissionMode) : permissionMode,
       sessionId,
       input.directory,
       assistantMessage.id,

@@ -8,6 +8,7 @@ import type {
   EsteiraEventMessage,
   RotinaEventMessage,
   SessionModeOverrides,
+  SessionPrefsSnapshot,
   WorkerConfigSnapshot,
   ReasoningPrefsMap,
   MessageQueueChangeEvent,
@@ -20,6 +21,7 @@ import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { useModelRotationStore } from '~/stores/model-rotation-store'
 import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
+import { applyRemoteSessionPrefs, fetchSessionPrefs } from '~/stores/session-prefs-sync'
 import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-sync'
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRotinasStore } from '~/stores/rotinas-store'
@@ -122,6 +124,8 @@ export function useCompanion() {
         void fetchSessionModes()
         // Thinking por modelo (toggle + variante) — vive no renderer do desktop
         void fetchReasoningPrefs()
+        // Thinking e autonomia POR CHAT (mesmo caminho: snapshot do renderer)
+        void fetchSessionPrefs()
         // Config de subagentes/orquestração e visão (global, mora no desktop)
         void useSettingsStore.getState().fetchWorkerConfig()
         // Preferências do desktop mandam: na conexão o celular adota as de lá
@@ -173,6 +177,12 @@ export function useCompanion() {
       if (msg?.overrides) applyRemoteModes(msg.overrides, true)
     })
 
+    // session:prefs-change → thinking/autonomia de um chat mudados no desktop
+    const unsubSessionPrefs = conn.onEvent('session:prefs-change', (event) => {
+      const msg = event as { prefs?: SessionPrefsSnapshot }
+      if (msg?.prefs) applyRemoteSessionPrefs(msg.prefs, true)
+    })
+
     // reasoning:change → thinking por modelo mudado no desktop (ou pelo
     // próprio toggle daqui, que volta no broadcast como confirmação)
     const unsubReasoning = conn.onEvent('reasoning:change', (event) => {
@@ -221,6 +231,7 @@ export function useCompanion() {
       unsubModels()
       unsubRotation()
       unsubModes()
+      unsubSessionPrefs()
       unsubReasoning()
       unsubWorkerConfig()
       unsubPrefs()

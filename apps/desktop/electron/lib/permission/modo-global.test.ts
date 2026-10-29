@@ -20,7 +20,7 @@ vi.mock('./trust-rules', () => ({ checkTrust: () => false, addTrust: vi.fn() }))
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }))
 
 const { createToolApproval } = await import('./index')
-const { definirModoGlobal, modoGlobal } = await import('./modo-global')
+const { definirModoGlobal, definirModosPorSessao, modoGlobal } = await import('./modo-global')
 
 const chamada = (toolName: string, input: unknown = {}) => ({
   toolCall: { toolCallId: `c_${Math.random()}`, toolName, input },
@@ -33,11 +33,20 @@ beforeEach(() => {
 
 describe('modo de permissão ao vivo', () => {
   it('modoGlobal usa o inicial até o seletor publicar um modo', () => {
-    expect(modoGlobal('ask')).toBe('ask')
+    expect(modoGlobal('s1', 'ask')).toBe('ask')
     definirModoGlobal('full')
-    expect(modoGlobal('ask')).toBe('full')
+    expect(modoGlobal('s1', 'ask')).toBe('full')
     definirModoGlobal(undefined)
-    expect(modoGlobal('ask')).toBe('full')
+    expect(modoGlobal('s1', 'ask')).toBe('full')
+  })
+
+  it('o modo de um chat não vaza para o outro', () => {
+    definirModosPorSessao({ s_full: 'full', s_ask: 'ask' })
+    expect(modoGlobal('s_full', 'ask')).toBe('full')
+    expect(modoGlobal('s_ask', 'full')).toBe('ask')
+    // Chat sem entrada própria (sessão filha, worker) cai no último publicado
+    definirModoGlobal('ask')
+    expect(modoGlobal('s_worker_sem_entrada', 'approve')).toBe('ask')
   })
 
   it('turno que segue o seletor: trocar no meio vale na próxima ferramenta', async () => {

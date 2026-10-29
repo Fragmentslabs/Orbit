@@ -16,6 +16,8 @@ import './stores/app-settings'
 import './stores/preferences-sync'
 // Thinking por modelo (toggle + variante) com o mobile.
 import './stores/reasoning-sync'
+// Thinking e autonomia por CHAT com o mobile.
+import './stores/session-prefs-sync'
 // Fila de mensagens compartilhada com o mobile.
 import './stores/message-queue-sync'
 

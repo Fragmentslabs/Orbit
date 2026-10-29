@@ -11,6 +11,7 @@ import type {
   MediaUsage,
   ReasoningPrefsMap,
   RotationConfig,
+  SessionPrefsSnapshot,
   VoiceEngineId,
   VoiceStatusResponse,
   VoiceTranscribeResponse,
@@ -83,6 +84,13 @@ export class CompanionHttp {
    *  O mobile herda o estado do chat ao conectar. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
+  }
+
+  /** Thinking e autonomia POR CHAT (mapas sessionId → preferência) mantidos
+   *  pelo renderer do desktop. O mobile herda no connect e depois acompanha
+   *  pelo evento WS 'session:prefs-change'. */
+  async getSessionPrefs(): Promise<HttpResult<SessionPrefsSnapshot>> {
+    return this.get('/api/session-prefs')
   }
 
   /** Thinking por modelo (toggle + variante) mantido pelo renderer do desktop.

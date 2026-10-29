@@ -104,7 +104,7 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
       // Gate próprio do subagente: os pedidos vão para a conversa (mesmo
       // sessionId), e "Permitir neste turno" vale pela execução dele.
       const toolApproval = createToolApproval(
-        input.options.followGlobalPermission ? () => modoGlobal(mode) : mode,
+        input.options.followGlobalPermission ? () => modoGlobal(input.sessionId, mode) : mode,
         input.sessionId,
         input.directory ?? null,
         `${input.sessionId}-computer-task`,

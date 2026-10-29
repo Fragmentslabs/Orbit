@@ -107,7 +107,11 @@ export function createSubagentTool(
       const tools = buildToolSet(workerInput, workerCtx, undefined, modelSupportsVision(workerProvider, worker.modelId))
       const modoWorker = workerInput.options.permissionMode ?? 'ask'
       const toolApproval = createToolApproval(
-        workerInput.options.followGlobalPermission ? () => modoGlobal(modoWorker) : modoWorker,
+        // O nível que vale é o do CHAT que pediu o worker: o id do worker é
+        // uma sessão filha, que não tem entrada própria no mapa.
+        workerInput.options.followGlobalPermission
+          ? () => modoGlobal(workerInput.parentSessionId ?? workerInput.sessionId, modoWorker)
+          : modoWorker,
         workerInput.sessionId,
         ctx?.directory ?? null,
         workerInput.sessionId,

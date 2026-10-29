@@ -33,6 +33,8 @@ import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
 import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel } from './session-model-prefs'
 import { useModelRotationStore } from './model-rotation-store'
+import { sessionReasoningFor, useSessionReasoning } from './session-reasoning'
+import { usePermissionPrefs } from './permission-prefs'
 import { saveLastSessionId } from './last-chat-store'
 
 export interface RevertResponse {
@@ -673,6 +675,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // Idem para a rotação escolhida no chat novo — sem isto ela ficaria
         // presa no draft e o primeiro turno da sessão rodaria sem rotação.
         useModelRotationStore.getState().adoptRotation(session.id)
+        // Thinking e autonomia do chat novo também passam a ser da sessão:
+        // sem escolha no rascunho, fixa o nível em vigor (o do modelo / o
+        // padrão), para o chat não mudar quando o default for mexido depois.
+        const modeloDaSessao = sessionModelFor(undefined)
+        useSessionReasoning.getState().adopt(
+          session.id,
+          sessionReasoningFor(undefined, modeloDaSessao?.providerId, modeloDaSessao?.modelId),
+        )
+        usePermissionPrefs.getState().adopt(session.id)
         return session
       }
     } catch {
@@ -744,6 +755,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         useChatStore.setState({ pendingAsks, activeAskSessionId: useChatStore.getState().activeAskSessionId === sessionId ? null : useChatStore.getState().activeAskSessionId })
         return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox, _localPlanReviews, unreadCounts }
       })
+      // Thinking e autonomia do chat vão junto — nada de override órfão.
+      useSessionReasoning.getState().clear(sessionId)
+      usePermissionPrefs.getState().clear(sessionId)
       // Cleanup de arquivos de cache
       void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
       void Storage.removeItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
@@ -1170,6 +1184,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'session:deleted':
+        // Some com o chat também o thinking e a autonomia que ele guardava.
+        useSessionReasoning.getState().clear(event.sessionId)
+        usePermissionPrefs.getState().clear(event.sessionId)
         set((state) => {
           const sessions = state.sessions.filter((s) => s.id !== event.sessionId)
           const unreadCounts = { ...state.unreadCounts }

@@ -13,10 +13,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ModelPicker } from "@/src/components/model-picker"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
+import { usePermissionMode, usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
-import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSessionReasoningPref } from "@/src/stores/session-reasoning"
 import type { PermissionMode } from "@shared/chat"
 
 const PERMISSION_MODES: PermissionMode[] = ["ask", "approve", "full"]
@@ -52,8 +52,9 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
-  const permissionMode = usePermissionPrefs((s) => s.mode)
+  // Thinking e autonomia POR CHAT — o menu edita só a conversa aberta.
+  const { enabled, variantId, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
+  const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
 
   const variants = model?.variants ?? []
@@ -87,7 +88,7 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
               <DropdownMenuSubContent onMouseEnter={permission.onEnter} onMouseLeave={permission.onLeave}>
                 <DropdownMenuRadioGroup
                   value={permissionMode}
-                  onValueChange={(value) => value && setPermissionMode(value as PermissionMode)}
+                  onValueChange={(value) => value && setPermissionMode(sessionId, value as PermissionMode)}
                 >
                   {PERMISSION_MODES.map((id) => (
                     <DropdownMenuRadioItem key={id} value={id}>

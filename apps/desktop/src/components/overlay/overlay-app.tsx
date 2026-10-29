@@ -12,7 +12,7 @@ import { DictationWave } from "@/src/components/dictation-wave"
 import { useVoiceCallControl } from "@/src/components/voice-call"
 import { assistantView } from "@/src/lib/overlay-answer"
 import { chatApi, overlayApi } from "@/src/lib/ipc"
-import { readReasoningPref } from "@/src/stores/reasoning-prefs"
+import { sessionReasoningFor } from "@/src/stores/session-reasoning"
 import { readVisionModel, useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
@@ -132,7 +132,9 @@ export function OverlayApp() {
       // Preferências depois que esta janela nasceu (o painel é pré-aquecido no
       // boot e vive a sessão inteira).
       const vision = look.vision ? readVisionModel() : null
-      const reasoningPref = readReasoningPref(model.providerId, model.modelId)
+      // Nível do chat do overlay: a escolha dele, senão o do modelo. Lido do
+      // storage agora — esta janela é pré-aquecida no boot.
+      const reasoningPref = sessionReasoningFor(sessionId, model.providerId, model.modelId)
       const catalogModel = useProviderStore.getState().catalog[model.providerId]?.models[model.modelId]
       void chatApi.send({
         sessionId,
@@ -149,8 +151,8 @@ export function OverlayApp() {
           overlay: true,
           computer: true,
           voiceCall: spoken || undefined,
-          // Nível de thinking escolhido para este modelo nas Preferências —
-          // o mesmo mapa por modelo que o input do chat lê e grava.
+          // Nível de thinking do chat do overlay (ou o do modelo, nas
+          // Preferências) — o mesmo mapa por chat que o input do chat usa.
           reasoning: {
             enabled: (reasoningPref?.enabled ?? false) || !!catalogModel?.reasoningAlwaysOn,
             variantId: reasoningPref?.variantId,

@@ -2126,7 +2126,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       ? createToolApproval(
           // Turno do seletor global: trocar o modo no meio da resposta vale
           // já na próxima ferramenta. Modo explícito (plano, rotina) fica fixo.
-          input.options.followGlobalPermission ? () => modoGlobal(mode) : mode,
+          input.options.followGlobalPermission ? () => modoGlobal(input.sessionId, mode) : mode,
           input.sessionId,
           toolContext?.directory ?? null,
           assistantMessage.id,

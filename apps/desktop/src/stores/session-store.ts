@@ -42,6 +42,8 @@ import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
+import { sessionReasoningFor, useSessionReasoning } from "@/src/stores/session-reasoning"
+import { permissionFor, usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { useModelRotationStore } from "@/src/stores/model-rotation-store"
@@ -697,6 +699,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (parentModel) {
       useSessionModelPrefs.getState().selectModel(child.id, parentModel.providerId, parentModel.modelId)
     }
+    // Thinking e autonomia também são do pai: o fork troca o contexto, não a
+    // configuração com que a conversa estava rodando.
+    const parentReasoning = sessionReasoningFor(parentId, parentModel?.providerId, parentModel?.modelId)
+    if (parentReasoning) useSessionReasoning.getState().setPref(child.id, parentReasoning)
+    usePermissionPrefs.getState().applyRemoteMode(child.id, permissionFor(parentId))
     return child
   },
 
@@ -795,6 +802,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
+      useSessionReasoning.getState().clear(sid)
+      usePermissionPrefs.getState().clear(sid)
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
@@ -940,6 +949,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().setEnabled(sid, true)
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
+      useSessionReasoning.getState().clear(sid)
+      usePermissionPrefs.getState().clear(sid)
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
@@ -1304,6 +1315,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // escolha explícita, fixa o modelo efetivamente usado (herdado do último
       // chat), para o picker e o envio continuarem consistentes.
       useSessionModelPrefs.getState().adopt(sessionId, selected)
+      // Thinking e autonomia do chat novo também passam a ser da sessão: sem
+      // escolha no rascunho, fixa o nível em vigor (o do modelo / o padrão),
+      // para o chat não mudar quando o default for mexido depois.
+      useSessionReasoning.getState().adopt(
+        sessionId,
+        sessionReasoningFor(null, selected.providerId, selected.modelId),
+      )
+      usePermissionPrefs.getState().adopt(sessionId)
       // A rotação escolhida no chat novo (draft) passa a valer para a sessão
       useModelRotationStore.getState().adoptRotation(sessionId)
     } else if (mode === "code") {
@@ -1778,6 +1797,8 @@ case "message": {
         useBrainPrefs.getState().setEnabled(sessionId, true)
         useSimplePrefs.getState().clear(sessionId)
         useSessionModelPrefs.getState().clear(sessionId)
+        useSessionReasoning.getState().clear(sessionId)
+        usePermissionPrefs.getState().clear(sessionId)
         useModelRotationStore.getState().selectRotation(sessionId, null)
       }
       set((state) => {

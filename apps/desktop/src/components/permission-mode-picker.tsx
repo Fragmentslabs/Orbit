@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { PermissionMode } from "@shared/chat"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
+import { usePermissionMode, usePermissionPrefs } from "@/src/stores/permission-prefs"
 
 const MODE_ICON: Record<PermissionMode, typeof Shield> = {
   ask: Shield,
@@ -17,9 +17,11 @@ const MODE_ICON: Record<PermissionMode, typeof Shield> = {
   full: ShieldOff,
 }
 
-export function PermissionModePicker() {
+/** Autonomia do chat aberto (`sessionId` ausente = chat novo, que vira o
+ *  padrão ao escolher). Mudar aqui não afeta os outros chats. */
+export function PermissionModePicker({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
-  const mode = usePermissionPrefs((s) => s.mode)
+  const mode = usePermissionMode(sessionId)
   const setMode = usePermissionPrefs((s) => s.setMode)
   const Icon = MODE_ICON[mode]
 
@@ -30,7 +32,7 @@ export function PermissionModePicker() {
   ], [t])
 
   return (
-    <Select value={mode} onValueChange={(value) => value && setMode(value as PermissionMode)}>
+    <Select value={mode} onValueChange={(value) => value && setMode(sessionId, value as PermissionMode)}>
       <SelectTrigger
         size="sm"
         className="h-7 gap-1 border-none bg-transparent px-1.5 text-xs hover:bg-muted dark:bg-transparent dark:hover:bg-muted"

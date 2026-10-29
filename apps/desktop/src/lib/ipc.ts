@@ -16,7 +16,7 @@ import type {
 } from "@shared/chat"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
-import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
+import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
@@ -410,6 +410,27 @@ export const sessionModesApi = {
       listener(data as { mode: ChatModeKey; value: boolean; sessionId?: string | null }),
     )
     return () => window.ipcRenderer.off("companion:mode-select", wrapper)
+  },
+}
+
+/** Thinking e permissão POR CHAT: mesma via do sessionModelsApi. O renderer
+ *  empurra o snapshot (reasoning + permissão por sessão) e escuta o que foi
+ *  escolhido num companion (WS 'session:prefs-select'). */
+export const sessionPrefsApi = {
+  sync: (prefs: SessionPrefsSnapshot) => {
+    window.ipcRenderer?.send("companion:session-prefs", prefs)
+  },
+  onSelect: (
+    listener: (data: {
+      sessionId?: string | null
+      reasoning?: ModelReasoningPref
+      permission?: "ask" | "approve" | "full"
+    }) => void,
+  ) => {
+    const wrapper = window.ipcRenderer.on("companion:session-prefs-select", (data) =>
+      listener(data as { sessionId?: string | null; reasoning?: ModelReasoningPref; permission?: "ask" | "approve" | "full" }),
+    )
+    return () => window.ipcRenderer.off("companion:session-prefs-select", wrapper)
   },
 }
 

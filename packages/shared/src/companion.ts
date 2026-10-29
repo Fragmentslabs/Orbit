@@ -227,6 +227,39 @@ export interface ReasoningPrefsChangeEvent {
   prefs: ReasoningPrefsMap
 }
 
+// ─── Preferências POR CHAT (thinking e permissão) ────────────────────────────
+// Mesmo desenho do modelo e dos modos por chat: chave 'draft' é o chat ainda
+// sem sessão (e não viaja entre aparelhos). O renderer do desktop é a fonte da
+// verdade — os mapas vivem no localStorage dele —, empurra o snapshot a cada
+// mudança e aplica o que chega dos companions.
+
+/** sessionId → preferência de thinking daquele chat. */
+export type SessionReasoningMap = Record<string, ModelReasoningPref>
+
+/** sessionId → nível de autonomia (ask/approve/full) daquele chat. */
+export type SessionPermissionMap = Record<string, PermissionMode>
+
+export interface SessionPrefsSnapshot {
+  reasoning: SessionReasoningMap
+  permission: SessionPermissionMap
+}
+
+/** Preferência de UM chat mudada num companion. O renderer aplica no store
+ *  certo e devolve o snapshot inteiro pelo 'session:prefs-change'. */
+export interface SelectSessionPrefsRequest {
+  type: 'session:prefs-select'
+  /** Sessão alvo — ausente/null = chat novo (draft). */
+  sessionId?: string | null
+  reasoning?: ModelReasoningPref
+  permission?: PermissionMode
+}
+
+/** Snapshot das preferências por chat empurrado pelo desktop. */
+export interface SessionPrefsChangeEvent {
+  type: 'session:prefs-change'
+  prefs: SessionPrefsSnapshot
+}
+
 // ─── Fila de mensagens compartilhada ─────────────────────────────────────────
 // A fila mora no renderer do desktop — é ele quem envia o próximo item quando
 // a sessão fica livre, então só existe UMA fila por chat, vista e editada
@@ -697,6 +730,7 @@ export type CompanionRequest =
   | SelectModelRequest
   | SelectSessionModeRequest
   | SelectReasoningRequest
+  | SelectSessionPrefsRequest
   | SelectRotationRequest
   | SetRotationsRequest
   | SetWorkerConfigRequest
@@ -845,6 +879,7 @@ export type CompanionEvent =
   | SessionModelChangeEvent
   | SessionModeChangeEvent
   | ReasoningPrefsChangeEvent
+  | SessionPrefsChangeEvent
   | RotationChangeEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent

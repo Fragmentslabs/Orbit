@@ -34,7 +34,7 @@ import { serveAsset } from './companion-assets'
 
 import { transcribePcm, voiceStatus } from './voice'
 
-import type { SessionModeOverrides, WorkerConfigSnapshot, ReasoningPrefsMap } from '@shared/companion'
+import type { SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot, ReasoningPrefsMap } from '@shared/companion'
 import type { VoiceEngineId } from '@shared/voice'
 import type { RotationConfig } from '@shared/chat'
 
@@ -263,6 +263,27 @@ export function getSessionModesCache(): SessionModeOverrides {
 
 async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModesCache() })
+}
+
+// Thinking e autonomia por chat: mesma mecânica. O renderer empurra o snapshot
+// (reasoning + permissão por sessão) a cada mudança; aqui fica o cache que o
+// mobile lê no connect (GET /api/session-prefs). Em tempo real chega pelo WS
+// 'session:prefs-change'.
+let sessionPrefsCache: SessionPrefsSnapshot = { reasoning: {}, permission: {} }
+
+export function setSessionPrefsCache(prefs: SessionPrefsSnapshot): void {
+  sessionPrefsCache = {
+    reasoning: prefs?.reasoning ?? {},
+    permission: prefs?.permission ?? {},
+  }
+}
+
+export function getSessionPrefsCache(): SessionPrefsSnapshot {
+  return sessionPrefsCache
+}
+
+async function handleGetSessionPrefs(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, getSessionPrefsCache())
 }
 
 // Thinking por modelo: mesma mecânica dos modos. O renderer empurra o mapa
@@ -682,6 +703,7 @@ function createRouter(
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
+    { pattern: /^GET \/api\/session-prefs$/, paramNames: [], handler: handleGetSessionPrefs },
     { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },

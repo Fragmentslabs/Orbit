@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
+import { usePermissionMode } from "@/src/stores/permission-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { PlanDialog } from "@/src/components/plan-dialog"
 import type { PlanReview } from "@shared/chat"
@@ -35,7 +35,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
   const rejectPlanReview = useSessionStore((s) => s.rejectPlanReview)
   const reviewPlanReview = useSessionStore((s) => s.reviewPlanReview)
   const dismissPlanReview = useSessionStore((s) => s.dismissPlanReview)
-  const currentMode = usePermissionPrefs((s) => s.mode)
+  const currentMode = usePermissionMode(sessionId)
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
   const content = review.content ?? null
   const checkboxCount = content

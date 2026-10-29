@@ -25,6 +25,7 @@ import { useModeOverrides } from "../stores/mode-overrides";
 import { useSimplePrefs } from "../stores/simple-prefs";
 import { useBrainPrefs } from "../stores/brain-prefs";
 import { usePermissionPrefs } from "../stores/permission-prefs";
+import { useSessionReasoning } from "../stores/session-reasoning";
 import { useModelRotationStore } from "../stores/model-rotation-store";
 import { hydrateInputDrafts } from "../stores/chat-draft-store";
 import { loadLastSessionId, saveLastSessionId } from "../stores/last-chat-store";
@@ -87,6 +88,7 @@ export default function RootLayout() {
     void useSimplePrefs.getState().hydrate();
     void useBrainPrefs.getState().hydrate();
     void usePermissionPrefs.getState().hydrate();
+    void useSessionReasoning.getState().hydrate();
     void useModelRotationStore.getState().hydrate();
     // Rascunhos do input por chat (o PromptInput também garante antes de ler)
     void hydrateInputDrafts();

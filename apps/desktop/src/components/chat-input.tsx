@@ -51,7 +51,7 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
-import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSessionReasoningPref } from "@/src/stores/session-reasoning"
 import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useToolsServers } from "@/src/stores/session-tools"
@@ -95,7 +95,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  // Thinking POR CHAT: o seletor grava a escolha desta conversa; sem ela, vale
+  // o nível do modelo definido nas Preferências.
+  const { enabled, variantId: savedVariant, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   const suggestion = usePromptSuggestion(sessionId)
   // Nível salvo que este modelo não oferece (ex: "medium" onde só há
   // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.

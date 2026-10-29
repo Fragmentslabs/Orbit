@@ -27,7 +27,8 @@ function snapshot(): AppPreferences {
   return {
     chatModes: modes.chatActiveModes,
     codeModes: modes.codeActiveModes,
-    permissionMode: usePermissionPrefs.getState().mode,
+    // Padrão do app (chat novo); o nível de cada chat viaja em session-prefs.
+    permissionMode: usePermissionPrefs.getState().defaultMode,
     autoCreateFolders: useSettingsStore.getState().autoCreateFolders,
   }
 }
@@ -60,8 +61,8 @@ function aplicar(prefs: AppPreferences): void {
     const k = key as keyof ActiveModeDefaults
     if (modes.codeActiveModes[k] !== value) modes.setCodeActiveMode(k, value as boolean)
   }
-  if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().mode) {
-    usePermissionPrefs.getState().setMode(prefs.permissionMode)
+  if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().defaultMode) {
+    usePermissionPrefs.getState().setDefaultMode(prefs.permissionMode)
   }
   if (
     typeof prefs.autoCreateFolders === 'boolean' &&

@@ -36,8 +36,8 @@ import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore, type ModeId } from '~/stores/appearance-store'
-import { useReasoningPrefs } from '~/stores/reasoning-prefs'
-import { usePermissionPrefs } from '~/stores/permission-prefs'
+import { useSessionReasoningPref } from '~/stores/session-reasoning'
+import { usePermissionMode, usePermissionPrefs } from '~/stores/permission-prefs'
 import { useModelModePrefs } from '~/stores/model-mode-prefs'
 import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
 import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
@@ -173,9 +173,9 @@ export function PromptInput({
   // teclado (keyboardVerticalOffset negativo, no ChatScreen), então existe uma
   // animação só e o input não sai de fase com o teclado. Ver lib/keyboard.
   const respiroFechado = useBottomBreathing()
-  // Global (como no desktop): o card de revisão de plano lê o mesmo modo
-  // para sugerir o aceite padrão.
-  const permissionMode = usePermissionPrefs((s) => s.mode)
+  // Autonomia POR CHAT (paridade com o desktop): o seletor muda só esta
+  // conversa; num chat novo a escolha vira o padrão do próximo.
+  const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
 
@@ -215,7 +215,8 @@ export function PromptInput({
   const model = selected && catalog
     ? catalog[selected.providerId]?.models[selected.modelId]
     : undefined
-  const { enabled, variantId, update, hydrate, hydrated } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  // Thinking POR CHAT: sem escolha nesta conversa, vale o nível do modelo.
+  const { enabled, variantId, update, hydrate, hydrated } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   // Thinking: o default das preferências define o default; reasoning do modelo
   // e modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = modeDefaults.thinking || enabled || !!model?.reasoningAlwaysOn
@@ -393,6 +394,10 @@ export function PromptInput({
       orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
       loop,
       permissionMode: modeNow === 'code' ? permissionMode : undefined,
+      // Modo vindo do seletor: no desktop vale já na próxima ferramenta da
+      // resposta em curso. Agora o main resolve pelo nível DESTE chat, então o
+      // mesmo contrato vale aqui sem vazar para os outros.
+      followGlobalPermission: modeNow === 'code' ? true : undefined,
     } satisfies SendMessageOptions
   }, [search, browser, simple, brain, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
 
@@ -752,7 +757,7 @@ export function PromptInput({
         visible={configOpen}
         onClose={() => setConfigOpen(false)}
         permissionMode={permissionMode}
-        onPermissionModeChange={setPermissionMode}
+        onPermissionModeChange={(mode) => setPermissionMode(sessionId, mode)}
         thinking={thinking}
         onThinkingToggle={() => update({ enabled: !enabled, variantId })}
         reasoningVariants={model?.variants ?? []}
