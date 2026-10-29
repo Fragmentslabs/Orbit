@@ -2873,12 +2873,22 @@ app.whenReady().then(() => {
     }
   })
 
-  // Tema do app → aparência NATIVA (menus de bandeja, diálogos do sistema). O
-  // renderer decide o tema; aqui ele só é espelhado, e o menu da bandeja é
-  // reconstruído para nascer já no tema novo.
-  ipcMain.on('theme:sync', (_event, theme: unknown) => {
-    nativeTheme.themeSource = theme === 'light' || theme === 'dark' ? theme : 'system'
+  // Tema do app → aparência NATIVA (menus de bandeja, diálogos do sistema) e
+  // para as OUTRAS janelas. O renderer decide o tema; aqui ele só é espelhado.
+  //
+  // O repasse existe porque cada janela é uma página própria: a do overlay é
+  // pré-aquecida no boot e vive a sessão inteira, então sem este aviso ela
+  // ficaria com a classe de tema do momento em que nasceu — trocar o tema nas
+  // Preferências deixava o painel branco no meio de um app escuro (e a persona
+  // branca sobre ele). Quem mudou não recebe o eco: ele já aplicou.
+  ipcMain.on('theme:sync', (event, theme: unknown) => {
+    const next = theme === 'light' || theme === 'dark' ? theme : 'system'
+    nativeTheme.themeSource = next
     if (hasTray()) void syncTray()
+    for (const other of BrowserWindow.getAllWindows()) {
+      if (other.isDestroyed() || other.webContents.id === event.sender.id) continue
+      other.webContents.send('theme:apply', next)
+    }
   })
 
   ipcMain.handle('browser:clear-data', () => clearBrowserData())

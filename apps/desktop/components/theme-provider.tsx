@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 
 type Theme = "dark" | "light" | "system"
 
@@ -29,6 +29,10 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   )
+  /** Tema aplicado a pedido de OUTRA janela: aplica, mas não devolve ao main. */
+  const fromOtherWindow = useRef(false)
+  const currentTheme = useRef(theme)
+  currentTheme.current = theme
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -41,9 +45,10 @@ export function ThemeProvider({
     root.classList.remove("light", "dark")
 
     // O tema também vale para o que é NATIVO no main (menu da bandeja,
-    // diálogos do sistema): o main não lê o localStorage, então ele é
-    // publicado a cada troca.
-    window.ipcRenderer?.send("theme:sync", theme)
+    // diálogos do sistema) e para as outras janelas — o main não lê o
+    // localStorage, então ele é publicado a cada troca.
+    if (fromOtherWindow.current) fromOtherWindow.current = false
+    else window.ipcRenderer?.send("theme:sync", theme)
 
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
@@ -57,6 +62,26 @@ export function ThemeProvider({
 
     root.classList.add(theme)
   }, [theme])
+
+  /**
+   * O tema é UM para o app inteiro: quando a janela principal troca, as demais
+   * (overlay, painéis do Computer Use) recebem por aqui. Sem isto, a janela
+   * pré-aquecida no boot ficava com o tema do nascimento — painel branco num
+   * app escuro.
+   */
+  useEffect(() => {
+    const bridge = window.ipcRenderer
+    if (!bridge?.on) return
+    const wrapper = bridge.on("theme:apply", (next) => {
+      if (next !== "light" && next !== "dark" && next !== "system") return
+      // Mesmo tema: nada a fazer (e o efeito de aplicação não rodaria — o
+      // `false` abaixo ficaria pendente e engoliria a próxima troca local).
+      if (next === currentTheme.current) return
+      fromOtherWindow.current = true
+      setTheme(next)
+    })
+    return () => bridge.off("theme:apply", wrapper)
+  }, [])
 
   const value = {
     theme,

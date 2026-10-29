@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AudioLines, Check, Copy, Keyboard, ShieldAlert, X } from "lucide-react"
 import { OVERLAY_DEFAULTS, type OverlayContext, type OverlaySettings } from "@shared/overlay"
+import { MessageResponse } from "@/src/components/ai/message"
+import { OrbitUiHostContext } from "@/src/components/ai/generative-ui"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { AskCard } from "@/src/components/ask-card"
 import { CompactInput } from "@/src/components/compact-input"
@@ -187,6 +189,8 @@ export function OverlayApp() {
   const otherAsks = useMemo(() => asks.filter((ask) => !(ask.kind === "permission" && !ask.batchId)), [asks])
   const view = useMemo(() => assistantView(messages, askedAt, busy), [messages, askedAt, busy])
   const answer = view.final
+  /** Sessão para os componentes inline do Markdown (orbit-ui) falarem com ela. */
+  const uiHost = useMemo(() => ({ sessionId: sessionId ?? undefined }), [sessionId])
 
   // O main manda o contexto ao abrir (seleção já lida, modo e preferências).
   useEffect(() => {
@@ -452,12 +456,19 @@ export function OverlayApp() {
                 <>
                   <div
                     className={cn(
-                      "select-text overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-[1.55] text-foreground",
+                      // Markdown de verdade: o painel mostrava o texto CRU, com
+                      // `**` e `#` à vista. É o mesmo renderizador da resposta
+                      // na conversa — então lista, tabela e código saem iguais.
+                      "select-text overflow-y-auto text-[13px] leading-[1.55] text-foreground",
                       // Falada, a resposta é curta; se passar disso, rola.
                       call.active ? "max-h-[132px]" : "max-h-[320px]",
                     )}
                   >
-                    {answer}
+                    {/* O host leva a sessão desta conversa: um bloco orbit-ui
+                        (botões, tabela) continua funcionando aqui. */}
+                    <OrbitUiHostContext.Provider value={uiHost}>
+                      <MessageResponse>{answer}</MessageResponse>
+                    </OrbitUiHostContext.Provider>
                   </div>
                   <div className="mt-2 flex items-center gap-3">
                     <button
