@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory, MemoryKind } from '@orbit/shared'
-import { isCodeContext, matchesProjectFilter, searchMemories } from '@orbit/shared'
+import { matchesProjectFilter, searchMemories, visibleIn } from '@orbit/shared'
 import { useMemoryStore } from '~/stores/memory-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { MemoryCard } from '~/components/memories/MemoryCard'
@@ -61,9 +61,8 @@ export default function MemoriesScreen() {
   const pool = useMemo(() => {
     return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
-      // "general" existe nos dois modos, mas os aprendizados gravados sob ele
-      // são conhecimento de código — no chat eles não entram.
-      if (mode === 'chat' && isCodeContext(m)) return false
+      // Uma regra só: a memória aparece no modo em que vale.
+      if (!visibleIn(m, mode)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
       // O filtro vale para TODOS os kinds: uma memória geral criada em outro
       // projeto não pertence a esta vista. As sem origem seguem globais.

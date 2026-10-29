@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
-import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory, RelationType } from '@shared/memory'
-import { isCodeContext, jaccard } from '@shared/memory'
+import type { Memory, MemoryEvent, MemoryKind, MemoryScope, ProjectArea, ProjectCategory, RelationType } from '@shared/memory'
+import { defaultScopeOf, jaccard, scopeOf, visibleIn } from '@shared/memory'
 import { PRODUCTION_RETRIEVAL, retrieveCandidates } from '@shared/memory-select'
 import { Bm25Index, lexicalDocOf } from '@shared/memory-retrieval'
 import {
@@ -59,9 +59,24 @@ async function alive(): Promise<Memory[]> {
   return (await repo.getIndex()).filter((m) => !isExpired(m, now))
 }
 
+/**
+ * Re-salvar a mesma memória não move o escopo: só `both` amplia. Fora isso vale
+ * onde ela nasceu, mesmo quando a segunda gravação vem do outro modo.
+ */
+function mergeScope(existing: Memory, incoming: MemoryScope): MemoryScope {
+  const current = scopeOf(existing)
+  return current === 'both' || incoming === 'both' ? 'both' : current
+}
+
 export interface SaveMemoryInput {
   text: string
   kind: MemoryKind
+  /**
+   * Onde a memória vale. Ausente = padrão do kind (defaultScopeOf). Cada tool
+   * passa o modo em que está rodando como default, e o agente só grava `both`
+   * quando decide, na hora de salvar, que o fato cruza os dois modos.
+   */
+  scope?: MemoryScope
   weight?: number
   tags?: string[]
   /** Markdown anexado (memory/docs/<id>.md) — para contexto extenso */
@@ -142,6 +157,9 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   const now = Date.now()
   const tags = normalizeTags(input.tags)
   const weight = clampWeight(input.weight ?? defaultWeight(input.kind, input.category))
+  // Explícito quando a tool passou o modo de origem; sem isso, o padrão do kind
+  // — o que mantém memórias antigas se comportando exatamente como antes.
+  const scope = input.scope ?? defaultScopeOf(input.kind, input.category)
 
   let projectId: string | undefined
   let projectName: string | undefined
@@ -175,6 +193,7 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   if (existing) {
     const merged: Memory = {
       ...existing,
+      scope: mergeScope(existing, scope),
       tags: normalizeTags([...existing.tags, ...tags]),
       weight: Math.max(existing.weight, weight),
       lastHitAt: now,
@@ -200,6 +219,7 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   const memory: Memory = {
     id: newId(),
     kind: input.kind,
+    scope,
     text: input.text.trim(),
     tags,
     weight,
@@ -246,11 +266,10 @@ export interface SearchMemoryInput {
   projectId?: string
   category?: ProjectCategory
   /**
-   * Descarta conhecimento de código (kind project e category learning). O modo
-   * chat passa true: "general" abrange tanto preferências de trabalho quanto
-   * aprendizados técnicos, e só as primeiras valem numa conversa.
+   * Modo de quem busca: descarta o que não vale nele (visibleIn). O chat não
+   * enxerga conhecimento de código; o código não enxerga preferência de conversa.
    */
-  excludeCodeContext?: boolean
+  mode?: 'chat' | 'code'
   limit?: number
 }
 
@@ -308,7 +327,7 @@ export async function search(input: SearchMemoryInput): Promise<Memory[]> {
     if (!input.kinds.includes(m.kind)) return false
     if (m.kind === 'project' && m.projectId !== input.projectId) return false
     if (input.category && m.category !== input.category) return false
-    if (input.excludeCodeContext && isCodeContext(m)) return false
+    if (input.mode && !visibleIn(m, input.mode)) return false
     return true
   })
   // Uma só lista lexical — BM25 sobre o texto indexável, com o `.md` anexado —
@@ -468,6 +487,11 @@ export interface ReviseMemoryInput {
   weight?: number
   /** Reclassificação — é como um general/learning mal classificado vira project. */
   kind?: MemoryKind
+  /**
+   * Move a memória de escopo (ex.: uma preferência de conversa que se mostrou
+   * útil no código passa a `both`). Ausente: mantém o atual.
+   */
+  scope?: MemoryScope
   category?: ProjectCategory
   /** null remove a área (o nó deixa de ser rotulado por ela no grafo). */
   area?: ProjectArea | null
@@ -521,10 +545,18 @@ export async function revise(id: string, input: ReviseMemoryInput): Promise<Memo
     ...(input.text != null ? { text: input.text.trim() } : undefined),
     ...(input.area != null ? { area: input.area } : undefined),
     ...(input.subproject != null && kind === 'project' ? { subproject: input.subproject } : undefined),
+    ...(input.scope != null && kind === 'general' ? { scope: input.scope } : undefined),
     category,
     ...enrichmentOf(input),
   }
   if (input.area === null) delete next.area
+  // Outro kind com o mesmo escopo gravado criaria combinação sem sentido
+  // ("project" só no chat). Menos em seasonal → general, cujo ponto é justamente
+  // não deixar o padrão que se repetiu escapar do modo onde nasceu.
+  if (input.scope == null && input.kind != null && input.kind !== memory.kind) {
+    const inherited = memory.kind === 'seasonal' && kind === 'general'
+    if (!inherited) delete next.scope
+  }
 
   if (input.tags != null) next.tags = normalizeTags(input.tags)
   else if (input.addTags != null) next.tags = normalizeTags([...memory.tags, ...input.addTags])
@@ -623,13 +655,19 @@ export async function tree(projectId: string): Promise<TreeNodeSummary[]> {
  * `general` e não `core`: core só é injetado no prompt do chat (ver
  * loadPromptContext), e o padrão que se repete vale sobretudo no código —
  * promovê-lo para core o faria desaparecer justamente ali.
+ *
+ * O escopo é GRAVADO na promoção (o do seasonal/context, derivado antes da
+ * troca de kind): sem isso um seasonal do chat viraria `general` sem campo e,
+ * pelo padrão do kind, passaria a valer também no código — exatamente o
+ * vazamento que o campo existe para impedir.
  */
 export async function promote(id: string): Promise<Memory | null> {
   const memory = await repo.get(id)
   if (!memory) return null
+  const inheritedScope = scopeOf(memory)
   let next: Memory | null = null
   if (memory.kind === 'seasonal') {
-    next = { ...memory, kind: 'general', expiresAt: null, promotedFrom: 'seasonal' }
+    next = { ...memory, kind: 'general', scope: inheritedScope, expiresAt: null, promotedFrom: 'seasonal' }
   } else if (memory.kind === 'project' && memory.category === 'context') {
     next = { ...memory, category: 'decision', expiresAt: null, promotedFrom: 'project/context' }
   }
@@ -790,9 +828,14 @@ export async function loadPromptContext(
   const pool = await alive()
   const byWeight = (a: Memory, b: Memory) => b.weight - a.weight
   const generalAll = pool.filter((m) => m.kind === 'general')
-  const learningPool = generalAll.filter((m) => m.category === 'learning')
-  const general = generalAll.filter((m) => m.category !== 'learning').sort(byWeight)
-  const promotable = repeatingSeasonals(pool, Date.now())
+  const learningPool = generalAll.filter((m) => m.category === 'learning' && visibleIn(m, 'code'))
+  // Preferência que só vale no chat não é injetada no prompt de código — e
+  // vice-versa. É a mesma regra da busca, para os dois caminhos não contarem
+  // histórias diferentes sobre o mesmo acervo.
+  const general = generalAll
+    .filter((m) => m.category !== 'learning' && visibleIn(m, mode))
+    .sort(byWeight)
+  const promotable = repeatingSeasonals(pool.filter((m) => visibleIn(m, mode)), Date.now())
   // A candidata não se repete no bloco de contexto: a mesma linha duas vezes
   // (uma como "use como contexto", outra como "pergunte") só confunde.
   const promotableIds = new Set(promotable.map((m) => m.id))
@@ -869,6 +912,9 @@ export async function cleanup(): Promise<void> {
       const next: Memory = {
         ...memory,
         kind: promotion.kind,
+        // Gravado antes da troca de kind: a promoção herda o escopo de origem
+        // em vez de cair no padrão do kind novo.
+        scope: scopeOf(memory),
         category: promotion.category ?? memory.category,
         expiresAt: null,
         promotedFrom: memory.kind === 'seasonal' ? 'seasonal' : 'project/context',
@@ -929,11 +975,15 @@ export async function syncMemoryIndex(): Promise<{ indexed: number; pending: num
 export async function retrievalPool(mode: 'chat' | 'code', directory?: string): Promise<Memory[]> {
   const pool = await alive()
   if (mode === 'chat') {
-    return pool.filter((m) => (m.kind === 'seasonal' || m.kind === 'general') && !isCodeContext(m))
+    return pool.filter((m) => (m.kind === 'seasonal' || m.kind === 'general') && visibleIn(m, 'chat'))
   }
   const scope = directory ? await resolveProjectScope(directory) : undefined
   const projectId = scope?.projectId
-  return pool.filter((m) => m.kind === 'general' || (m.kind === 'project' && m.projectId === projectId))
+  return pool.filter(
+    (m) =>
+      visibleIn(m, 'code') &&
+      (m.kind === 'general' || (m.kind === 'project' && m.projectId === projectId)),
+  )
 }
 
 /**

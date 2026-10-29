@@ -468,6 +468,9 @@
       "general": "general",
       "project": "project"
     },
+    "scopes": {
+      "both": "both"
+    },
     "categories": {
       "preference": "preference",
       "convention": "convention",

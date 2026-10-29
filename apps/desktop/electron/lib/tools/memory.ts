@@ -2,7 +2,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
-import { isCodeContext } from '@shared/memory'
+import { defaultScopeOf, visibleIn } from '@shared/memory'
 import * as memory from '../memory/service'
 import type { ToolContext } from './context'
 
@@ -35,6 +35,9 @@ const ENRICHMENT = z.object({
 
 function describe(m: Memory): string {
   const kind = m.kind === 'project' ? `project/${m.category}` : m.kind
+  // Só aparece quando foi escolhido: o padrão do kind já é implícito, e
+  // imprimir "scope=chat" em toda memória de conversa é ruído.
+  const scope = m.scope && m.scope !== defaultScopeOf(m.kind, m.category) ? ` scope=${m.scope}` : ''
   const area = m.area ? ` area=${m.area}` : ''
   const sub = m.subproject ? ` sub=${m.subproject}` : ''
   const doc = m.hasDoc ? ' (doc attached — use memory_open to read it)' : ''
@@ -45,7 +48,7 @@ function describe(m: Memory): string {
   // O título é a manchete escolhida para esta memória — cinco palavras que
   // dizem o que o texto às vezes leva três linhas para dizer.
   const title = m.title ? `${m.title} — ` : ''
-  return `#${m.id} [${kind}]${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${title}${m.text}${tags}${doc}${links}`
+  return `#${m.id} [${kind}]${scope}${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${title}${m.text}${tags}${doc}${links}`
 }
 
 function saveReply(result: { id: string; merged: boolean; text: string }): string {
@@ -146,7 +149,7 @@ function createListTool(projectIdOf?: () => Promise<string>) {
           // que a chamada peça explicitamente.
           if (projectId) {
             if (m.kind === 'project' && m.projectId !== projectId) return false
-          } else if (!includeProjectMemories && isCodeContext(m)) {
+          } else if (!includeProjectMemories && !visibleIn(m, 'chat')) {
             return false
           }
           if (maxHits != null && m.hits > maxHits) return false
@@ -232,16 +235,28 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
       inputSchema: z.object({
         text: z.string().describe('The memory, as a short, self-contained sentence'),
         kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Default: seasonal'),
+        scope: z
+          .enum(['chat', 'both'])
+          .optional()
+          .describe(
+            'Default "chat": the memory only exists in chat mode. Use "both" when it is about HOW TO WORK ' +
+            'and must also guide code sessions (e.g. "offer an artifact before implementing"). Personal ' +
+            'facts and conversational style stay "chat". Only meaningful for kind="general".',
+          ),
         weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
         tags: z.array(z.string()).optional().describe('Keywords for future search'),
         relatedIds: z.array(z.string()).optional().describe('Ids of related memories (creates links). Pass ids of existing parents/related memories.'),
         relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }. Default: related'),
         ...ENRICHMENT.shape,
       }),
-      execute: async ({ text, kind, weight, tags, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
+      execute: async ({ text, kind, scope, weight, tags, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
+        const resolvedKind = kind ?? 'seasonal'
         const result = await memory.save({
           text,
-          kind: kind ?? 'seasonal',
+          kind: resolvedKind,
+          // Só "general" escolhe onde vale: core e seasonal são conversa por
+          // definição, e o padrão do kind já os prende ao chat.
+          scope: resolvedKind === 'general' ? (scope ?? 'chat') : undefined,
           weight,
           tags,
           relatedIds,
@@ -270,7 +285,7 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
           kinds: kind ? [kind] : ['core', 'seasonal', 'general'],
           // O chat nunca vê conhecimento de código, mesmo quando ele está
           // gravado como kind="general" (é o caso dos aprendizados).
-          excludeCodeContext: true,
+          mode: 'chat',
           limit,
         })
         return searchReply(results)
@@ -288,10 +303,14 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         tags: z.array(z.string()).optional().describe('Replaces the whole tag list'),
         weight: z.number().min(0).max(1).optional(),
         kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Reclassify (e.g. a seasonal fact that turned out to be permanent)'),
+        scope: z
+          .enum(['chat', 'both'])
+          .optional()
+          .describe('Move a general memory to "both" when it turned out to guide code sessions too.'),
       }),
-      execute: async ({ id, text, addTags, tags, weight, kind }) => {
+      execute: async ({ id, text, addTags, tags, weight, kind, scope }) => {
         try {
-          const updated = await memory.revise(id, { text, addTags, tags, weight, kind })
+          const updated = await memory.revise(id, { text, addTags, tags, weight, kind, scope })
           if (!updated) return `Memory #${id} not found.`
           return `Memory #${id} updated: ${describe(updated)}`
         } catch (err) {
@@ -388,6 +407,14 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
             'nothing with this codebase. Anything naming this project entities, schema, routes, ' +
             'business rules or infrastructure is kind="project", never general.',
           ),
+        scope: z
+          .enum(['code', 'both'])
+          .optional()
+          .describe(
+            'Default "code": the fact only exists inside code sessions. Use "both" when it is a work ' +
+            'preference that must also shape chat conversations (e.g. "offer an artifact before ' +
+            'implementing"). Only meaningful for kind="general".',
+          ),
         category: z
           .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
@@ -423,7 +450,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           .describe('Relationship per id. Mark the owning area as "parent": { "mem_abc": "parent" }'),
         ...ENRICHMENT.shape,
       }),
-      execute: async ({ text, kind, category, area, subproject, weight, tags, document, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
+      execute: async ({ text, kind, scope: savedScope, category, area, subproject, weight, tags, document, relatedIds, relatedTypes, title, summary, entities, keywords, concepts }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
           return 'Error: project memories require the category field (preference | convention | structure | decision | context | database | standard).'
@@ -438,6 +465,8 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         const result = await memory.save({
           text,
           kind: resolvedKind,
+          // Só "general" escolhe onde vale; "project" já é código por natureza.
+          scope: resolvedKind === 'general' ? (savedScope ?? 'code') : undefined,
           category,
           area: resolvedKind === 'project' ? area : undefined,
           subproject: resolvedKind === 'project' ? subproject : undefined,
@@ -474,6 +503,10 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         tags: z.array(z.string()).optional().describe('Replaces the whole tag list'),
         weight: z.number().min(0).max(1).optional(),
         kind: z.enum(['project', 'general']).optional().describe('Reclassify. Moving to "project" attaches it to the current folder.'),
+        scope: z
+          .enum(['code', 'both'])
+          .optional()
+          .describe('Move a general memory to "both" when it turned out to guide chat conversations too.'),
         category: z
           .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional(),
@@ -486,10 +519,10 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         document: z.string().optional().describe('Replaces the attached markdown'),
         ...ENRICHMENT.shape,
       }),
-      execute: async ({ id, text, addTags, tags, weight, kind, category, area, document, title, summary, entities, keywords, concepts }) => {
+      execute: async ({ id, text, addTags, tags, weight, kind, scope: savedScope, category, area, document, title, summary, entities, keywords, concepts }) => {
         try {
           const updated = await memory.revise(id, {
-            text, addTags, tags, weight, kind, category, area, document,
+            text, addTags, tags, weight, kind, scope: savedScope, category, area, document,
             title, summary, entities, keywords, concepts,
             directory: (await scope()).directory,
           })
@@ -531,6 +564,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           query,
           kinds: kind ? [kind] : ['project', 'general'],
           projectId: await projectId(),
+          mode: 'code',
           category,
           limit,
         })

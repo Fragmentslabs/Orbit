@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { Memory } from "@shared/memory"
+import { scopeOf } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -157,6 +158,11 @@ function EditDialog({ memory, open, onOpenChange }: {
             {current.category && (
               <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
                 {t(`memories.categories.${current.category}`, { defaultValue: CATEGORY_LABEL[current.category] })}
+              </Badge>
+            )}
+            {scopeOf(current) === "both" && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+                {t("memories.scopes.both", { defaultValue: "ambos" })}
               </Badge>
             )}
             {(current.projectName ?? current.originProjectName) && (
@@ -411,6 +417,11 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
         {memory.category && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
             {t(`memories.categories.${memory.category}`, { defaultValue: CATEGORY_LABEL[memory.category] })}
+          </Badge>
+        )}
+        {scopeOf(memory) === "both" && (
+          <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+            {t("memories.scopes.both", { defaultValue: "ambos" })}
           </Badge>
         )}
         {memory.kind === "project" && memory.projectName && (

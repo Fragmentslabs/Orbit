@@ -6,7 +6,11 @@
 
 export type MemoryKind = "core" | "seasonal" | "project" | "general"
 
-export type MemoryScope = "chat" | "code" | "any"
+/**
+ * Onde a memória vale. `both` é uma decisão explícita do agente na gravação —
+ * o padrão é a memória seguir o modo em que nasceu.
+ */
+export type MemoryScope = "chat" | "code" | "both"
 
 export type ProjectCategory =
   | "preference"
@@ -82,13 +86,33 @@ export function isCodeContext(memory: Pick<Memory, "kind" | "category">): boolea
 }
 
 /**
- * O scope é derivado do kind — não é armazenado, para não existirem
- * combinações inválidas (ex.: core com scope code).
+ * Scope padrão de uma memória que nasceu sem escopo explícito: ela segue o modo
+ * em que foi criada. `general` é a exceção histórica — preferência de trabalho
+ * sempre valeu nos dois modos —, então continua em `both` para que memória
+ * antiga sem o campo não suma de um deles.
  */
-export function scopeOf(kind: MemoryKind): MemoryScope {
-  if (kind === "project") return "code"
-  if (kind === "general") return "any"
+export function defaultScopeOf(kind: MemoryKind, category?: ProjectCategory): MemoryScope {
+  if (kind === "project" || category === "learning") return "code"
+  if (kind === "general") return "both"
   return "chat"
+}
+
+/**
+ * Scope efetivo: o campo gravado manda; sem ele, vale o padrão do kind. Assim
+ * uma memória promovida de `seasonal` para `general` continua no chat se o
+ * escopo foi gravado na memória antes da promoção (ver service.promote).
+ */
+export function scopeOf(memory: Pick<Memory, "kind" | "category" | "scope">): MemoryScope {
+  return memory.scope ?? defaultScopeOf(memory.kind, memory.category)
+}
+
+/** A memória aparece neste modo? É a única regra de acesso entre chat e código. */
+export function visibleIn(
+  memory: Pick<Memory, "kind" | "category" | "scope">,
+  mode: "chat" | "code",
+): boolean {
+  const scope = scopeOf(memory)
+  return scope === "both" || scope === mode
 }
 
 export type RelationType = "parent" | "related"
@@ -96,6 +120,12 @@ export type RelationType = "parent" | "related"
 export interface Memory {
   id: string
   kind: MemoryKind
+  /**
+   * Onde a memória vale. Ausente = o padrão do kind (é o caso de toda memória
+   * gravada antes deste campo). `both` só é gravado quando o agente decide, na
+   * hora de salvar, que o fato cruza os dois modos.
+   */
+  scope?: MemoryScope
   /** Resumo curto — é o que entra no system prompt e na busca */
   text: string
   tags: string[]

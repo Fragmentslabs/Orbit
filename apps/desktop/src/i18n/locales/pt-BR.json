@@ -468,6 +468,9 @@
       "general": "geral",
       "project": "projeto"
     },
+    "scopes": {
+      "both": "ambos"
+    },
     "categories": {
       "preference": "preferência",
       "convention": "convenção",

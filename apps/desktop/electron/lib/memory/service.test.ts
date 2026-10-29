@@ -161,6 +161,55 @@ describe('memory_search', () => {
 })
 
 /**
+ * O escopo é o que impede a preferência de conversa de virar instrução de
+ * código (e o aprendizado técnico de virar contexto de chat). O padrão é a
+ * memória seguir o modo em que nasceu; `both` é decisão explícita.
+ */
+describe('escopo entre modos', () => {
+  const ids = (list: Memory[]) => list.map((m) => m.id)
+
+  it('general sem escopo gravado continua valendo nos dois modos', async () => {
+    const { id } = await service.save({ text: 'Prefere respostas curtas', kind: 'general' })
+    expect(store.get(id)!.scope).toBe('both')
+    expect(ids((await service.loadPromptContext('chat')).general)).toContain(id)
+    expect(ids((await service.loadPromptContext('code')).general)).toContain(id)
+  })
+
+  it('preferência gravada no chat não entra no prompt do código', async () => {
+    const { id } = await service.save({ text: 'Não usar emojis nas respostas', kind: 'general', scope: 'chat' })
+    expect(ids((await service.loadPromptContext('chat')).general)).toContain(id)
+    expect(ids((await service.loadPromptContext('code')).general)).not.toContain(id)
+  })
+
+  it('a promoção de seasonal herda o escopo de origem em vez de virar both', async () => {
+    const { id } = await service.save({ text: 'Costuma revisar o diff antes de commitar', kind: 'seasonal' })
+    await service.promote(id)
+    expect(store.get(id)!.kind).toBe('general')
+    expect(store.get(id)!.scope).toBe('chat')
+    expect(ids((await service.loadPromptContext('code')).general)).not.toContain(id)
+  })
+
+  it('re-salvar não move o escopo; só "both" amplia', async () => {
+    const { id } = await service.save({ text: 'Prefere respostas curtas', kind: 'general', scope: 'chat' })
+    await service.save({ text: 'Prefere respostas curtas', kind: 'general', scope: 'chat' })
+    expect(store.get(id)!.scope).toBe('chat')
+    await service.save({ text: 'Prefere respostas curtas', kind: 'general', scope: 'both' })
+    expect(store.get(id)!.scope).toBe('both')
+  })
+
+  it('a busca filtra pelo modo de quem procura', async () => {
+    const talk = await service.save({ text: 'Prefere tom direto, sem rodeios', kind: 'general', scope: 'chat' })
+    const work = await service.save({ text: 'Prefere artefato antes de implementar tela', kind: 'general', scope: 'both' })
+
+    const chat = await service.search({ query: 'prefere', kinds: ['general'], mode: 'chat' })
+    const code = await service.search({ query: 'prefere', kinds: ['general'], mode: 'code' })
+    expect(ids(chat)).toContain(talk.id)
+    expect(ids(code)).not.toContain(talk.id)
+    expect(ids(code)).toContain(work.id)
+  })
+})
+
+/**
  * O bloco do system prompt é enviado em TODA mensagem, para sempre. O limite
  * tem que ser de tamanho: contar memórias não protege contra uma memória longa.
  */
