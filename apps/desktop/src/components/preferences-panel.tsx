@@ -201,6 +201,7 @@ function CodePrefs() {
           type="button"
           role="switch"
           aria-checked={autoCreateFolders}
+          aria-label={t("preferences.autoFolders.title")}
           onClick={() => setAutoCreateFolders(!autoCreateFolders)}
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
             autoCreateFolders ? "bg-primary" : "bg-input"

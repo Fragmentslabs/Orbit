@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { artifactApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Artefato HTML na resposta do assistente (tool create_artifact): a página
@@ -139,7 +141,9 @@ function ArtifactToolbar({
     >
       <div className="flex min-w-0 items-center gap-2">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+        <Truncate text={title}>
+          <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+        </Truncate>
         {badge}
       </div>
       <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover/artifact:opacity-100 focus-within:opacity-100">
@@ -344,7 +348,6 @@ function ZoomBar({ zoom, onChange }: { zoom: number; onChange: (z: number) => vo
       <button
         type="button"
         onClick={() => onChange(ZOOM_DEFAULT)}
-        title={t("artifacts.zoomReset")}
         aria-label={t("artifacts.zoomReset")}
         className="min-w-11 rounded-full px-1 text-[11px] font-medium tabular-nums text-muted-foreground transition-colors hover:text-foreground"
       >
@@ -379,21 +382,23 @@ function IconAction({
   active?: boolean
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={cn(
-        "size-6",
-        active ? "bg-primary/15 text-primary hover:bg-primary/20" : "text-muted-foreground",
-      )}
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-    >
-      <Icon className="size-3.5" />
-    </Button>
+    <Hint label={label}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "size-6",
+          active ? "bg-primary/15 text-primary hover:bg-primary/20" : "text-muted-foreground",
+        )}
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        aria-pressed={active}
+
+      >
+        <Icon className="size-3.5" />
+      </Button>
+    </Hint>
   )
 }
 

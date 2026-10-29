@@ -4,6 +4,7 @@ import { ChevronRightIcon, GlobeIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Indicador "testando…" do browser do agente: aparece na conversa enquanto o
@@ -46,7 +47,6 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
       onClick={() => usePanelStore.getState().openAgentBrowser(sessionId)}
       className={cn(
@@ -58,7 +58,10 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
       {/* Header estreito (sidebar + painel abertos): só o globo, com o texto
           no title. O @lg mede o container do header, não o viewport. */}
       <Shimmer className={cn(compact && "hidden @lg:inline-block")}>{t("chat.browser.testing")}</Shimmer>
-      {!compact && entry.url && <span className="max-w-40 truncate font-mono text-emerald-600/70 dark:text-emerald-400/70">{shortUrl(entry.url)}</span>}
+      {!compact && entry.url && 
+        <Truncate>
+            <span className="max-w-40 truncate font-mono text-emerald-600/70 dark:text-emerald-400/70">{shortUrl(entry.url)}</span>
+        </Truncate>}
       {!compact && <ChevronRightIcon className="size-3.5 shrink-0 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 dark:text-emerald-400/50" />}
     </button>
   )

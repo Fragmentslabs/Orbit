@@ -9,6 +9,7 @@ import { useModelsStore } from "@/src/stores/models-store"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { formatContext, formatPrice, SPEED_LABELS } from "./meta"
 import { ModelCheckbox, ScoreBar } from "./shared"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Tabela de exploração de modelos — ordenável, com checkbox de comparação. */
 
@@ -111,16 +112,21 @@ export function ModelsTable({ models }: { models: OrbitModel[] }) {
               </td>
               <td className="border-b p-2">
                 <div className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">{model.name}</span>
-                  <span className="flex items-center gap-1.5 truncate text-[10px] text-muted-foreground">
-                    {model.providerName}
-                    {model.speedTier === "deep" && (
-                      <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
-                        {t("models.speeds.deep", { defaultValue: SPEED_LABELS.deep })}
-                      </Badge>
-                    )}
-                    <ModalityIcons modalities={model.modalities} className="size-3 shrink-0" />
-                  </span>
+                  <Truncate text={model.name}>
+                    <span className="truncate font-medium">{model.name}</span>
+                  </Truncate>
+                  
+                    <Truncate>
+                        <span className="flex items-center gap-1.5 truncate text-[10px] text-muted-foreground">
+                        {model.providerName}
+                        {model.speedTier === "deep" && (
+                          <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
+                            {t("models.speeds.deep", { defaultValue: SPEED_LABELS.deep })}
+                          </Badge>
+                        )}
+                        <ModalityIcons modalities={model.modalities} className="size-3 shrink-0" />
+                      </span>
+                    </Truncate>
                 </div>
               </td>
               <td className="border-b p-2"><ScoreBar score={model.scores.coding} /></td>

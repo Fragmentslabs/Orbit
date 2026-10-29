@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useProcessStore } from "@/src/stores/process-store"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Servidores de desenvolvimento rodando no chat atual, na tela inicial do
  * browser do painel.
@@ -42,16 +43,18 @@ export function RunningServers({ sessionId, onSelect }: { sessionId?: string; on
       </p>
       <div className="flex flex-col gap-1">
         {servers.map((server) => (
-          <button
-            key={server.url}
-            onClick={() => onSelect(server.url)}
-            title={server.url}
-            className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
-          >
-            <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+          <Hint label={server.url}>
+            <button
+              key={server.url}
+              onClick={() => onSelect(server.url)}
+              className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
+            >
+       
+               <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
             <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{server.label}</span>
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{server.url.replace(/^https?:\/\//, "")}</span>
           </button>
+          </Hint>
         ))}
       </div>
     </div>

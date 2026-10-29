@@ -51,6 +51,7 @@ import { INPUT_TYPES, parseOrbitUi, type OrbitUiBlock } from "@/src/lib/orbit-ui
 import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
 import { windowApi } from "@/src/lib/ipc"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Blocos inline da resposta do assistente (fence ```orbit-ui, ver
@@ -470,7 +471,9 @@ function Compare({ items }: Of<"compare">) {
       {items.map((item, i) => (
         <div key={i} className="rounded-xl bg-secondary/70 px-3.5 py-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="truncate text-sm font-semibold">{tx(item.title)}</div>
+            <Truncate>
+                <div className="truncate text-sm font-semibold">{tx(item.title)}</div>
+            </Truncate>
             {item.tag && (
               <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[0.7rem] font-medium">
                 {tx(item.tag)}
@@ -516,7 +519,9 @@ function Progress({ items }: Of<"progress">) {
         return (
           <div key={i}>
             <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-              <span className="truncate">{tx(item.label)}</span>
+              <Truncate>
+                  <span className="truncate">{tx(item.label)}</span>
+              </Truncate>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {item.hint ? tx(item.hint) : `${formatValue(value, "0")}%`}
               </span>
@@ -543,7 +548,9 @@ function Field({ label, aside, children }: { label?: string; aside?: ReactNode; 
     <div className="flex min-w-0 flex-col gap-1.5">
       {(label || aside) && (
         <div className="flex items-baseline justify-between gap-2 text-xs">
-          <span className="truncate text-muted-foreground">{label}</span>
+          <Truncate>
+              <span className="truncate text-muted-foreground">{label}</span>
+          </Truncate>
           {aside && <span className="shrink-0 font-medium tabular-nums">{aside}</span>}
         </div>
       )}

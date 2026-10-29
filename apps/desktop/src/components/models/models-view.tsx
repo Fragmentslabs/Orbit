@@ -13,6 +13,7 @@ import { CompareDialog, CompareFloatingCard } from "./compare"
 import { ModelDetailPanel } from "./model-detail-panel"
 import { ModelFiltersRow } from "./model-filters"
 import { ModelsTable } from "./models-table"
+import { Hint } from "@/components/ui/hint"
 
 /**
  * Aba Models: exploração do catálogo unificado (OpenRouter + Artificial
@@ -63,15 +64,17 @@ export function ModelsView() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={t("models.refreshCatalog")}
-          disabled={loading}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-        </Button>
+        <Hint label={t("models.refreshCatalog")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+
+            disabled={loading}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+          </Button>
+        </Hint>
       </div>
 
       <ModelFiltersRow models={models} />

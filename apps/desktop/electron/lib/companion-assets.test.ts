@@ -24,6 +24,15 @@ vi.mock('electron', () => ({
 
 const ORBIT_DATA = `${USER_DATA}/orbit-data`
 
+/** Nome do arquivo de fonte no armazém: hash de 32 hex + extensão. */
+const FONT_FILE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90.woff2'
+
+/** HTML de artefato como o `font_use` deixa: o @font-face aponta para o scheme. */
+const ARTIFACT_WITH_FONT = `<!doctype html><style>
+@font-face { font-family: 'Inter'; src: url('orbit-font://f/${FONT_FILE}') format('woff2'); }
+body { font-family: 'Inter', sans-serif; }
+</style><h1>com fonte</h1>`
+
 let server: Server
 let base = ''
 
@@ -32,8 +41,10 @@ let base = ''
 function startServer(): Promise<string> {
   return new Promise((resolve) => {
     server = createServer((req, res) => {
+      // Aceita `/f/...` (atalho do teste) e `/api/file/...` (o caminho real, que
+      // a URL de fonte reescrita usa) — quem serve é o mesmo serveAsset.
       const pathname = new URL(req.url ?? '/', 'http://x').pathname
-      const match = /^\/f\/([^/]+)\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(pathname)
+      const match = /^\/(?:f|api\/file)\/([^/]+)\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(pathname)
       if (!match) {
         res.writeHead(400).end()
         return
@@ -53,6 +64,7 @@ beforeAll(async () => {
   await fsp.mkdir(`${ORBIT_DATA}/media`, { recursive: true })
   await fsp.mkdir(`${ORBIT_DATA}/artifacts`, { recursive: true })
   await fsp.mkdir(`${ORBIT_DATA}/audio`, { recursive: true })
+  await fsp.mkdir(`${ORBIT_DATA}/fonts/files`, { recursive: true })
 
   // 1x1 PNG de verdade — o teste é do transporte, não da imagem.
   await fsp.writeFile(
@@ -63,8 +75,11 @@ beforeAll(async () => {
     ),
   )
   await fsp.writeFile(`${ORBIT_DATA}/artifacts/art_a.html`, '<!doctype html><h1>oi</h1>')
+  await fsp.writeFile(`${ORBIT_DATA}/artifacts/art_font.html`, ARTIFACT_WITH_FONT)
   // 10 bytes com valores conhecidos, para conferir o recorte do Range.
   await fsp.writeFile(`${ORBIT_DATA}/audio/aud_z1.wav`, Buffer.from('0123456789'))
+  // Fonte de mentira: o teste é do transporte (MIME, token, URL), não do glifo.
+  await fsp.writeFile(`${ORBIT_DATA}/fonts/files/${FONT_FILE}`, Buffer.from('wOF2fake-font-bytes'))
 
   base = await startServer()
 })
@@ -137,6 +152,54 @@ describe('arquivos', () => {
     expect((await get('motion', 'mv_naoexiste')).status).toBe(404)
     expect((await get('design', 'dsg_naoexiste')).status).toBe(404)
     expect((await get('slides', 'sld_naoexiste')).status).toBe(404)
+  })
+})
+
+describe('fonte', () => {
+  it('serve o arquivo da biblioteca com o content-type certo', async () => {
+    // No celular o orbit-font:// não existe: a fonte precisa sair por aqui, com
+    // o MIME que o motor de fonte aceita (fonts/woff2, não octet-stream).
+    const res = await get('font', FONT_FILE)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('font/woff2')
+    // Nome = hash do conteúdo: o byte nunca muda, então o cache pode ser eterno.
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    expect(await res.text()).toBe('wOF2fake-font-bytes')
+  })
+
+  it('recusa o token de outro escopo e nome que não é do armazém', async () => {
+    // Token de artefato não abre fonte — mesma regra dos outros escopos.
+    const crossScope = await fetch(
+      `${base}/f/font/${FONT_FILE}/${createAssetToken('artifact', 'art_a.html')}`,
+    )
+    expect(crossScope.status).toBe(401)
+    // Fora do SAFE_FILE: nada de leitura fora de fonts/files.
+    expect((await get('font', '../media-secret')).status).toBe(404)
+    expect((await get('font', 'nao-existe.woff2')).status).toBe(404)
+  })
+
+  it('reescreve o orbit-font:// do HTML servido para a URL HTTP com token', async () => {
+    const res = await get('artifact', 'art_font.html')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    const html = await res.text()
+    // Nenhum scheme do Electron sobra no documento que o celular recebe: com
+    // ele a fonte cairia para a do sistema, em silêncio.
+    expect(html).not.toContain('orbit-font://')
+    expect(html).toContain(`/api/file/font/${FONT_FILE}/`)
+    expect(html).toContain("format('woff2')")
+
+    // A URL reescrita é de verdade: pedindo-a, a fonte sai.
+    const url = /src: url\('([^']+)'\)/.exec(html)?.[1] ?? ''
+    const font = await fetch(url)
+    expect(font.status).toBe(200)
+    expect(font.headers.get('content-type')).toBe('font/woff2')
+  })
+
+  it('não mexe no HTML que não cita fonte', async () => {
+    const html = await (await get('artifact', 'art_a.html')).text()
+    expect(html).not.toContain('/api/file/font/')
+    expect(html).toContain('<h1>oi</h1>')
   })
 })
 

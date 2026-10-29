@@ -29,6 +29,7 @@ import {
 import { useTheme } from "@/components/theme-provider"
 import { windowApi } from "@/src/lib/ipc"
 import { useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 type ThemePref = "light" | "dark" | "system"
 type View = "main" | "visible"
@@ -247,7 +248,10 @@ export function AppearancePanel() {
           onClick={() => setView("visible")}
           className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-colors hover:bg-accent/50 hover:text-foreground"
         >
-          <span className="min-w-0 truncate">{t("appearance.bottomModes.visibleModes")}</span>
+          
+            <Truncate>
+                <span className="min-w-0 truncate">{t("appearance.bottomModes.visibleModes")}</span>
+            </Truncate>
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         </button>
       </div>

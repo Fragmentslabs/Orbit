@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { WorkspaceMode } from "@/lib/workspace-context"
 import { getFolderName, loadRecentFolders, pickFolder } from "@/src/components/folder-selector"
+import { Truncate } from "@/components/ui/truncated-text"
 
 interface NewFolderDialogProps {
   open: boolean
@@ -99,9 +100,12 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
                 className="group flex h-8 w-full cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
               >
                 <Folder className="size-3 shrink-0 text-muted-foreground" />
-                <span className={cn("truncate", !project && "font-normal text-muted-foreground")}>
-                  {project ? getFolderName(project) : t("sidebar.folder.noProject")}
-                </span>
+                
+                  <Truncate>
+                      <span className={cn("truncate", !project && "font-normal text-muted-foreground")}>
+                      {project ? getFolderName(project) : t("sidebar.folder.noProject")}
+                    </span>
+                  </Truncate>
               </button>
               {listOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
@@ -114,7 +118,10 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
                     className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
                   >
                     <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{t("sidebar.folder.noProject")}</span>
+                    
+                      <Truncate>
+                          <span className="truncate">{t("sidebar.folder.noProject")}</span>
+                      </Truncate>
                     {!project && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
                   </button>
                   {recentFolders.map((folder) => (
@@ -128,7 +135,10 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
                       className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
                     >
                       <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{getFolderName(folder)}</span>
+                      
+                        <Truncate>
+                            <span className="truncate">{getFolderName(folder)}</span>
+                        </Truncate>
                       {project === folder && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
                     </button>
                   ))}
@@ -144,7 +154,10 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
                     className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
                   >
                     <FolderSearch className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{t("sidebar.folder.pickProject")}</span>
+                    
+                      <Truncate>
+                          <span className="truncate">{t("sidebar.folder.pickProject")}</span>
+                      </Truncate>
                   </button>
                 </div>
               )}

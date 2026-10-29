@@ -8,6 +8,7 @@ import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { mcpApi } from "@/src/lib/ipc"
 import { useSkillsStore } from "@/src/stores/skills-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Card da proposta de conexão MCP (tools mcp_connect / mcp_update): a conexão
@@ -146,7 +147,9 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
               {input.type}
             </Badge>
           </div>
-          {target && <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{target}</p>}
+          {target && <Truncate text={target}>
+            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{target}</p>
+          </Truncate>}
           {input.reason && <p className="mt-0.5 text-xs text-muted-foreground">{input.reason}</p>}
           {secret.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">

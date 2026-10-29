@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * SegmentedControl — 3 estados mutuamente exclusivos. Usado nos ajustes de
  * thresholds de permissões (low / medium / high). Implementação leve em torno
@@ -33,23 +34,25 @@ export function SegmentedControl<T extends string>({
       {options.map((opt) => {
         const active = opt.value === value
         return (
-          <button
-            key={opt.value}
-            type="button"
-            title={opt.hint}
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              "flex-1 rounded-[5px] font-medium transition-colors",
-              size === "xs" ? "px-1 py-px text-[9px] leading-tight"
-              : size === "sm" ? "px-1.5 py-0.5 text-[10px]"
-              : "px-2.5 py-1 text-xs",
-              active
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {opt.label}
+          <Hint label={opt.hint ?? ""}>
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={cn(
+                "flex-1 rounded-[5px] font-medium transition-colors",
+                size === "xs" ? "px-1 py-px text-[9px] leading-tight"
+                : size === "sm" ? "px-1.5 py-0.5 text-[10px]"
+                : "px-2.5 py-1 text-xs",
+                active
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+       
+               {opt.label}
           </button>
+          </Hint>
         )
       })}
     </div>

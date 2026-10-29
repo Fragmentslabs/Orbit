@@ -20,6 +20,8 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * O modelo de IA aceita ÁUDIO na entrada? Só isso autoriza o ditado pelo modelo —
@@ -334,43 +336,50 @@ export function DictationButton({ className, sessionId }: { className?: string; 
     <div className="flex shrink-0 items-center gap-1.5">
       {showWave && <DictationWave levels={levelsRef} className="w-[calc(100cqw-3.25rem)]" />}
       {active && !live && !showWave && partial && (
-        <span aria-live="polite" className="max-w-40 truncate text-xs text-muted-foreground">
-          {partial}
-        </span>
+        <Truncate text={partial}>
+          <span aria-live="polite" className="max-w-40 truncate text-xs text-muted-foreground">
+            {partial}
+          </span>
+        </Truncate>
       )}
       {error && !active && (
-        <span role="status" title={error} className="max-w-56 truncate text-xs text-destructive">
-          {t("voice.stt.error")} {error}
-        </span>
+        
+          <Truncate>
+              <span role="status" title={error} className="max-w-56 truncate text-xs text-destructive">
+              {t("voice.stt.error")} {error}
+            </span>
+          </Truncate>
       )}
-      <button
-        type="button"
-        aria-label={needsModel ? t("voice.stt.setupModel") : t("voice.stt.dictate")}
-        aria-pressed={active}
-        title={title}
-        onPointerDown={press}
-        onPointerUp={endPress}
-        onPointerCancel={endPress}
-        onLostPointerCapture={endPress}
-        /* Sem alvo de ditado, quem abre as Preferências é o CLIQUE (soltura) e
-           não o aperto — ver `openVoiceSettingsOnClick`. */
-        onClick={openVoiceSettingsOnClick}
-        onKeyDown={keyDown}
-        onKeyUp={(event) => {
-          if (event.key === " " || event.key === "Enter") endPress()
-        }}
-        onContextMenu={(event) => event.preventDefault()}
-        className={cn(
-          "flex size-7 shrink-0 touch-none items-center justify-center rounded-md text-muted-foreground transition-colors select-none",
-          "hover:bg-muted hover:text-foreground",
-          // Gravando, o hover não "desliga" o vermelho: continua dizendo que está ouvindo.
-          active && "animate-pulse bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
-          Boolean(error) && !active && "text-destructive hover:text-destructive",
-          className,
-        )}
-      >
-        <Mic className="size-4" />
-      </button>
+      <Hint label={title}>
+        <button
+          type="button"
+          aria-label={needsModel ? t("voice.stt.setupModel") : t("voice.stt.dictate")}
+          aria-pressed={active}
+
+          onPointerDown={press}
+          onPointerUp={endPress}
+          onPointerCancel={endPress}
+          onLostPointerCapture={endPress}
+          /* Sem alvo de ditado, quem abre as Preferências é o CLIQUE (soltura) e
+             não o aperto — ver `openVoiceSettingsOnClick`. */
+          onClick={openVoiceSettingsOnClick}
+          onKeyDown={keyDown}
+          onKeyUp={(event) => {
+            if (event.key === " " || event.key === "Enter") endPress()
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+          className={cn(
+            "flex size-7 shrink-0 touch-none items-center justify-center rounded-md text-muted-foreground transition-colors select-none",
+            "hover:bg-muted hover:text-foreground",
+            // Gravando, o hover não "desliga" o vermelho: continua dizendo que está ouvindo.
+            active && "animate-pulse bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+            Boolean(error) && !active && "text-destructive hover:text-destructive",
+            className,
+          )}
+        >
+          <Mic className="size-4" />
+        </button>
+      </Hint>
     </div>
   )
 }

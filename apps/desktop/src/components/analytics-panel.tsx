@@ -28,6 +28,7 @@ import { useAnalyticsStore } from "@/src/stores/analytics-store";
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector";
 import { ActivityHeatmap } from "@/src/components/activity-heatmap";
 import type { AnalyticsRange, AnalyticsSummary, ProjectBreakdown } from "@shared/analytics";
+import { Truncate } from "@/components/ui/truncated-text"
 
 type PresetRange = "total" | "30d" | "7d" | "today";
 
@@ -268,12 +269,14 @@ function ProjectHoursList({ data }: { data: AnalyticsSummary }) {
           <div key={p.projectId} className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-              <span
-                className="truncate text-xs font-medium text-foreground"
-                title={p.directory ?? t("analytics.noProject")}
-              >
-                {p.directory ? p.name : t("analytics.noProject")}
-              </span>
+              <Truncate>
+                  <span
+                  className="truncate text-xs font-medium text-foreground"
+                  title={p.directory ?? t("analytics.noProject")}
+                >
+                  {p.directory ? p.name : t("analytics.noProject")}
+                </span>
+              </Truncate>
               <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
                 {t("analytics.messagesShort", { count: p.messages })} ·{" "}
                 {formatTokens(p.tokens)} · {p.cost > 0 ? formatCost(p.cost) : "—"}
@@ -321,9 +324,11 @@ function StatsGrid({ data }: { data: AnalyticsSummary }) {
         >
           <div className="min-w-0">
             <p className="text-[11px] text-muted-foreground">{s.label}</p>
-            <p className="truncate text-base font-semibold tabular-nums">
-              {s.value}
-            </p>
+            <Truncate>
+                <p className="truncate text-base font-semibold tabular-nums">
+                {s.value}
+              </p>
+            </Truncate>
           </div>
         </div>
       ))}

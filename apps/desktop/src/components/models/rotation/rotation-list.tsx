@@ -4,6 +4,8 @@ import { ListRestartIcon, PlusIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { ModelRotation } from "@shared/chat"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Lista de rotações (coluna esquerda do split-view). Cada linha é um botão
@@ -63,23 +65,27 @@ export function RotationList({
             >
               <ListRestartIcon className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-xs font-medium text-foreground">{rotation.name}</span>
+                <Truncate text={rotation.name}>
+                  <span className="truncate text-xs font-medium text-foreground">{rotation.name}</span>
+                </Truncate>
                 <span className="text-[10px] text-muted-foreground">
                   {t("rotation.slotsLabel", { count: rotation.models.length })}
                 </span>
               </span>
-              <button
-                type="button"
-                title={t("rotation.remove")}
-                aria-label={t("rotation.remove")}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRequestRemove(rotation)
-                }}
-                className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-              >
-                <TrashIcon className="size-3" />
-              </button>
+              <Hint label={t("rotation.remove")}>
+                <button
+                  type="button"
+
+                  aria-label={t("rotation.remove")}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRequestRemove(rotation)
+                  }}
+                  className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                >
+                  <TrashIcon className="size-3" />
+                </button>
+              </Hint>
             </div>
           )
         })}

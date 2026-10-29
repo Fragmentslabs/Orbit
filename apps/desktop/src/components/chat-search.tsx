@@ -17,6 +17,7 @@ import {
 import { searchApi, type SearchHit } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useWorkspace } from "@/lib/workspace-context"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export function ChatSearch({ open, onOpenChange }: {
   open: boolean
@@ -105,7 +106,9 @@ export function ChatSearch({ open, onOpenChange }: {
                       ) : (
                         <MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
-                      <span className="truncate">{hit.snippet}</span>
+                      <Truncate text={hit.snippet}>
+                        <span className="truncate">{hit.snippet}</span>
+                      </Truncate>
                     </CommandItem>
                   ))}
                 </CommandGroup>

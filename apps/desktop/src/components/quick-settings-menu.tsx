@@ -18,6 +18,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSessionReasoningPref } from "@/src/stores/session-reasoning"
 import type { PermissionMode } from "@shared/chat"
+import { Truncate } from "@/components/ui/truncated-text"
 
 const PERMISSION_MODES: PermissionMode[] = ["ask", "approve", "full"]
 
@@ -134,7 +135,9 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
           >
             <Sparkles className="size-4" />
             <span className="flex-1">{t("input.quickSettingsModel")}</span>
-            <span className="max-w-32 truncate text-xs text-muted-foreground">{modelName}</span>
+            <Truncate text={modelName}>
+              <span className="max-w-32 truncate text-xs text-muted-foreground">{modelName}</span>
+            </Truncate>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

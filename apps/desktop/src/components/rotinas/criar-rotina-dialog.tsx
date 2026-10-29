@@ -18,6 +18,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useRotinasStore } from "@/src/stores/rotinas-store"
 import { AgendaEditor, ModosEditor } from "./agenda-editor"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modal "Nova rotina", em duas etapas dentro do mesmo diálogo:
@@ -181,9 +182,11 @@ export function CriarRotinaDialog({
           )}
           <div className="min-w-0">
             <DialogTitle>{naRevisao ? t("rotinas.revisar.titulo") : t("rotinas.criar.titulo")}</DialogTitle>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {naRevisao ? t("rotinas.revisar.subtitulo") : t("rotinas.criar.descreverDica")}
-            </p>
+            <Truncate text={naRevisao ? t("rotinas.revisar.subtitulo") : t("rotinas.criar.descreverDica")}>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {naRevisao ? t("rotinas.revisar.subtitulo") : t("rotinas.criar.descreverDica")}
+              </p>
+            </Truncate>
           </div>
         </div>
 
@@ -223,7 +226,9 @@ export function CriarRotinaDialog({
                       {pastas.map((pasta) => (
                         <li key={pasta} className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                           <FolderIcon className="size-3 shrink-0" />
-                          <span className="truncate">{pasta}</span>
+                          <Truncate text={pasta}>
+                            <span className="truncate">{pasta}</span>
+                          </Truncate>
                         </li>
                       ))}
                     </ul>

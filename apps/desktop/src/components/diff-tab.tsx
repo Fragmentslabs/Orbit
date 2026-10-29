@@ -7,6 +7,7 @@ import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store";
 import { parsePatch, type FileDiff } from "@/lib/unified-diff";
 import { HighlightedDiffFile } from "@/src/components/diff-lines";
 import { cn } from "@/lib/utils";
+import { Truncate } from "@/components/ui/truncated-text"
 
 function FileDiffSection({ file }: { file: FileDiff }) {
   const [open, setOpen] = useState(false);
@@ -28,9 +29,12 @@ function FileDiffSection({ file }: { file: FileDiff }) {
             open ? "rotate-0" : "-rotate-90",
           )}
         />
-        <span className="min-w-0 truncate" title={label}>
-          {label}
-        </span>
+        
+          <Truncate>
+              <span className="min-w-0 truncate" title={label}>
+              {label}
+            </span>
+          </Truncate>
         <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px]">
           {file.added > 0 && (
             <span className="text-emerald-500">+{file.added}</span>

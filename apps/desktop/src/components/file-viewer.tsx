@@ -32,6 +32,7 @@ import {
   SaveIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/ui/hint";
 import {
   CodeEditor,
   type CodeEditorHandle,
@@ -74,6 +75,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Salvamento automático: preferência do painel, como as demais. */
 const AUTO_SAVE_KEY = "orbit-files-auto-save";
@@ -705,22 +707,25 @@ export function FileViewer({
                 </ArtifactTitle>
               )}
               <ArtifactDescription className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate">
-                  {getBreadcrumbs(repoRoot ?? "", file.path).map((part, i, arr) => (
-                    <span key={i}>
-                      {i > 0 && (
-                        <span className="mx-0.5 text-muted-foreground/50">›</span>
-                      )}
-                      <span
-                        className={cn(
-                          i === arr.length - 1 && "font-medium text-foreground",
+                
+                  <Truncate>
+                      <span className="truncate">
+                      {getBreadcrumbs(repoRoot ?? "", file.path).map((part, i, arr) => (
+                        <span key={i}>
+                          {i > 0 && (
+                            <span className="mx-0.5 text-muted-foreground/50">›</span>
                         )}
-                      >
-                        {part}
+                        <span
+                          className={cn(
+                            i === arr.length - 1 && "font-medium text-foreground",
+                          )}
+                        >
+                          {part}
+                        </span>
                       </span>
-                    </span>
-                  ))}
-                </span>
+                    ))}
+                  </span>
+                  </Truncate>
                 {dirty && (
                   <span
                     title={t("folders.unsaved")}
@@ -788,66 +793,74 @@ export function FileViewer({
           <div className="pointer-events-none absolute right-3 bottom-3 z-20 flex flex-col items-end gap-1.5 [&>*]:pointer-events-auto">
             {!isImage && (
               <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-                <button
-                  type="button"
-                  onClick={() => selectLens("content")}
-                  title={t("folders.standardMode")}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full transition-colors",
-                    lens === "content"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <FileTextIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectLens("diff")}
-                  title={t("folders.diffMode")}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full transition-colors",
-                    lens === "diff"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  {patchLoading ? (
+                <Hint label={t("folders.standardMode")}>
+                  <button
+                    type="button"
+                    onClick={() => selectLens("content")}
+
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-full transition-colors",
+                      lens === "content"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    <FileTextIcon className="size-3.5" />
+                  </button>
+                </Hint>
+                <Hint label={t("folders.diffMode")}>
+                  <button
+                    type="button"
+                    onClick={() => selectLens("diff")}
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-full transition-colors",
+                      lens === "diff"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+       
+                           {patchLoading ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
                     <GitCompareArrowsIcon className="size-3.5" />
                   )}
                 </button>
+                </Hint>
               </div>
             )}
             {isMarkdownFile && lens === "content" && (
               <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-                <button
-                  type="button"
-                  onClick={() => setMdMode("source")}
-                  title={t("folders.sourceMode")}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full transition-colors",
-                    mdMode === "source"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <CodeIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMdMode("preview")}
-                  title={t("folders.previewMode")}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full transition-colors",
-                    mdMode === "preview"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <EyeIcon className="size-3.5" />
-                </button>
+                <Hint label={t("folders.sourceMode")}>
+                  <button
+                    type="button"
+                    onClick={() => setMdMode("source")}
+
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-full transition-colors",
+                      mdMode === "source"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    <CodeIcon className="size-3.5" />
+                  </button>
+                </Hint>
+                <Hint label={t("folders.previewMode")}>
+                  <button
+                    type="button"
+                    onClick={() => setMdMode("preview")}
+
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-full transition-colors",
+                      mdMode === "preview"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    <EyeIcon className="size-3.5" />
+                  </button>
+                </Hint>
               </div>
             )}
           </div>

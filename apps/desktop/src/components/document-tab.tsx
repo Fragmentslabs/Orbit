@@ -7,6 +7,8 @@ import { MessageResponse } from "@/src/components/ai/message"
 import { QuoteSelection } from "@/src/components/quote-selection"
 import { artifactApi, documentApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * O documento vivo, aberto ao lado da conversa: lê-se em Markdown renderizado
@@ -181,7 +183,9 @@ export function DocumentTab({
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-xs font-medium">{title}</span>
+          <Truncate text={title}>
+            <span className="truncate text-xs font-medium">{title}</span>
+          </Truncate>
           <span className="shrink-0 text-[10px] text-muted-foreground">{status}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -201,38 +205,40 @@ export function DocumentTab({
             beforeDownload={save}
           />
           <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              title={t("folders.editMode")}
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full transition-colors",
-                mode === "edit"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              <PenLineIcon className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              // Voltar para a leitura grava antes: o card na conversa mostra o
-              // que está em disco, e ficar atrás do que se acabou de escrever
-              // pareceria que a edição se perdeu.
-              onClick={() => {
-                void save()
-                setMode("preview")
-              }}
-              title={t("folders.previewMode")}
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full transition-colors",
-                mode === "preview"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              <EyeIcon className="size-3.5" />
-            </button>
+            <Hint label={t("folders.editMode")}>
+              <button
+                type="button"
+                onClick={() => setMode("edit")}
+                className={cn(
+                  "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
+                  mode === "edit"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                )}
+              >
+                <PenLineIcon className="size-3.5" />
+              </button>
+            </Hint>
+            <Hint label={t("folders.previewMode")}>
+              <button
+                type="button"
+                // Voltar para a leitura grava antes: o card na conversa mostra o
+                // que está em disco, e ficar atrás do que se acabou de escrever
+                // pareceria que a edição se perdeu.
+                onClick={() => {
+                  void save()
+                  setMode("preview")
+                }}
+                className={cn(
+                  "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
+                  mode === "preview"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                )}
+              >
+                <EyeIcon className="size-3.5" />
+              </button>
+            </Hint>
           </div>
         </div>
       </div>

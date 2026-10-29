@@ -13,6 +13,7 @@ import { chatApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import type { PendingAskUI } from "@/src/stores/session-store"
+import { Hint } from "@/components/ui/hint"
 
 function OriginBadge({ workerTitle, t }: { workerTitle: string; t: (key: string) => string }) {
   return (
@@ -61,7 +62,9 @@ function PermissionBody({ ask, submitted, onReply }: {
           <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger
               aria-label={t("permissions.moreOptions")}
-              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
+              render={<Hint label={t("common.previous")}>
+                <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />
+              </Hint>}
             >
               <ChevronDown className="size-3" />
             </DropdownMenuTrigger>
@@ -225,22 +228,26 @@ function QuestionBody({ ask, submitted, onReply, sessionId }: {
               {t("ask.questionOf", { current: currentIndex + 1, total: questions.length })}
             </span>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
-                disabled={currentIndex === 0}
-                onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-              >
-                <ChevronLeft className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
-                disabled={currentIndex >= questions.length - 1}
-                onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
-              >
-                <ChevronRight className="size-3.5" />
-              </button>
+              <Hint label={t("common.previous")}>
+                <button
+                  type="button"
+                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  disabled={currentIndex === 0}
+                  onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                >
+                  <ChevronLeft className="size-3.5" />
+                </button>
+              </Hint>
+              <Hint label={t("common.next")}>
+                <button
+                  type="button"
+                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  disabled={currentIndex >= questions.length - 1}
+                  onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+                >
+                  <ChevronRight className="size-3.5" />
+                </button>
+              </Hint>
             </div>
           </div>
           {current && (
@@ -341,7 +348,9 @@ function SubchatBody({ ask, submitted, onReply }: {
           <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger
               aria-label={t("ask.subchat.moreOptions")}
-              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
+              render={<Hint label={t("common.next")}>
+                <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />
+              </Hint>}
             >
               <ChevronDown className="size-3" />
             </DropdownMenuTrigger>

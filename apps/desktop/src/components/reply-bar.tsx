@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next"
 import { MessageSquareQuoteIcon, XIcon } from "lucide-react"
 import { replySnippet } from "@shared/chat"
 import { useMessageReply } from "@/src/stores/message-reply"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Rótulo de quem escreveu a mensagem respondida — o texto gravado traz o
  *  papel (`[assistant]`), e a tradução sai daqui. */
@@ -39,19 +41,24 @@ export function ReplyBar({ replyKey }: { replyKey: string }) {
       <span className="flex size-5 shrink-0 items-center justify-center rounded bg-background">
         <MessageSquareQuoteIcon className="size-3 text-primary" />
       </span>
-      <span className="min-w-0 flex-1 truncate">
-        <span className="text-primary">{label(reply.role)}</span>
-        <span className="text-muted-foreground">{" · "}{replySnippet(reply.text)}</span>
-      </span>
-      <button
-        type="button"
-        title={t("reply.cancel")}
-        aria-label={t("reply.cancel")}
-        onClick={() => clearReply(replyKey)}
-        className="shrink-0 cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <XIcon className="size-3" />
-      </button>
+      
+        <Truncate>
+            <span className="min-w-0 flex-1 truncate">
+            <span className="text-primary">{label(reply.role)}</span>
+          <span className="text-muted-foreground">{" · "}{replySnippet(reply.text)}</span>
+        </span>
+        </Truncate>
+      <Hint label={t("reply.cancel")}>
+        <button
+          type="button"
+
+          aria-label={t("reply.cancel")}
+          onClick={() => clearReply(replyKey)}
+          className="shrink-0 cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <XIcon className="size-3" />
+        </button>
+      </Hint>
     </div>
   )
 }

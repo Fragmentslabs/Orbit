@@ -67,6 +67,9 @@ export type AssetScope =
   | 'motion'
   | 'design'
   | 'slides'
+  /** Um arquivo da biblioteca de fontes (`<hash>.woff2`): o `orbit-font://` não
+   *  existe no celular, e é ele que o `<style>` do `font_use` referencia. */
+  | 'font'
 
 const SCOPES: readonly AssetScope[] = [
   'media',
@@ -76,6 +79,7 @@ const SCOPES: readonly AssetScope[] = [
   'motion',
   'design',
   'slides',
+  'font',
 ]
 
 export function isAssetScope(value: string): value is AssetScope {

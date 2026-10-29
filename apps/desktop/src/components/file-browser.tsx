@@ -60,6 +60,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/ui/hint";
 import { BranchSelector } from "@/src/components/branch-selector";
 import { CreateRemoteRepoDialog } from "@/src/components/create-remote-repo-dialog";
 import {
@@ -110,6 +111,7 @@ import {
 import { useGitRepos } from "@/src/lib/use-git-repos";
 import type { WsMatchOptions } from "@/src/lib/ipc";
 import { WorkspaceSearch } from "@/src/components/workspace-search";
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Modo do par de painéis — o mesmo da aba selecionada à direita. */
 export type BrowserTab = "files" | "changes" | "commits";
@@ -257,18 +259,23 @@ const MAX_TAG_BADGES = 2;
 
 function RefBadge({ kind, name }: { kind: RefKind; name: string }) {
   return (
-    <span
-      title={name}
-      className={cn(
-        "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
-        REF_BADGE_STYLES[kind],
-      )}
-    >
-      {kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
-      {kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
-      {kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
-      <span className="truncate">{name}</span>
-    </span>
+    
+      <Truncate>
+          <span
+          title={name}
+          className={cn(
+            "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
+            REF_BADGE_STYLES[kind],
+          )}
+        >
+          {kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
+          {kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
+          {kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
+          <Truncate text={name}>
+            <span className="truncate">{name}</span>
+        </Truncate>
+      </span>
+      </Truncate>
   );
 }
 
@@ -513,7 +520,10 @@ function FolderQuickSwitch({
         className="flex h-8 w-full items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         <FolderIcon className="size-3.5 shrink-0" />
-        <span className="flex-1 truncate text-left">{primaryName}</span>
+        
+          <Truncate>
+              <span className="flex-1 truncate text-left">{primaryName}</span>
+          </Truncate>
         <ChevronUpIcon
           className={cn(
             "size-3 shrink-0 transition-transform",
@@ -533,9 +543,12 @@ function FolderQuickSwitch({
               className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
             >
               <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate text-left">
-                {getBaseName(f)}
-              </span>
+              
+                <Truncate>
+                    <span className="flex-1 truncate text-left">
+                    {getBaseName(f)}
+                  </span>
+                </Truncate>
               {folders[0] === f && <CheckIcon className="size-3.5 shrink-0" />}
             </button>
           ))}
@@ -1180,16 +1193,17 @@ export function FileBrowser({
     const branch = branchByDir[section.path]?.current;
     const info = infoByDir[section.path];
     return (
-      <button
-        type="button"
-        onClick={() => handleRepoClick(section.path)}
-        title={section.relative || section.name}
-        className={cn(
-          "flex w-full items-center gap-1.5 px-2 pb-1.5 pt-2 text-left transition-colors",
-          open ? "sticky top-0 z-10 bg-code-viewer" : "hover:bg-accent/50",
-        )}
-      >
-        <ChevronRightIcon
+      <Hint label={section.relative || section.name}>
+        <button
+          type="button"
+          onClick={() => handleRepoClick(section.path)}
+          className={cn(
+            "flex w-full items-center gap-1.5 px-2 pb-1.5 pt-2 text-left transition-colors",
+            open ? "sticky top-0 z-10 bg-code-viewer" : "hover:bg-accent/50",
+          )}
+        >
+       
+       <ChevronRightIcon
           className={cn(
             "size-3.5 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-90",
@@ -1225,6 +1239,7 @@ export function FileBrowser({
           )}
         </span>
       </button>
+      </Hint>
     );
   };
 
@@ -1251,9 +1266,11 @@ export function FileBrowser({
                 value="files"
               >
                 <FolderTreeIcon className="size-3.5 shrink-0" />
-                <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
-                  {t("folders.filesTab")}
-                </span>
+                <Truncate text={t("folders.filesTab")}>
+                  <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
+                    {t("folders.filesTab")}
+                  </span>
+                </Truncate>
               </TabsTrigger>
               <TabsTrigger
                 className="group min-w-0 flex-[1.3] @max-[18rem]:flex-none @max-[18rem]:data-[active]:flex-1"
@@ -1261,9 +1278,11 @@ export function FileBrowser({
                 value="changes"
               >
                 <GitCompareArrowsIcon className="size-3.5 shrink-0" />
-                <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
-                  {t("folders.changesTab")}
-                </span>
+                <Truncate text={t("folders.changesTab")}>
+                  <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
+                    {t("folders.changesTab")}
+                  </span>
+                </Truncate>
                 {changeCount > 0 && (
                   <span className="shrink-0 rounded-full bg-muted-foreground/15 px-1 text-[10px] tabular-nums">
                     {changeCount}
@@ -1276,9 +1295,11 @@ export function FileBrowser({
                 value="commits"
               >
                 <HistoryIcon className="size-3.5 shrink-0" />
-                <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
-                  {t("folders.commitsTab")}
-                </span>
+                <Truncate text={t("folders.commitsTab")}>
+                  <span className="hidden min-w-0 truncate group-data-[active]:inline @[18rem]:inline">
+                    {t("folders.commitsTab")}
+                  </span>
+                </Truncate>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1287,30 +1308,33 @@ export function FileBrowser({
             value="commits"
           >
             <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-border/60 px-2 py-1.5">
-              <button
-                type="button"
-                onClick={() => void handlePull()}
-                disabled={
-                  syncBusyDir !== null ||
-                  !branchInfo?.current ||
-                  !branchInfo?.hasRemote
-                }
-                title={t("folders.pullHint")}
-                className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
-              >
-                <DownloadIcon className="size-3" />
+              <Hint label={t("folders.pullHint")}>
+                <button
+                  type="button"
+                  onClick={() => void handlePull()}
+                  disabled={
+                    syncBusyDir !== null ||
+                    !branchInfo?.current ||
+                    !branchInfo?.hasRemote
+                  }
+                  className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
+                >
+       
+                       <DownloadIcon className="size-3" />
                 <span className="hidden @[16rem]:inline">
                   {t("folders.pull")}
                 </span>
               </button>
-              <button
-                type="button"
-                onClick={() => void handlePush()}
-                disabled={syncBusyDir !== null || !branchInfo?.current}
-                title={t("folders.pushHint")}
-                className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
-              >
-                {syncBusyDir ? (
+              </Hint>
+              <Hint label={t("folders.pushHint")}>
+                <button
+                  type="button"
+                  onClick={() => void handlePush()}
+                  disabled={syncBusyDir !== null || !branchInfo?.current}
+                  className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
+                >
+       
+                       {syncBusyDir ? (
                   <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
                   <UploadIcon className="size-3" />
@@ -1319,6 +1343,7 @@ export function FileBrowser({
                   {t("folders.push")}
                 </span>
               </button>
+              </Hint>
             </div>
             {syncStatus && (
               <p
@@ -1433,9 +1458,11 @@ export function FileBrowser({
                                             {row.commit!.hash.slice(0, 7)}
                                           </CommitHash>
                                           <CommitSeparator className="shrink-0" />
-                                          <span className="truncate">
-                                            {row.commit!.author}
-                                          </span>
+                                          <Truncate text={row.commit!.author}>
+                                            <span className="truncate">
+                                              {row.commit!.author}
+                                            </span>
+                                          </Truncate>
                                           <CommitSeparator className="shrink-0" />
                                           <CommitTimestamp
                                             className="shrink-0 text-[10px]"
@@ -1453,9 +1480,11 @@ export function FileBrowser({
                                       </CommitHash>
                                       <span className="hidden min-w-0 items-center gap-2 @[16rem]:flex">
                                         <CommitSeparator className="shrink-0" />
-                                        <span className="truncate">
-                                          {row.commit!.author}
-                                        </span>
+                                        <Truncate text={row.commit!.author}>
+                                          <span className="truncate">
+                                            {row.commit!.author}
+                                          </span>
+                                        </Truncate>
                                       </span>
                                       <CommitSeparator className="shrink-0" />
                                       <CommitTimestamp
@@ -1644,17 +1673,21 @@ export function FileBrowser({
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <button
-                    type="button"
-                    title={t("folders.repoSwitch")}
-                    className="flex h-6 min-w-0 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent"
-                  />
+                  <Hint label={t("folders.repoSwitch")}>
+                    <button
+                      type="button"
+
+                      className="flex h-6 min-w-0 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent"
+                    />
+                  </Hint>
                 }
               >
                 <FolderIcon className="size-3 shrink-0 text-muted-foreground" />
-                <span className="max-w-24 truncate">
-                  {repo ? getBaseName(repo) : ""}
-                </span>
+                <Truncate>
+                    <span className="max-w-24 truncate">
+                    {repo ? getBaseName(repo) : ""}
+                  </span>
+                </Truncate>
                 <ChevronUpIcon className="size-3 shrink-0 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -1667,19 +1700,20 @@ export function FileBrowser({
                   const branch = branchByDir[item.path]?.current;
                   const active = item.path === repo;
                   return (
-                    <button
-                      key={item.path}
-                      type="button"
-                      onClick={() => handleRepoPick(item.path)}
-                      title={item.relative || item.name}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                        active
-                          ? "bg-primary/10 text-primary"
-                          : "hover:bg-foreground/10",
-                      )}
-                    >
-                      <span className="min-w-0 flex-1 truncate">
+                    <Hint label={item.relative || item.name}>
+                      <button
+                        key={item.path}
+                        type="button"
+                        onClick={() => handleRepoPick(item.path)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-foreground/10",
+                        )}
+                      >
+       
+                                   <span className="min-w-0 flex-1 truncate">
                         {item.name}
                       </span>
                       {info?.dirty && (
@@ -1697,6 +1731,7 @@ export function FileBrowser({
                       )}
                       {active && <CheckIcon className="size-3 shrink-0" />}
                     </button>
+                    </Hint>
                   );
                 })}
               </DropdownMenuContent>
@@ -1719,17 +1754,19 @@ export function FileBrowser({
               branch (o "33 0 ⇄ main" da dúvida). O histórico já diz o mesmo, e
               melhor: os divisores de região marcam onde a branch começa, e o
               cabeçalho de cada projeto traz o ↑↓ dele. */}
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            title={t("folders.refresh")}
-            className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
-          >
-            <RefreshCwIcon
-              className={cn("size-3.5", refreshing && "animate-spin")}
-            />
-          </button>
+          <Hint label={t("folders.refresh")}>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+
+              className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+            >
+              <RefreshCwIcon
+                className={cn("size-3.5", refreshing && "animate-spin")}
+              />
+            </button>
+          </Hint>
         </div>
 
         <FolderQuickSwitch

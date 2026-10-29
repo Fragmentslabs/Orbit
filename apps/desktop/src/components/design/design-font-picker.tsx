@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { fontsApi, type FontChoices } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import { FIELD_SHELL } from "./design-controls"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Seletor de família tipográfica do inspetor.
@@ -130,12 +131,14 @@ export function FontPicker({
         <span className="flex size-3 shrink-0 items-center justify-center text-muted-foreground/60 [&_svg]:size-3">
           <Type />
         </span>
-        <span
-          className={cn("w-0 min-w-0 flex-1 truncate text-[10px] font-semibold", !current && "font-normal text-muted-foreground/60")}
-          style={{ fontFamily: current || inherited || undefined }}
-        >
-          {current || inherited || "—"}
-        </span>
+        <Truncate text={current || inherited || "—"}>
+          <span
+            className={cn("w-0 min-w-0 flex-1 truncate text-[10px] font-semibold", !current && "font-normal text-muted-foreground/60")}
+            style={{ fontFamily: current || inherited || undefined }}
+          >
+            {current || inherited || "—"}
+          </span>
+        </Truncate>
         <ChevronDown className="size-3 shrink-0 text-muted-foreground/60" />
       </PopoverTrigger>
 
@@ -157,9 +160,12 @@ export function FontPicker({
           {typed && !exact && (
             <button type="button" onClick={() => apply(typed)} className={ROW}>
               <span className="w-3 shrink-0 text-center text-[9px] text-primary">↵</span>
-              <span className="min-w-0 flex-1 truncate" style={{ fontFamily: typed }}>
-                {t("design.props.fontUse", { name: typed })}
-              </span>
+              
+                <Truncate>
+                    <span className="min-w-0 flex-1 truncate" style={{ fontFamily: typed }}>
+                    {t("design.props.fontUse", { name: typed })}
+                  </span>
+                </Truncate>
             </button>
           )}
 
@@ -171,9 +177,12 @@ export function FontPicker({
               {orbit.map((font) => (
                 <button key={`orbit:${font.id}`} type="button" onClick={() => apply(font.family)} className={ROW}>
                   <span className="w-3 shrink-0 text-center text-[9px] text-primary">{current === font.family ? "✓" : ""}</span>
-                  <span className="min-w-0 flex-1 truncate" style={{ fontFamily: `'${font.family}'` }}>
-                    {font.family}
-                  </span>
+                  
+                    <Truncate>
+                      <span className="min-w-0 flex-1 truncate" style={{ fontFamily: `'${font.family}'` }}>
+                      {font.family}
+                    </span>
+                    </Truncate>
                   <span className="shrink-0 text-[9px] text-muted-foreground/50">{font.category ?? ""}</span>
                 </button>
               ))}
@@ -188,9 +197,12 @@ export function FontPicker({
               {system.map((family) => (
                 <button key={`system:${family}`} type="button" onClick={() => apply(family)} className={ROW}>
                   <span className="w-3 shrink-0 text-center text-[9px] text-primary">{current === family ? "✓" : ""}</span>
-                  <span className="min-w-0 flex-1 truncate" style={{ fontFamily: `'${family}'` }}>
-                    {family}
-                  </span>
+                  
+                    <Truncate>
+                      <span className="min-w-0 flex-1 truncate" style={{ fontFamily: `'${family}'` }}>
+                      {family}
+                    </span>
+                    </Truncate>
                 </button>
               ))}
             </>

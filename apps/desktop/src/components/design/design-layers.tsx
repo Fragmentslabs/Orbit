@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { samePath, type DesignNodeKind, type DesignTreeNode, type DropMode, type ElementPath } from "./design-protocol"
 import type { DesignBoardView } from "./design-properties"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Camadas do canvas: os artboards e, dentro de cada um, a árvore do DOM — lida
  * ao vivo pela ponte, e não guardada em lugar nenhum. O HTML É o modelo; esta
@@ -194,27 +195,29 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
             >
               <ChevronRight className={cn("size-3 transition-transform", !collapsed.has(row.key) && "rotate-90")} />
             </button>
-            <button
-              ref={isSelected ? selectedRef : undefined}
-              type="button"
-              draggable={Boolean(row.node)}
-              onDragStart={(e) => {
-                if (!row.node) return
-                const payload = { file: row.file, path: row.node.path }
-                dragging.current = payload
-                e.dataTransfer.setData(LAYER_DND_MIME, JSON.stringify(payload))
-                e.dataTransfer.effectAllowed = "move"
-              }}
-              onClick={(e) => onSelect(row.file, path, e.shiftKey)}
-              className="flex min-w-0 flex-1 select-none items-center gap-1.5 text-left"
-              title={row.node ? `<${row.node.tag}> ${name}` : name}
-            >
-              <Icon className={cn("size-3 shrink-0", row.node ? "opacity-70" : "text-primary")} />
+            <Hint label={row.node ? `<${row.node.tag}> ${name}` : name}>
+              <button
+                ref={isSelected ? selectedRef : undefined}
+                type="button"
+                draggable={Boolean(row.node)}
+                onDragStart={(e) => {
+                  if (!row.node) return
+                  const payload = { file: row.file, path: row.node.path }
+                  dragging.current = payload
+                  e.dataTransfer.setData(LAYER_DND_MIME, JSON.stringify(payload))
+                  e.dataTransfer.effectAllowed = "move"
+                }}
+                onClick={(e) => onSelect(row.file, path, e.shiftKey)}
+                className="flex min-w-0 flex-1 select-none items-center gap-1.5 text-left"
+              >
+       
+                   <Icon className={cn("size-3 shrink-0", row.node ? "opacity-70" : "text-primary")} />
               <span className={cn("truncate", !row.node && "font-medium")}>{name}</span>
               {row.node && row.node.label && row.node.text && (
                 <span className="truncate text-muted-foreground">{row.node.text}</span>
               )}
             </button>
+            </Hint>
             {!row.node && !trees[row.file] && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
           </div>
         )

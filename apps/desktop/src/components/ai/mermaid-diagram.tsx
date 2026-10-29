@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { diagramApi } from "@/src/lib/ipc"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Hint } from "@/components/ui/hint"
 
 /**
  * Diagrama Mermaid direto na conversa: sem moldura, sem fundo próprio, com as
@@ -236,7 +237,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
         <div className="absolute top-0 right-0 flex gap-0.5 opacity-0 transition-opacity group-hover/mermaid:opacity-100 has-[[data-popup-open]]:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon-sm" title={t("mermaid.download")} />}
+              render={<Hint label={t("mermaid.download")}>
+                <Button variant="ghost" size="icon-sm"  />
+              </Hint>}
               onClick={() => setDownloadFailed(false)}
             >
               <DownloadIcon className={downloadFailed ? "text-destructive" : undefined} />
@@ -247,12 +250,16 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
               <DropdownMenuItem onClick={() => download("mmd")}>{t("mermaid.asMmd")}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon-sm" onClick={copy} title={t("mermaid.copy")}>
-            {copied ? <CheckIcon /> : <CopyIcon />}
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)} title={t("mermaid.expand")}>
-            <Maximize2Icon />
-          </Button>
+          <Hint label={t("mermaid.copy")}>
+            <Button variant="ghost" size="icon-sm" onClick={copy}>
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </Button>
+          </Hint>
+          <Hint label={t("mermaid.expand")}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)} >
+              <Maximize2Icon />
+            </Button>
+          </Hint>
         </div>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>

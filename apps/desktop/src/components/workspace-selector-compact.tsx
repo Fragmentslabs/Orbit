@@ -6,6 +6,7 @@ import { BranchSelector } from "@/src/components/branch-selector"
 import { FolderSelector, getFolderName, useNomeDaPastaPrincipal } from "@/src/components/folder-selector"
 import { useRotuloWorktreeAtual, WorktreeSelector } from "@/src/components/worktree-selector"
 import { useBranchStore } from "@/src/stores/branch-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Versão compacta de branch + pastas para containers estreitos (@container):
@@ -53,7 +54,10 @@ export function CompactWorkspaceSelector({
           }
         >
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+          
+            <Truncate>
+                <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+            </Truncate>
           {/* O botão compacto só mostra a pasta principal: o contador avisa
               quantas pastas anexadas ficaram fora (hover lista os nomes). */}
           {folders.length > 1 && (
@@ -77,7 +81,10 @@ export function CompactWorkspaceSelector({
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
                 {/* max-w-16 corta quase qualquer nome real de branch aqui */}
-                <span className="max-w-16 truncate" title={byDir?.current}>{byDir?.current}</span>
+                
+                  <Truncate>
+                      <span className="max-w-16 truncate" title={byDir?.current}>{byDir?.current}</span>
+                  </Truncate>
                 <ChevronRight className="size-3" />
               </span>
             </DropdownMenuItem>
@@ -89,7 +96,10 @@ export function CompactWorkspaceSelector({
                 {t("worktree.titulo")}
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                <span className="max-w-16 truncate" title={worktreeAtual}>{worktreeAtual}</span>
+                
+                  <Truncate>
+                      <span className="max-w-16 truncate" title={worktreeAtual}>{worktreeAtual}</span>
+                  </Truncate>
                 <ChevronRight className="size-3" />
               </span>
             </DropdownMenuItem>

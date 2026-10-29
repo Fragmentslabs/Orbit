@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Pipette, X } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Hint } from "@/components/ui/hint"
 import { hexToRgb, hsvToHex, rgbToHsv, toHex, type Hsv } from "./design-protocol"
 
 /**
@@ -200,24 +201,26 @@ export function ColorPicker({
                 placeholder="000000"
               />
             </div>
-            <button
-              type="button"
-              title={t("design.props.eyedropper")}
-              aria-label={t("design.props.eyedropper")}
-              onClick={() => void pickWithEye()}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <Pipette className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              title={t("design.props.noColor")}
-              aria-label={t("design.props.noColor")}
-              onClick={() => onCommit("")}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
+            <Hint label={t("design.props.eyedropper")}>
+              <button
+                type="button"
+                aria-label={t("design.props.eyedropper")}
+                onClick={() => void pickWithEye()}
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/60 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Pipette className="size-3.5" />
+              </button>
+            </Hint>
+            <Hint label={t("design.props.noColor")}>
+              <button
+                type="button"
+                aria-label={t("design.props.noColor")}
+                onClick={() => onCommit("")}
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/60 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </Hint>
           </div>
         </div>
       </PopoverContent>

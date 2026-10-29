@@ -24,6 +24,7 @@ import { memoryApi } from "@/src/lib/ipc"
 import { AREA_ICON, CATEGORY_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 import { useCanvasViewport } from "./use-graph-viewport"
 import type { CanvasViewport } from "./use-graph-viewport"
+import { Hint } from "@/components/ui/hint"
 
 const ICON_MAP: Record<string, LucideIcon> = {
   BrainCircuit, Briefcase, Palette, Layers, SlidersHorizontal, Server, Shield, Terminal,
@@ -293,17 +294,24 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} title={t("memories.zoomIn")}>
-            <ZoomIn className="size-3.5" />
-          </Button>
+          <Hint label={t("memories.zoomIn")}>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} >
+              <ZoomIn className="size-3.5" />
+            </Button>
+          </Hint>
           <ZoomLabel viewport={viewport} />
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} title={t("memories.zoomOut")}>
-            <ZoomOut className="size-3.5" />
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => fitView()} title={t("memories.centerTitle")}>
-            <Crosshair className="size-3.5" />
+          <Hint label={t("memories.zoomOut")}>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} >
+              <ZoomOut className="size-3.5" />
+            </Button>
+          </Hint>
+          <Hint label={t("memories.centerTitle")}>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => fitView()} >
+       
+               <Crosshair className="size-3.5" />
             {t("memories.center")}
           </Button>
+          </Hint>
           {collapsedIds.size > 0 && (
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setCollapsedIds(new Set())}>
               <Plus className="size-3.5" />

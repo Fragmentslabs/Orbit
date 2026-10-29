@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { descreverAgenda, diasCurtos, modoDaAgenda, type ModoAgenda } from "./agenda"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Edição da agenda e dos modos — compartilhada pela criação e pela edição de
  * uma rotina existente. A agenda é estruturada, então a UI é de presets +
@@ -239,21 +240,23 @@ export function ModosEditor({
           const Icon = MODO_ICONE[chave]
           const ativo = modos[chave] === true
           return (
-            <button
-              key={chave}
-              type="button"
-              onClick={() => alternar(chave)}
-              title={t(`rotinas.modos.${chave}.descricao`)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
-                ativo
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <Icon className="size-3.5" />
+            <Hint label={t(`rotinas.modos.${chave}.descricao`)}>
+              <button
+                key={chave}
+                type="button"
+                onClick={() => alternar(chave)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
+                  ativo
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted",
+                )}
+              >
+       
+                   <Icon className="size-3.5" />
               {t(`rotinas.modos.${chave}.nome`)}
             </button>
+            </Hint>
           )
         })}
       </div>
@@ -262,20 +265,22 @@ export function ModosEditor({
         <p className="text-[11px] text-muted-foreground">{t("permissions.title")}</p>
         <div className="flex flex-wrap gap-1.5">
           {ROTINA_PERMISSOES.map((op) => (
-            <button
-              key={op}
-              type="button"
-              onClick={() => onChange({ ...modos, permissionMode: op })}
-              title={t(`permissions.${op}Description`)}
-              className={cn(
-                "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
-                permissao === op
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {t(`permissions.${op}`)}
+            <Hint label={t(`permissions.${op}Description`)}>
+              <button
+                key={op}
+                type="button"
+                onClick={() => onChange({ ...modos, permissionMode: op })}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
+                  permissao === op
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted",
+                )}
+              >
+       
+                   {t(`permissions.${op}`)}
             </button>
+            </Hint>
           ))}
         </div>
         {permissao === "ask" && (

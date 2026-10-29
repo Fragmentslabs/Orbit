@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch"
 import { useBranchStore } from "@/src/stores/branch-store"
 import { useWorktreeStore } from "@/src/stores/worktree-store"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Nome mostrado: o principal aparece como "Principal", não pelo nome da pasta. */
 export function useRotuloWorktreeAtual(pasta: string | undefined): string | null {
@@ -135,14 +137,16 @@ export function WorktreeSelector({
         <DropdownMenu open={aberto} onOpenChange={setAberto}>
           <DropdownMenuTrigger
             render={
-              <button
-                type="button"
-                title={t("worktree.tituloAtual", { nome: rotuloAtual })}
-                className={cn(
-                  "flex h-7 items-center gap-1 rounded-md border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
-                  atual && !atual.principal ? "border-primary/40 bg-primary/5" : "border-border",
-                )}
-              />
+              <Hint label={t("worktree.tituloAtual", { nome: rotuloAtual })}>
+                <button
+                  type="button"
+
+                  className={cn(
+                    "flex h-7 items-center gap-1 rounded-md border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                    atual && !atual.principal ? "border-primary/40 bg-primary/5" : "border-border",
+                  )}
+                />
+              </Hint>
             }
           >
             {carregando && !lista ? (
@@ -150,7 +154,9 @@ export function WorktreeSelector({
             ) : (
               <FolderGit2 className={cn("size-3", atual && !atual.principal ? "text-primary" : "text-muted-foreground")} />
             )}
-            <span className="max-w-24 truncate">{rotuloAtual}</span>
+            <Truncate>
+                <span className="max-w-24 truncate">{rotuloAtual}</span>
+            </Truncate>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72 p-1">
             {itens}
@@ -202,14 +208,15 @@ function LinhaWorktree({
         atual ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
       )}
     >
-      <button
-        type="button"
-        disabled={!w.disponivel}
-        onClick={onEscolher}
-        title={w.caminho}
-        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <FolderGit2 className="size-3 shrink-0" />
+      <Hint label={w.caminho}>
+        <button
+          type="button"
+          disabled={!w.disponivel}
+          onClick={onEscolher}
+          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
+        >
+       
+       <FolderGit2 className="size-3 shrink-0" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs">{w.principal ? t("worktree.principal") : w.nome}</span>
           <span className={cn("block truncate text-[10px]", atual ? "text-primary/70" : "text-muted-foreground")}>
@@ -218,16 +225,19 @@ function LinhaWorktree({
         </span>
         {atual && <Check className="size-3 shrink-0" />}
       </button>
+      </Hint>
       {removivel && (
-        <button
-          type="button"
-          onClick={onRemover}
-          aria-label={t("worktree.remover")}
-          title={t("worktree.remover")}
-          className="mr-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <XIcon className="size-3" />
-        </button>
+        <Hint label={t("worktree.remover")}>
+          <button
+            type="button"
+            onClick={onRemover}
+            aria-label={t("worktree.remover")}
+
+            className="mr-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <XIcon className="size-3" />
+          </button>
+        </Hint>
       )}
     </div>
   )

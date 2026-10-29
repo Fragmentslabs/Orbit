@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { docsApi, documentApi } from "@/src/lib/ipc"
+import { Hint } from "@/components/ui/hint"
 
 /**
  * Os dois controles que o documento carrega onde quer que ele apareça — o
@@ -65,14 +66,16 @@ export function DocumentDownloadMenu({
       <DropdownMenuTrigger
         render={
           compact ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              disabled={busy !== null}
-              aria-label={t("documents.download")}
-              title={t("documents.download")}
-            />
+            <Hint label={t("documents.download")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                disabled={busy !== null}
+                aria-label={t("documents.download")}
+
+              />
+            </Hint>
           ) : (
             <Button variant="outline" size="sm" className={PILL} disabled={busy !== null} />
           )
@@ -137,16 +140,18 @@ export function DocumentSourceBadge({
   }, [sessionId, documentId, beforeAdd, onError])
 
   return (
-    <Button
-      variant={isSource ? "secondary" : "outline"}
-      size="sm"
-      className={PILL}
-      disabled={busy || isSource}
-      title={isSource ? t("documents.isSource") : t("documents.useAsSource")}
-      onClick={() => void add()}
-    >
-      {busy ? <Loader2 className="size-3 animate-spin" /> : <Library className="size-3" />}
+    <Hint label={isSource ? t("documents.isSource") : t("documents.useAsSource")}>
+      <Button
+        variant={isSource ? "secondary" : "outline"}
+        size="sm"
+        className={PILL}
+        disabled={busy || isSource}
+        onClick={() => void add()}
+      >
+        {
+    busy ? <Loader2 className="size-3 animate-spin" /> : <Library className="size-3" />}
       {isSource ? t("documents.sourceBadgeOn") : t("documents.sourceBadgeOff")}
     </Button>
+    </Hint>
   )
 }

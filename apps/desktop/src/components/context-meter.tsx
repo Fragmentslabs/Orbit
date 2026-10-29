@@ -163,7 +163,6 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 variant="outline"
                 className="w-full text-xs h-7"
                 disabled={turnRunning}
-                title={turnRunning ? t("usage.compactWaitTurn") : undefined}
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
                 {t("usage.compactNow")}
@@ -185,7 +184,6 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 variant="outline"
                 className="w-full text-xs h-7"
                 disabled={turnRunning}
-                title={turnRunning ? t("usage.compactWaitTurn") : undefined}
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
                 {t("usage.compactNow")}

@@ -33,6 +33,8 @@ import { cn } from "@/lib/utils"
 import { useSettingsUi, type SettingsTab } from "@/src/stores/settings-ui"
 import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
 import type { DetectResult } from "@/src/lib/ipc"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 interface TabDef {
   id: SettingsTab
@@ -183,7 +185,9 @@ const ProviderRow = memo(function ProviderRow({
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex items-center gap-2">
         <ModelSelectorLogo provider={providerId} className="size-4" />
-        <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
+        <Truncate text={provider.name}>
+          <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
+        </Truncate>
         {connected && (
           <Badge variant="secondary" className="gap-1 text-[10px]">
             <Check className="size-3" />
@@ -191,14 +195,16 @@ const ProviderRow = memo(function ProviderRow({
           </Badge>
         )}
         {connected ? (
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            title={t("providers.removeKey")}
-            onClick={() => void removeApiKey(providerId)}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
+          <Hint label={t("providers.removeKey")}>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+
+              onClick={() => void removeApiKey(providerId)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </Hint>
         ) : (
           !editing && (
             <Button size="sm" variant="outline" className="gap-1" onClick={() => onEdit(providerId, true)}>
@@ -334,7 +340,9 @@ function CustomProviderCard({
             <Globe className="size-4 text-muted-foreground" />
           )}
         </span>
-        <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
+        <Truncate text={provider.name}>
+          <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
+        </Truncate>
         {count === 0 ? (
           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
             {t("providers.local.noModels")}
@@ -350,33 +358,41 @@ function CustomProviderCard({
             {t("providers.local.noKey")}
           </Badge>
         )}
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          title={t("providers.local.refresh")}
-          disabled={refreshing || !provider.api}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
-        </Button>
-        <Button size="icon-sm" variant="ghost" title={t("providers.local.edit")} onClick={onEdit}>
-          <Pencil className="size-3.5" />
-        </Button>
-        <Button size="icon-sm" variant="ghost" title={t("providers.local.remove")} onClick={onRemove}>
-          <Trash2 className="size-3.5" />
-        </Button>
+        <Hint label={t("providers.local.refresh")}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+
+            disabled={refreshing || !provider.api}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+          </Button>
+        </Hint>
+        <Hint label={t("providers.local.edit")}>
+          <Button size="icon-sm" variant="ghost"  onClick={onEdit}>
+            <Pencil className="size-3.5" />
+          </Button>
+        </Hint>
+        <Hint label={t("providers.local.remove")}>
+          <Button size="icon-sm" variant="ghost"  onClick={onRemove}>
+            <Trash2 className="size-3.5" />
+          </Button>
+        </Hint>
       </div>
       {provider.api && (
-        <p className="truncate text-[11px] text-muted-foreground">
-          {provider.api}
-          {provider.protocol && provider.protocol !== "openai-completions" && (
-            <span className="ml-2 text-muted-foreground/70">
-              {provider.protocol === "anthropic-messages"
-                ? t("providers.dialog.protocolAnthropic")
-                : t("providers.dialog.protocolResponses")}
-            </span>
-          )}
-        </p>
+        <Truncate>
+            <p className="truncate text-[11px] text-muted-foreground">
+            {provider.api}
+            {provider.protocol && provider.protocol !== "openai-completions" && (
+              <span className="ml-2 text-muted-foreground/70">
+                {provider.protocol === "anthropic-messages"
+                  ? t("providers.dialog.protocolAnthropic")
+                  : t("providers.dialog.protocolResponses")}
+              </span>
+            )}
+          </p>
+        </Truncate>
       )}
       {error && <p className="text-[11px] text-destructive">{error}</p>}
     </div>
@@ -678,7 +694,10 @@ function CustomProviderDialog({
                     >
                       {model.enabled && <Check className="size-3" />}
                     </span>
-                    <span className="flex-1 truncate text-xs">{model.name ?? model.id}</span>
+                    
+                      <Truncate>
+                          <span className="flex-1 truncate text-xs">{model.name ?? model.id}</span>
+                      </Truncate>
                     {model.contextWindow ? (
                       <span className="text-[10px] text-muted-foreground">
                         {Math.round(model.contextWindow / 1024)}k ctx
@@ -920,10 +939,12 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
         <Server className="size-3.5 text-muted-foreground" />
         <p className="text-xs font-medium text-muted-foreground">{t("providers.local.title")}</p>
         <div className="flex-1" />
-        <Button size="icon-sm" variant="ghost" title={t("providers.local.detect")}
-          disabled={detecting} onClick={() => void handleDetect()}>
-          <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
-        </Button>
+        <Hint label={t("providers.local.detect")}>
+          <Button size="icon-sm" variant="ghost" 
+            disabled={detecting} onClick={() => void handleDetect()}>
+            <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
+          </Button>
+        </Hint>
         <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => openNewProvider()}>
           <Plus className="size-3" />
           {t("providers.local.add")}
@@ -950,9 +971,11 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
                 <span className="text-muted-foreground">({t("providers.detect.models", { count: r.models.length })})</span>
               )}
               <span className="text-muted-foreground">{r.baseURL}</span>
-              <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={() => setDetectResults(null)}>
-                <X className="size-3" />
-              </button>
+              <Hint label={t("common.dismiss")}>
+                <button type="button" className="ml-auto cursor-pointer text-muted-foreground hover:text-foreground" onClick={() => setDetectResults(null)}>
+                  <X className="size-3" />
+                </button>
+              </Hint>
             </div>
           ))}
         </div>
@@ -1071,18 +1094,19 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
             <ul className="mt-1 flex flex-col gap-0.5">
               {TABS.map(({ id, label, icon: Icon, description, beta }) => (
                 <li key={id}>
-                  <button
-                    type="button"
-                    onClick={() => { if (id !== "mcp-skills") setTab(id) }}
-                    title={description}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                      tab === id
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-3.5 shrink-0" />
+                  <Hint label={description}>
+                    <button
+                      type="button"
+                      onClick={() => { if (id !== "mcp-skills") setTab(id) }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                        tab === id
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+                      )}
+                    >
+       
+                               <Icon className="size-3.5 shrink-0" />
                     {label}
                     {beta && (
                       <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] font-medium uppercase">
@@ -1090,6 +1114,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
                       </Badge>
                     )}
                   </button>
+                  </Hint>
                 </li>
               ))}
             </ul>

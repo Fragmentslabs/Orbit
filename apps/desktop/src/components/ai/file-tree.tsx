@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { Truncate } from "@/components/ui/truncated-text"
 
 interface FileTreeContextType {
   expandedPaths: Set<string>;
@@ -129,6 +130,7 @@ export const FileTreeFolder = ({
                 )}
                 onClick={() => onSelect?.(path)}
                 type="button"
+                aria-label={name}
               />
             }
           >
@@ -299,9 +301,12 @@ export const FileTreeName = ({
   children,
   ...props
 }: FileTreeNameProps) => (
-  <span className={cn("truncate", className)} {...props}>
-    {children}
-  </span>
+  
+    <Truncate>
+        <span className={cn("truncate", className)} {...props}>
+        {children}
+      </span>
+    </Truncate>
 );
 
 export type FileTreeActionsProps = HTMLAttributes<HTMLDivElement>;

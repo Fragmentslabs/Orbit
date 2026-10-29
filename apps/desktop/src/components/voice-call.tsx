@@ -12,6 +12,8 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Quanto o aviso de erro fica à vista depois de a chamada cair. */
 const ERROR_VISIBLE_MS = 6000
@@ -175,15 +177,17 @@ export function VoiceCallButton({ control }: { control: HostedVoiceCallControlSt
   const { call, ready, start } = control
   if (control.isCallSession && call.active) {
     return (
-      <button
-        type="button"
-        aria-label={t("voice.call.hangUp")}
-        title={t("voice.call.hangUp")}
-        onClick={call.hangUp}
-        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
-      >
-        <PhoneOff className="size-4" />
-      </button>
+      <Hint label={t("voice.call.hangUp")}>
+        <button
+          type="button"
+          aria-label={t("voice.call.hangUp")}
+
+          onClick={call.hangUp}
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
+        >
+          <PhoneOff className="size-4" />
+        </button>
+      </Hint>
     )
   }
   // Chamada em outra conversa: o botão não começa outra — explica onde ela
@@ -193,29 +197,33 @@ export function VoiceCallButton({ control }: { control: HostedVoiceCallControlSt
       ? t("voice.call.elsewhere", { title: control.callSessionTitle })
       : t("voice.call.elsewhereOther")
     return (
-      <button
-        type="button"
-        aria-label={label}
-        title={label}
-        onClick={start}
-        className="relative flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        <Phone className="size-4 opacity-50" />
-        <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
-      </button>
+      <Hint label={label}>
+        <button
+          type="button"
+          aria-label={label}
+
+          onClick={start}
+          className="relative flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Phone className="size-4 opacity-50" />
+          <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
+        </button>
+      </Hint>
     )
   }
   const label = ready ? t("voice.call.start") : t("voice.call.setup")
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={start}
-      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/85"
-    >
-      <AudioLines className="size-4" />
-    </button>
+    <Hint label={label}>
+      <button
+        type="button"
+        aria-label={label}
+
+        onClick={start}
+        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/85"
+      >
+        <AudioLines className="size-4" />
+      </button>
+    </Hint>
   )
 }
 
@@ -234,16 +242,18 @@ export function CallCaption({ lines, current }: { lines: string[]; current: numb
         style={{ transform: `translateY(-${(at * 1.375).toFixed(3)}em)` }}
       >
         {lines.map((line, index) => (
-          <div
-            key={index}
-            aria-hidden={index === at ? undefined : true}
-            className={cn(
-              "h-[1.375em] truncate transition-colors duration-200",
-              index === at ? "text-foreground" : "text-muted-foreground/40",
-            )}
-          >
-            {line}
-          </div>
+          <Truncate text={line}>
+            <div
+              key={index}
+              aria-hidden={index === at ? undefined : true}
+              className={cn(
+                "h-[1.375em] truncate transition-colors duration-200",
+                index === at ? "text-foreground" : "text-muted-foreground/40",
+              )}
+            >
+              {line}
+            </div>
+          </Truncate>
         ))}
       </div>
     </div>
@@ -268,9 +278,11 @@ export function VoiceCallPanel({ control }: { control: HostedVoiceCallControlSta
   if (!call.active) {
     if (!errorText) return null
     return (
-      <span role="status" title={errorText} className="max-w-56 truncate text-xs text-destructive">
-        {t("voice.call.failed")} {errorText}
-      </span>
+      <Truncate>
+          <span role="status" title={errorText} className="max-w-56 truncate text-xs text-destructive">
+          {t("voice.call.failed")} {errorText}
+        </span>
+      </Truncate>
     )
   }
 
@@ -335,7 +347,6 @@ export function VoiceCallPanel({ control }: { control: HostedVoiceCallControlSta
         <button
           type="button"
           onClick={call.interrupt}
-          title={t("voice.call.interrupt")}
           aria-label={t("voice.call.interrupt")}
           className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >

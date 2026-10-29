@@ -20,6 +20,7 @@ import type { WorkspaceMode } from "@/lib/workspace-context"
 import type { SessionInfo } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Arrastar uma conversa da sidebar: o mesmo gesto serve para abrir no painel
@@ -216,7 +217,9 @@ function SessionDragOverlay({ dropAnimation }: { dropAnimation: DropAnimation })
           )}
         >
           <Icon className="size-4 shrink-0" />
-          <span className="truncate">{data.title}</span>
+          <Truncate text={data.title}>
+            <span className="truncate">{data.title}</span>
+          </Truncate>
         </div>
       ) : null,
     [data, Icon],

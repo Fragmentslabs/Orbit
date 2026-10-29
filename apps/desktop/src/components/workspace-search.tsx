@@ -54,6 +54,8 @@ import {
   type WsMatchOptions,
 } from "@/src/lib/ipc";
 import { previewLine } from "@/src/lib/text-match";
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Espera depois da última tecla. */
 const NAME_DEBOUNCE_MS = 90;
@@ -135,22 +137,25 @@ function CodeLine({
   const lead = before.length > 30 ? `…${before.slice(-30)}` : before;
 
   return (
-    <span className="min-w-0 truncate font-mono text-[10.5px] text-muted-foreground">
-      {lead}
-      <span
-        className={cn(
-          "rounded-[3px] px-px",
-          // Antes em vermelho, depois em verde — a convenção do diff, para a
-          // prévia se ler sem explicação.
-          tone === "match"
-            ? "bg-destructive/20 text-destructive"
-            : "bg-emerald-500/20 text-emerald-500",
-        )}
-      >
-        {mid}
+    
+      <Truncate>
+          <span className="min-w-0 truncate font-mono text-[10.5px] text-muted-foreground">
+          {lead}
+          <span
+            className={cn(
+              "rounded-[3px] px-px",
+              // Antes em vermelho, depois em verde — a convenção do diff, para a
+              // prévia se ler sem explicação.
+              tone === "match"
+                ? "bg-destructive/20 text-destructive"
+                : "bg-emerald-500/20 text-emerald-500",
+            )}
+          >
+            {mid}
+          </span>
+        {after.slice(0, 150)}
       </span>
-      {after.slice(0, 150)}
-    </span>
+      </Truncate>
   );
 }
 
@@ -200,7 +205,6 @@ function IconToggle({
     <button
       type="button"
       onClick={onToggle}
-      title={title}
       aria-label={title}
       aria-pressed={active}
       className={cn(
@@ -239,7 +243,10 @@ function FilterOption({
       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-accent"
     >
       <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      
+        <Truncate>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+        </Truncate>
       <CheckIcon
         className={cn("size-3 shrink-0 text-primary", !active && "opacity-0")}
       />
@@ -605,15 +612,17 @@ export function WorkspaceSearch({
             <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
           )}
           {query !== "" && (
-            <button
-              type="button"
-              onClick={clear}
-              title={t("workspaceSearch.clear")}
-              aria-label={t("workspaceSearch.clear")}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <XIcon className="size-3" />
-            </button>
+            <Hint label={t("workspaceSearch.clear")}>
+              <button
+                type="button"
+                onClick={clear}
+
+                aria-label={t("workspaceSearch.clear")}
+                className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <XIcon className="size-3" />
+              </button>
+            </Hint>
           )}
           {/* Os três filtros num popover: a barra é estreita, e três botões
               permanentes roubavam largura do próprio texto pesquisado. */}
@@ -652,23 +661,25 @@ export function WorkspaceSearch({
             </PopoverContent>
           </Popover>
           <span className="mx-0.5 h-4 w-px shrink-0 bg-border" />
-          <button
-            type="button"
-            onClick={() => setReplaceOpen((value) => !value)}
-            title={t("workspaceSearch.replaceToggle")}
-            aria-label={t("workspaceSearch.replaceToggle")}
-            aria-expanded={replaceOpen}
-            className={cn(
-              "flex size-5 shrink-0 items-center justify-center rounded transition-colors",
-              replaceOpen
-                ? "text-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <ChevronRightIcon
-              className={cn("size-3.5 transition-transform", replaceOpen && "rotate-90")}
-            />
-          </button>
+          <Hint label={t("workspaceSearch.replaceToggle")}>
+            <button
+              type="button"
+              onClick={() => setReplaceOpen((value) => !value)}
+
+              aria-label={t("workspaceSearch.replaceToggle")}
+              aria-expanded={replaceOpen}
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded transition-colors",
+                replaceOpen
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <ChevronRightIcon
+                className={cn("size-3.5 transition-transform", replaceOpen && "rotate-90")}
+              />
+            </button>
+          </Hint>
         </div>
       </div>
 
@@ -702,19 +713,19 @@ export function WorkspaceSearch({
               {/* No painel a lista é o espaço inteiro — substituir "aqui" não
                   tem aqui. O arquivo em foco só existe no modal (⌘P). */}
               {variant === "dialog" && (
-                <button
-                  type="button"
-                  onClick={replaceInFile}
-                  disabled={!canReplaceInFile}
-                  title={
-                    canReplaceInFile
+                <Hint label={canReplaceInFile
                       ? t("workspaceSearch.replaceInFileHint")
-                      : t("workspaceSearch.replaceInFileDisabled")
-                  }
-                  className="h-7 w-full rounded-md border border-border px-2 text-[11px] transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {t("workspaceSearch.replaceInFile")}
+                      : t("workspaceSearch.replaceInFileDisabled")}>
+                  <button
+                    type="button"
+                    onClick={replaceInFile}
+                    disabled={!canReplaceInFile}
+                    className="h-7 w-full rounded-md border border-border px-2 text-[11px] transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+       
+                           {t("workspaceSearch.replaceInFile")}
                 </button>
+                </Hint>
               )}
               <button
                 type="button"
@@ -781,15 +792,21 @@ export function WorkspaceSearch({
                       className="flex min-w-0 items-center gap-1.5 rounded px-2 py-1 text-left text-[11.5px] hover:bg-accent"
                     >
                       <FileIcon className="size-3 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 shrink truncate">{row.name}</span>
-                      <span className="ml-auto min-w-0 truncate text-[10px] text-muted-foreground">
-                        {rootLabel && (
-                          <span className="mr-1 text-foreground/50">
-                            {rootLabel.get(row.root)}
-                          </span>
-                        )}
-                        {row.dir}
-                      </span>
+                      
+                        <Truncate>
+                            <span className="min-w-0 shrink truncate">{row.name}</span>
+                        </Truncate>
+                      
+                        <Truncate>
+                            <span className="ml-auto min-w-0 truncate text-[10px] text-muted-foreground">
+                            {rootLabel && (
+                              <span className="mr-1 text-foreground/50">
+                                {rootLabel.get(row.root)}
+                              </span>
+                          )}
+                          {row.dir}
+                        </span>
+                        </Truncate>
                     </button>
                   ))}
               </section>
@@ -815,7 +832,10 @@ export function WorkspaceSearch({
                         className="flex min-w-0 items-center gap-1.5 rounded px-2 py-0.5 text-left text-[11px] font-medium hover:bg-accent"
                       >
                         <FileIcon className="size-3 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 shrink truncate">{name}</span>
+                        
+                          <Truncate>
+                              <span className="min-w-0 shrink truncate">{name}</span>
+                          </Truncate>
                         <span className="ml-auto shrink-0 rounded-full bg-muted-foreground/15 px-1.5 text-[9.5px] tabular-nums text-muted-foreground">
                           {file.count}
                         </span>

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { normalizeText } from "@shared/memory"
 import { usePromptInputController, usePromptInputAttachments } from "@/src/components/ai/prompt-input"
 import { useReferenceCommands, commandMatches, type SlashCommand } from "@/src/lib/slash-commands"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Paleta "@" — REFERÊNCIAS: tudo que entra no contexto do pedido.
@@ -177,9 +178,12 @@ export function ReferencePalette({ directory, servers, children, className }: {
                       ) : null}
                       <span className="shrink-0 font-medium">{label}</span>
                       {description && (
-                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                          {description}
-                        </span>
+                        
+                          <Truncate>
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                              {description}
+                            </span>
+                          </Truncate>
                       )}
                     </button>
                   )

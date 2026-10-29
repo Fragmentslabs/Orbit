@@ -5,6 +5,7 @@ import { Action } from "@/src/components/ai/actions"
 import { readTtsEngine, readTtsPrefs, useSpeak, useTtsStatus } from "@/src/hooks/use-speak"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Quanto o aviso de erro fica à vista antes de o botão voltar ao normal. */
 const ERROR_VISIBLE_MS = 6000
@@ -95,9 +96,12 @@ export function SpeakAction({ text }: { text: string }) {
         )}
       </Action>
       {error && !speaking && (
-        <span role="status" title={error} className="max-w-72 truncate text-xs text-destructive">
-          {t("voice.tts.error")} {error}
-        </span>
+        
+          <Truncate>
+              <span role="status" title={error} className="max-w-72 truncate text-xs text-destructive">
+              {t("voice.tts.error")} {error}
+            </span>
+          </Truncate>
       )}
     </>
   )

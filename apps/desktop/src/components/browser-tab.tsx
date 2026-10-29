@@ -41,7 +41,9 @@ import {
 } from "@/src/components/browser/webview-session"
 import { RunningServers } from "@/src/components/running-servers"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Aba Browser do painel direito, controlável pelo agente (tools panel_*):
  * - registra o webContents do <webview> no main (panel:register)
@@ -201,13 +203,14 @@ function ActivityFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: (
         )}
       >
         {/* Alça: sempre visível, indica atividade com um ponto pulsante */}
-        <button
-          type="button"
-          onClick={onTogglePin}
-          title={t("browser.browserActivity")}
-          className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <span className="relative flex items-center justify-center">
+        <Hint label={t("browser.browserActivity")}>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          >
+       
+           <span className="relative flex items-center justify-center">
             <SparklesIcon className="size-4" />
             {agentActive && (
               <span className="absolute -right-1.5 -top-1.5 flex size-2">
@@ -217,13 +220,16 @@ function ActivityFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: (
             )}
           </span>
         </button>
+        </Hint>
         {expanded && (
           <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
               <SparklesIcon className={cn("size-3.5", agentActive ? "text-emerald-500" : "text-muted-foreground")} />
-              <span className="min-w-0 flex-1 truncate">
-                {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
-              </span>
+              <Truncate text={agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}>
+                <span className="min-w-0 flex-1 truncate">
+                  {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
+                </span>
+              </Truncate>
               <FeedPinButton pinned={pinned} onToggle={onTogglePin} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">

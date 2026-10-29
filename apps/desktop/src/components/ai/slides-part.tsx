@@ -17,6 +17,7 @@ import { IconAction } from "@/src/components/ai/artifact-part"
 import { useSlidesDeck } from "@/src/components/slides/use-slides-deck"
 import { slidesApi } from "@/src/lib/ipc"
 import { slidesRefOf } from "@/src/lib/slides-part-ref"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Altura do preview como fração da JANELA, não em pixels fixos — a mesma regra
@@ -85,7 +86,9 @@ export function SlidesPartView({ part, sessionId }: { part: ToolPart; sessionId?
     return (
       <div className="not-prose my-2 flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2.5">
         <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-        <span className="truncate text-xs text-muted-foreground">{t("slides.loading")}</span>
+        <Truncate text={t("slides.loading")}>
+          <span className="truncate text-xs text-muted-foreground">{t("slides.loading")}</span>
+        </Truncate>
       </div>
     )
   }
@@ -95,7 +98,9 @@ export function SlidesPartView({ part, sessionId }: { part: ToolPart; sessionId?
       <div className="not-prose my-2 w-full rounded-lg border bg-background px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{ref.label}</span>
+          <Truncate text={ref.label}>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{ref.label}</span>
+          </Truncate>
           <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={() => setAttempt((n) => n + 1)}>
             {t("slides.retry")}
           </Button>
@@ -137,7 +142,9 @@ function SlidesDeckCard({ slidesId, entry, label }: { slidesId: string; entry: s
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5">
           <div className="flex min-w-0 items-center gap-2">
             <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
+            <Truncate text={label}>
+              <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
+            </Truncate>
             {deck && (
               <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {t("slides.slidesCount", { count: deck.total })}

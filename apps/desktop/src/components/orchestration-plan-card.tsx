@@ -19,6 +19,7 @@ import type { OrchestrationPlan, OrchestrationTask } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { formatCost, formatTokens } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Card inline do plano de orquestração no chat principal: lista as tarefas
@@ -124,7 +125,9 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
             )}
             <TaskModeIcon />
             <span className="min-w-0 flex-1" title={task.prompt}>
-              <span className="block truncate text-xs">{task.title}</span>
+              <Truncate text={task.title}>
+                <span className="block truncate text-xs">{task.title}</span>
+              </Truncate>
               {/* Ordem que o orquestrador definiu: esta só começa depois
                   destas serem aceitas. Desmarcar uma delas tira a dependência. */}
               {(() => {
@@ -133,15 +136,19 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
                   .filter((x): x is NonNullable<typeof x> => !!x && !excluded.has(x.id))
                 if (deps.length === 0) return null
                 return (
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}
-                  </span>
+                  <Truncate text={t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}
+                    </span>
+                  </Truncate>
                 )
               })()}
               {task.arquivos?.length ? (
-                <span className="block truncate text-[10px] text-muted-foreground" title={task.arquivos.join("\n")}>
-                  {t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}
-                </span>
+                <Truncate text={t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}>
+                  <span className="block truncate text-[10px] text-muted-foreground" >
+                    {t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}
+                  </span>
+                </Truncate>
               ) : null}
             </span>
             <TaskChips task={task} t={t} />

@@ -42,6 +42,7 @@ import { useAudioInputs } from "@/src/hooks/use-audio-inputs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { formatSizeMb, modelViews } from "@/src/lib/voice-models"
 import { voiceApi } from "@/src/lib/voice-ipc"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Preferências → Voz: TTS (ler respostas em voz alta), STT (ditar) e o
@@ -150,7 +151,9 @@ function CompactSelect({
         aria-label={label}
         title={selected?.title ?? selected?.label ?? label}
       >
-        <span className="min-w-0 flex-1 truncate text-left">{selected?.label ?? value}</span>
+        <Truncate text={selected?.label ?? value}>
+          <span className="min-w-0 flex-1 truncate text-left">{selected?.label ?? value}</span>
+        </Truncate>
       </SelectTrigger>
       <SelectContent className="w-64!">
         {options.map((option) => (
@@ -591,16 +594,23 @@ export function VoicePanel() {
           <div className="flex flex-col gap-1.5 px-1 text-[11px] text-muted-foreground">
             {inUseModel ? (
               <>
-                <p className="truncate" title={inUseModel.label}>
-                  {t(
+                <Truncate text={t(
                     inUseAuto ? "voice.settings.stt.modelInUseAuto" : "voice.settings.stt.modelInUse",
                     { model: shortModelName(inUseModel.label, inUseModel.id) },
-                  )}
-                </p>
-                {inUseMeta && (
-                  <p className="truncate" title={inUseMeta}>
-                    {inUseMeta}
+                  )}>
+                  <p className="truncate" >
+                    {t(
+                      inUseAuto ? "voice.settings.stt.modelInUseAuto" : "voice.settings.stt.modelInUse",
+                      { model: shortModelName(inUseModel.label, inUseModel.id) },
+                    )}
                   </p>
+                </Truncate>
+                {inUseMeta && (
+                  <Truncate text={inUseMeta}>
+                    <p className="truncate" >
+                      {inUseMeta}
+                    </p>
+                  </Truncate>
                 )}
                 {inUseDownloaded === false && (
                   <div className="flex items-center gap-2">

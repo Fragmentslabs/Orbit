@@ -69,6 +69,7 @@ import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@
 import { BROWSER_SELECTION_MIME, closestVariant } from "@shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
+import { Hint } from "@/components/ui/hint"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -507,13 +508,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                   <Quote className="size-3" />
                 )}
                 {quoteChipLabel(q)}
-                <button
-                  type="button"
-                  onClick={() => removeQuote(q.id)}
-                  className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
-                >
-                  <X className="size-3" />
-                </button>
+                <Hint label={t("common.remove")}>
+                  <button
+                    type="button"
+                    onClick={() => removeQuote(q.id)}
+                    className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Hint>
               </span>
             ))}
           </div>
@@ -529,13 +532,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               >
                 <MousePointerClick className="size-3" />
                 {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : t("codeInput.selected")}
-                <button
-                  type="button"
-                  onClick={() => removeSelection(sel.id)}
-                  className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
-                >
-                  <X className="size-3" />
-                </button>
+                <Hint label={t("common.remove")}>
+                  <button
+                    type="button"
+                    onClick={() => removeSelection(sel.id)}
+                    className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Hint>
               </span>
             ))}
           </div>

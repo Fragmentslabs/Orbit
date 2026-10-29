@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { BotIcon, XCircleIcon } from "lucide-react"
 import { parseSubagentOutput, type ToolPart } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Card minimalista de subagente (tool subagent): mostra a tarefa delegada,
@@ -22,7 +23,9 @@ export function SubAgentCard({ part }: { part: ToolPart }) {
         ) : (
           <BotIcon className="size-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="min-w-0 flex-1 truncate font-medium">{task}</span>
+        <Truncate text={task}>
+          <span className="min-w-0 flex-1 truncate font-medium">{task}</span>
+        </Truncate>
       </div>
       {part.state === "running" && (
         <Shimmer className="mt-1.5 block">{t("subagent.running")}</Shimmer>

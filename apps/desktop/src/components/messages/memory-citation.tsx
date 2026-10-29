@@ -55,7 +55,6 @@ export function MemoryCitation({ memoryId, label, sessionId }: {
           <button
             type="button"
             onClick={open}
-            title={t("memories.citationHint")}
             className={cn(
               // font-sans: o chip também aparece dentro do output monoespaçado
               // de uma ferramenta, onde herdaria a fonte do <pre>.

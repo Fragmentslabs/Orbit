@@ -31,6 +31,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Hint } from "@/components/ui/hint"
 import { SettingSelect } from "@/src/components/settings-row"
 import { Switch } from "@/components/ui/switch"
 import { IconAction } from "@/src/components/ai/artifact-part"
@@ -51,6 +52,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Preview de uma composição de motion na aba do painel direito — o palco onde o
@@ -925,11 +927,15 @@ export function MotionTab({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Clapperboard className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          <Truncate text={title}>
+            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          </Truncate>
           {entry && (
-            <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={path ?? entry}>
-              {baseName(entry)}
-            </Badge>
+            <Truncate>
+                <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={path ?? entry}>
+                {baseName(entry)}
+              </Badge>
+            </Truncate>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -948,17 +954,19 @@ export function MotionTab({
           {/* Renderizar abre o MODAL: formato, peso, fps e áudio separado são
               decididos antes de pagar os minutos de captura. Enquanto renderiza o
               botão fica desabilitado e vira o próprio indicador de progresso. */}
-          <Button
-            variant="default"
-            size="lg"
-            className="ml-1 gap-1.5"
-            disabled={rendering || total <= 0}
-            onClick={() => setRenderOpen(true)}
-            title={t("motion.renderOptions")}
-          >
-            {rendering ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
+          <Hint label={t("motion.renderOptions")}>
+            <Button
+              variant="default"
+              size="lg"
+              className="ml-1 gap-1.5"
+              disabled={rendering || total <= 0}
+              onClick={() => setRenderOpen(true)}
+            >
+       
+               {rendering ? <Loader2 className="size-3.5 animate-spin" /> : <Film className="size-3.5" />}
             {rendering && renderTotal > 0 ? t("motion.rendering", { percent: renderPercent }) : t("motion.render")}
           </Button>
+          </Hint>
         </div>
       </div>
 
@@ -983,9 +991,12 @@ export function MotionTab({
               {t("motion.projectSavedHint")}
             </AlertDescription>
             <AlertAction>
-              <Button variant="outline" size="sm" onClick={() => reveal(project.path)} title={project.path}>
-                {t("motion.showInFolder")}
+              <Hint label={project.path}>
+                <Button variant="outline" size="sm" onClick={() => reveal(project.path)} >
+       
+                       {t("motion.showInFolder")}
               </Button>
+              </Hint>
               <IconAction icon={X} label={t("motion.dismiss")} onClick={() => setProject({ status: "idle" })} />
             </AlertAction>
           </Alert>
@@ -1011,21 +1022,26 @@ export function MotionTab({
             <CircleCheck className="text-emerald-500" />
             <AlertTitle>{t("motion.rendered", { file: baseName(renderedPath) })}</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => reveal(renderedPath)} title={renderedPath}>
-                {t("motion.showInFolder")}
+              <Hint label={renderedPath}>
+                <Button variant="outline" size="sm" onClick={() => reveal(renderedPath)} >
+       
+                       {t("motion.showInFolder")}
               </Button>
+              </Hint>
               {/* Pediu áudio separado: o WAV está ao lado do vídeo, e o botão
                   leva direto a ele (a pasta já está aberta pelo outro). */}
               {render.status === "done" && render.audioPath && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reveal(render.audioPath!)}
-                  title={render.audioPath}
-                >
-                  <Music className="size-3" />
+                <Hint label={render.audioPath}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => reveal(render.audioPath!)}
+                  >
+       
+                           <Music className="size-3" />
                   {baseName(render.audioPath)}
                 </Button>
+                </Hint>
               )}
             </AlertDescription>
             <AlertAction>
@@ -1155,59 +1171,66 @@ export function MotionTab({
       {/* Transporte: repetir à esquerda, início/play/fim no meio e comentar o
           instante à direita — os dois extremos são ações sobre o que se vê. */}
       <div className="flex shrink-0 items-center justify-between gap-2 px-2.5 py-1">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className={cn(loop && "bg-primary/15 text-primary hover:bg-primary/20")}
-          aria-pressed={loop}
-          title={t("motion.loop")}
-          aria-label={t("motion.loop")}
-          onClick={toggleLoop}
-        >
-          <Repeat className="size-3.5" />
-        </Button>
-        <div className="flex items-center gap-0.5">
+        <Hint label={t("motion.loop")}>
           <Button
             variant="ghost"
-            size="icon"
-            disabled={total <= 0}
-            title={t("motion.toStart")}
-            aria-label={t("motion.toStart")}
-            onClick={() => jump(0)}
+            size="icon-sm"
+            className={cn(loop && "bg-primary/15 text-primary hover:bg-primary/20")}
+            aria-pressed={loop}
+
+            aria-label={t("motion.loop")}
+            onClick={toggleLoop}
           >
-            <SkipBack className="size-3.5" />
+            <Repeat className="size-3.5" />
           </Button>
+        </Hint>
+        <div className="flex items-center gap-0.5">
+          <Hint label={t("motion.toStart")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={total <= 0}
+
+              aria-label={t("motion.toStart")}
+              onClick={() => jump(0)}
+            >
+              <SkipBack className="size-3.5" />
+            </Button>
+          </Hint>
           <Button
             variant={playing ? "secondary" : "default"}
             size="icon"
             disabled={total <= 0}
-            title={t(playing ? "motion.pause" : "motion.play")}
             aria-label={t(playing ? "motion.pause" : "motion.play")}
             onClick={togglePlay}
           >
             {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
           </Button>
+          <Hint label={t("motion.toEnd")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={total <= 0}
+
+              aria-label={t("motion.toEnd")}
+              onClick={() => jump(Math.max(0, total - 1))}
+            >
+              <SkipForward className="size-3.5" />
+            </Button>
+          </Hint>
+        </div>
+        <Hint label={t("motion.commentHint")}>
           <Button
             variant="ghost"
-            size="icon"
-            disabled={total <= 0}
-            title={t("motion.toEnd")}
-            aria-label={t("motion.toEnd")}
-            onClick={() => jump(Math.max(0, total - 1))}
+            size="icon-sm"
+            disabled={!entry || total <= 0}
+
+            aria-label={t("motion.commentHint")}
+            onClick={() => comment()}
           >
-            <SkipForward className="size-3.5" />
+            <MessageSquarePlus className="size-3.5" />
           </Button>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!entry || total <= 0}
-          title={t("motion.commentHint")}
-          aria-label={t("motion.commentHint")}
-          onClick={() => comment()}
-        >
-          <MessageSquarePlus className="size-3.5" />
-        </Button>
+        </Hint>
       </div>
 
       {/* Linha de tempo: régua + uma faixa por camada, com a mesma escala e o
@@ -1289,7 +1312,8 @@ export function MotionTab({
                 className={cn("group/audio flex h-6 items-center", selected && "bg-primary/10")}
                 title={t(track.url ? "motion.audioHint" : "motion.audioOutside")}
               >
-                <div
+                <Truncate>
+                  <div
                   className={cn(
                     "flex h-full min-w-0 shrink-0 items-center gap-1.5 truncate px-3 text-[11px] transition-colors",
                     nameColumn,
@@ -1300,13 +1324,14 @@ export function MotionTab({
                         : "text-muted-foreground",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedName(selected ? null : track.name)}
-                    title={t("motion.audioSelect", { name: track.name })}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                  >
-                    <span
+                  <Hint label={t("motion.audioSelect", { name: track.name })}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedName(selected ? null : track.name)}
+                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    >
+       
+                               <span
                       className={cn("size-1.5 shrink-0 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground/30")}
                     />
                     {/* O ícone de SOM também nesta linha: a faixa não é elemento
@@ -1316,27 +1341,30 @@ export function MotionTab({
                     <Music className="size-3 shrink-0 opacity-70" />
                     <span className="truncate italic">{track.name}</span>
                   </button>
+                  </Hint>
                   {/* Marcar a FAIXA, como se marca a camada — mas em `audio`: o
                       agente precisa saber que é som, senão procura no palco um
                       elemento com o nome da trilha. */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedName(track.name)
-                      comment({ audio: track.name })
-                    }}
-                    title={t("motion.audioMarkHint", { name: track.name })}
-                    aria-label={t("motion.audioMarkHint", { name: track.name })}
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded transition-opacity",
-                      markedAudio
-                        ? "text-primary opacity-100"
-                        : "text-muted-foreground opacity-0 group-hover/audio:opacity-100",
-                    )}
-                  >
-                    <MessageSquarePlus className="size-3" />
-                  </button>
+                  <Hint label={t("motion.audioMarkHint", { name: track.name })}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedName(track.name)
+                        comment({ audio: track.name })
+                      }}
+                      aria-label={t("motion.audioMarkHint", { name: track.name })}
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded transition-opacity cursor-pointer",
+                        markedAudio
+                          ? "text-primary opacity-100"
+                          : "text-muted-foreground opacity-0 group-hover/audio:opacity-100",
+                      )}
+                    >
+                      <MessageSquarePlus className="size-3" />
+                    </button>
+                  </Hint>
                 </div>
+                </Truncate>
                 <div className="relative mr-3 h-full flex-1">
                   <div
                     className={cn(
@@ -1384,20 +1412,22 @@ export function MotionTab({
                 key={`${layer.name}-${index}`}
                 className={cn("group/layer flex h-6 items-center", selected && "bg-primary/10")}
               >
-                <div
+                <Truncate>
+                  <div
                   className={cn(
                     "flex h-full min-w-0 shrink-0 items-center gap-1.5 truncate px-3 text-[11px] transition-colors",
                     nameColumn,
                     selected ? "font-medium text-foreground" : visible ? "text-foreground/90" : "text-muted-foreground",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedName(selected ? null : layer.name)}
-                    title={t("motion.layerSelect", { name: layer.name })}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                  >
-                    <span
+                  <Hint label={t("motion.layerSelect", { name: layer.name })}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedName(selected ? null : layer.name)}
+                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    >
+       
+                               <span
                       className={cn(
                         "size-1.5 shrink-0 rounded-full",
                         visible ? "bg-emerald-500" : "bg-muted-foreground/30",
@@ -1410,24 +1440,27 @@ export function MotionTab({
                     </span>
                     <span className={cn("truncate", !layer.named && "italic")}>{layer.name}</span>
                   </button>
+                  </Hint>
                   {/* Marcar: prende ESTA camada — e o quadro de agora — à próxima
                       mensagem do chat. Aparece no hover e fica aceso quando é a
                       marcada: em quarenta faixas, botão sempre visível é ruído. */}
-                  <button
-                    type="button"
-                    onClick={mark}
-                    title={t("motion.layerMarkHint", { name: layer.name })}
-                    aria-label={t("motion.layerMarkHint", { name: layer.name })}
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded transition-opacity",
-                      marked
-                        ? "text-primary opacity-100"
-                        : "text-muted-foreground opacity-0 group-hover/layer:opacity-100",
-                    )}
-                  >
-                    <MessageSquarePlus className="size-3" />
-                  </button>
+                  <Hint label={t("motion.layerMarkHint", { name: layer.name })}>
+                    <button
+                      type="button"
+                      onClick={mark}
+                      aria-label={t("motion.layerMarkHint", { name: layer.name })}
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded transition-opacity cursor-pointer",
+                        marked
+                          ? "text-primary opacity-100"
+                          : "text-muted-foreground opacity-0 group-hover/layer:opacity-100",
+                      )}
+                    >
+                      <MessageSquarePlus className="size-3" />
+                    </button>
+                  </Hint>
                 </div>
+                </Truncate>
                 <div
                   className="relative mr-3 h-full flex-1 cursor-pointer touch-none select-none"
                   onPointerDown={onTrackDown}

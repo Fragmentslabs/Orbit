@@ -6,6 +6,7 @@ import type { ValidacaoPastaWorktrees } from "@shared/worktrees"
 import { SettingRow, SettingSelect } from "@/src/components/settings-row"
 import { worktreeApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
+import { Truncate } from "@/components/ui/truncated-text"
 
 async function escolherPasta(): Promise<string | null> {
   try {
@@ -104,9 +105,11 @@ export function WorktreeSettings() {
       {worktrees.local === "personalizada" && worktrees.pasta && (
         <div className="space-y-1.5 px-1">
           <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px]" title={worktrees.pasta}>
-              {worktrees.pasta}
-            </span>
+            <Truncate text={worktrees.pasta}>
+              <span className="min-w-0 flex-1 truncate rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px]" >
+                {worktrees.pasta}
+              </span>
+            </Truncate>
             <button
               type="button"
               onClick={() => void trocarPasta()}

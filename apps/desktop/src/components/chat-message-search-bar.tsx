@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { messageText } from "@/src/lib/message-utils"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { scrollToMessage, clearTextHighlight, highlightTextIn } from "@/src/lib/message-jump"
+import { Hint } from "@/components/ui/hint"
 
 export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) {
   const { t } = useTranslation()
@@ -116,26 +117,30 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
             {matches.length === 0 ? t("chatSearch.noMatches") : t("chatSearch.of", { current: matchIndex + 1, total: matches.length })}
           </span>
         )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="size-7 shrink-0"
-          onClick={goPrev}
-          disabled={matches.length === 0}
-          title={t("chatSearch.previousMatch")}
-        >
-          <ChevronUp className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="size-7 shrink-0"
-          onClick={goNext}
-          disabled={matches.length === 0}
-          title={t("chatSearch.nextMatch")}
-        >
-          <ChevronDown className="size-4" />
-        </Button>
+        <Hint label={t("chatSearch.previousMatch")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0"
+            onClick={goPrev}
+            disabled={matches.length === 0}
+
+          >
+            <ChevronUp className="size-4" />
+          </Button>
+        </Hint>
+        <Hint label={t("chatSearch.nextMatch")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0"
+            onClick={goNext}
+            disabled={matches.length === 0}
+
+          >
+            <ChevronDown className="size-4" />
+          </Button>
+        </Hint>
         <label
           className="relative flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           title={t("chatSearch.dateFilter")}
@@ -147,9 +152,11 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
             onChange={(e) => handleDateChange(e.target.value)}
           />
         </label>
-        <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={close} title={t("chatSearch.close")}>
-          <X className="size-4" />
-        </Button>
+        <Hint label={t("chatSearch.close")}>
+          <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={close} >
+            <X className="size-4" />
+          </Button>
+        </Hint>
       </div>
     </div>
   )

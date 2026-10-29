@@ -21,7 +21,9 @@ import { useSlidesDeck } from "@/src/components/slides/use-slides-deck"
 import { slidesApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
+import { Truncate } from "@/components/ui/truncated-text"
 
+import { Hint } from "@/components/ui/hint"
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
 /**
@@ -145,19 +147,20 @@ export function SlidesTab({
    */
   const slideRows = (dense: boolean) =>
     deck?.slides.map((slide, i) => (
-      <button
-        key={`${i}-${slide.title}`}
-        ref={i === index ? activeRowRef : undefined}
-        type="button"
-        onClick={() => go(i)}
-        title={slide.title}
-        className={cn(
-          "flex w-full items-center gap-2 text-left transition-colors",
-          dense ? "px-2.5 py-1.5 text-[11px]" : "rounded-md px-2.5 py-2 text-xs",
-          i === index ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/40",
-        )}
-      >
-        <span
+      <Hint label={slide.title}>
+        <button
+          key={`${i}-${slide.title}`}
+          ref={i === index ? activeRowRef : undefined}
+          type="button"
+          onClick={() => go(i)}
+          className={cn(
+            "flex w-full items-center gap-2 text-left transition-colors",
+            dense ? "px-2.5 py-1.5 text-[11px]" : "rounded-md px-2.5 py-2 text-xs",
+            i === index ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/40",
+          )}
+        >
+       
+       <span
           className={cn(
             "w-4 shrink-0 text-right tabular-nums opacity-60",
             dense ? "text-[10px]" : "text-[11px]",
@@ -168,6 +171,7 @@ export function SlidesTab({
         <span className="min-w-0 flex-1 truncate">{slide.title}</span>
         {slide.notes && <StickyNote className="size-2.5 shrink-0 opacity-50" />}
       </button>
+      </Hint>
     ))
 
   if (!slidesId || !entry) {
@@ -191,10 +195,14 @@ export function SlidesTab({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
-          <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={entry}>
-            {baseName(entry)}
-          </Badge>
+          <Truncate text={title}>
+            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          </Truncate>
+          <Truncate>
+              <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={entry}>
+              {baseName(entry)}
+            </Badge>
+          </Truncate>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {/* Na tela cheia quem abre e fecha a lista é o botão da sidebar
@@ -233,7 +241,9 @@ export function SlidesTab({
       {exportError && (
         <div className="flex shrink-0 items-center gap-1.5 border-b border-border/60 bg-destructive/10 px-3 py-1 text-[0.6875rem] text-destructive">
           <AlertTriangle className="size-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{exportError}</span>
+          <Truncate text={exportError}>
+            <span className="min-w-0 flex-1 truncate">{exportError}</span>
+          </Truncate>
           <button
             type="button"
             onClick={() => setExportError(null)}

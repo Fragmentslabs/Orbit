@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatDateTimeNumeric } from "@/src/lib/format"
 import { useLocaleStore } from "@/src/stores/locale-store"
 import { cn } from "@/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export type CommitProps = ComponentProps<typeof Collapsible>
 
@@ -270,9 +271,12 @@ export const CommitFileIcon = ({ className, ...props }: CommitFileIconProps) => 
 export type CommitFilePathProps = HTMLAttributes<HTMLSpanElement>
 
 export const CommitFilePath = ({ className, children, ...props }: CommitFilePathProps) => (
-  <span className={cn("truncate font-mono text-xs", className)} {...props}>
-    {children}
-  </span>
+  
+    <Truncate>
+        <span className={cn("truncate font-mono text-xs", className)} {...props}>
+        {children}
+      </span>
+    </Truncate>
 )
 
 export type CommitFileChangesProps = HTMLAttributes<HTMLDivElement>

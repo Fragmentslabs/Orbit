@@ -9,6 +9,7 @@ import { ActionsFeed, FullscreenChatFeed } from "@/src/components/fullscreen-doc
 import { describeAction } from "@/src/lib/computer-actions"
 import { chatApi, computerApi } from "@/src/lib/ipc"
 import { startChatMirror, useSessionStore } from "@/src/stores/session-store"
+import { Hint } from "@/components/ui/hint"
 
 /**
  * Painéis flutuantes do Computer Use, na janela transparente que cobre a tela
@@ -91,15 +92,17 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
         describe={(part) => describeAction(part, t)}
         top={<ComputerShotThumb sessionId={sessionId} />}
         headerExtra={
-          <button
-            type="button"
-            title={t("computer.chip.stopTitle")}
-            onClick={() => void computerApi.stop(sessionId)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"
-          >
-            <SquareIcon className="size-2.5 fill-current" />
+          <Hint label={t("computer.chip.stopTitle")}>
+            <button
+              type="button"
+              onClick={() => void computerApi.stop(sessionId)}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"
+            >
+       
+               <SquareIcon className="size-2.5 fill-current" />
             {t("computer.chip.stop")}
           </button>
+          </Hint>
         }
       />
     </div>
@@ -146,17 +149,19 @@ function PanelReply({ sessionId }: { sessionId: string }) {
         }}
         placeholder={t("computer.panels.replyPlaceholder")}
         trailing={
-          <button
-            type="button"
-            onClick={() => {
-              if (send(text)) setText("")
-            }}
-            aria-label={t("computer.panels.replySend")}
-            title={t("computer.panels.replySend")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <ArrowUpIcon className="size-4" />
-          </button>
+          <Hint label={t("computer.panels.replySend")}>
+            <button
+              type="button"
+              onClick={() => {
+                if (send(text)) setText("")
+              }}
+              aria-label={t("computer.panels.replySend")}
+
+              className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ArrowUpIcon className="size-4" />
+            </button>
+          </Hint>
         }
       />
       {failed && <p className="text-[11px] text-destructive">{t("computer.panels.replyFailed")}</p>}

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import type { ModelBenchmarks, OrbitModel } from "@shared/models"
 import { useModelsStore } from "@/src/stores/models-store"
 import { formatContext, formatPrice, SCORE_CATEGORIES } from "./meta"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Sistema de comparação: card flutuante que aparece ao selecionar modelos na
@@ -158,7 +159,9 @@ export function CompareDialog() {
                 {models.map((model, i) => (
                   <div key={model.id} className="flex items-center gap-2 text-xs">
                     <span className={cn("size-2 shrink-0 rounded-full", MODEL_COLORS[i % MODEL_COLORS.length])} />
-                    <span className="truncate text-muted-foreground">{model.name}</span>
+                    <Truncate text={model.name}>
+                      <span className="truncate text-muted-foreground">{model.name}</span>
+                    </Truncate>
                     <span className="ml-auto shrink-0 tabular-nums">
                       {t("models.compare.inOut", {
                         input: formatPrice(model.pricing.input),
@@ -180,7 +183,9 @@ export function CompareDialog() {
                     <th key={model.id} className="p-1.5 text-right font-medium">
                       <span className="inline-flex items-center gap-1.5">
                         <span className={cn("size-2 rounded-full", MODEL_COLORS[i % MODEL_COLORS.length])} />
-                        <span className="max-w-28 truncate">{model.name}</span>
+                        <Truncate text={model.name}>
+                          <span className="max-w-28 truncate">{model.name}</span>
+                        </Truncate>
                       </span>
                     </th>
                   ))}

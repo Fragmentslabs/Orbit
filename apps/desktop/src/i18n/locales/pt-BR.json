@@ -577,6 +577,7 @@
       "deleteTitle": "Remover pasta?",
       "deleteDescription": "As conversas de \"{{name}}\" não serão excluídas — voltarão para a lista principal.",
       "remove": "Remover",
+      "reorder": "Reordenar",
       "unmark": "Desmarcar",
       "mark": "Marcar",
       "add": "Adicionar",
@@ -788,7 +789,8 @@
         "description": "Uma memória citada na conversa"
       }
     },
-    "unreadMessages": "Mensagens não lidas"
+    "unreadMessages": "Mensagens não lidas",
+    "closeTab": "Fechar aba"
   },
   "chat": {
     "retry": "Tentar novamente",
@@ -2144,7 +2146,11 @@
     "close": "Fechar",
     "previous": "Anterior",
     "next": "Próximo",
-    "back": "Voltar"
+    "back": "Voltar",
+    "remove": "Remover",
+    "edit": "Editar",
+    "dismiss": "Dispensar",
+    "addFolder": "Adicionar pasta"
   },
   "appearance": {
     "title": "Aparência",
@@ -2304,6 +2310,7 @@
     "delete": "Excluir",
     "openInChat": "Abrir no chat",
     "selectedCount": "{{count}} selecionada(s)",
+    "clearSelection": "Limpar seleção",
     "usage": "{{count}} imagens · {{size}}",
     "cleanupScripts": "Limpar imagens de scripts",
     "cleanupScriptsHint": "Apaga imagens capturadas por scripts/lotes que nunca foram mostradas em um chat",

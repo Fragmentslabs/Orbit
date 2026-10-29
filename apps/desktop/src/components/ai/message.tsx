@@ -12,6 +12,7 @@ import { ImageLightbox } from "~/src/components/ai/image"
 import { OrbitUiRenderer } from "~/src/components/ai/generative-ui"
 import { MermaidDiagram } from "~/src/components/ai/mermaid-diagram"
 import { cn } from "~/lib/utils"
+import { Hint } from "@/components/ui/hint"
 
 // Mermaid: um bloco ```mermaid vira diagrama em qualquer Markdown do app — a
 // resposta do chat e o canvas do documento — sem moldura e no tema do Orbit
@@ -383,20 +384,21 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
       <div className={cn("group relative size-24 overflow-hidden rounded-lg", className)} {...props}>
         {isImage ? (
           <>
-            <button
-              type="button"
-              onClick={() => setLightboxOpen(true)}
-              title={t("images.enlarge")}
-              className="block size-full cursor-zoom-in"
-            >
-              <img
-                alt={filename || t("attachments.attachment")}
-                className="size-full object-cover"
-                height={100}
-                src={data.url}
-                width={100}
-              />
-            </button>
+            <Hint label={t("images.enlarge")}>
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                className="block size-full cursor-zoom-in"
+              >
+                <img
+                  alt={filename || t("attachments.attachment")}
+                  className="size-full object-cover"
+                  height={100}
+                  src={data.url}
+                  width={100}
+                />
+              </button>
+            </Hint>
             {onRemove && (
               <Button
                 aria-label={t("attachments.remove")}

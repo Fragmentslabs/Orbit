@@ -5,6 +5,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CallCaption } from "@/src/components/voice-call"
 import { useVoiceCallHost } from "@/src/components/voice-call-host"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Badge da chamada no header, no mesmo desenho do chip "Controlando <app>"
@@ -124,7 +126,9 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
               )}
             </span>
           ) : (
-            <span className="hidden max-w-40 truncate @lg:inline">{title}</span>
+            <Truncate text={title}>
+              <span className="hidden max-w-40 truncate @lg:inline">{title}</span>
+            </Truncate>
           )}
           <ChevronDown className={cn("size-3 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
         </PopoverTrigger>
@@ -135,7 +139,9 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
             <Phone className="size-3" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium">{title}</p>
+            <Truncate text={title}>
+              <p className="truncate text-xs font-medium">{title}</p>
+            </Truncate>
             <p className="text-[11px] text-muted-foreground">{placeholder}</p>
           </div>
         </div>
@@ -171,29 +177,36 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
             disabled={!callSessionId}
             className="flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="truncate">{t("voice.call.open")}</span>
+            
+              <Truncate>
+                  <span className="truncate">{t("voice.call.open")}</span>
+              </Truncate>
             <ArrowUpRight className="size-3.5 shrink-0" />
           </button>
           {phase !== "listening" && (
+            <Hint label={t("voice.call.interrupt")}>
+              <button
+                type="button"
+                onClick={call.interrupt}
+
+                aria-label={t("voice.call.interrupt")}
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Hand className="size-3.5" />
+              </button>
+            </Hint>
+          )}
+          <Hint label={t("voice.call.hangUp")}>
             <button
               type="button"
-              onClick={call.interrupt}
-              title={t("voice.call.interrupt")}
-              aria-label={t("voice.call.interrupt")}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={call.hangUp}
+
+              aria-label={t("voice.call.hangUp")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
             >
-              <Hand className="size-3.5" />
+              <PhoneOff className="size-3.5" />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={call.hangUp}
-            title={t("voice.call.hangUp")}
-            aria-label={t("voice.call.hangUp")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive text-white transition-colors hover:bg-destructive/90"
-          >
-            <PhoneOff className="size-3.5" />
-          </button>
+          </Hint>
         </div>
       </PopoverContent>
     </Popover>

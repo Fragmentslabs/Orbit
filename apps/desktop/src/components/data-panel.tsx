@@ -85,6 +85,7 @@ export function DataPanel() {
           type="button"
           role="switch"
           aria-checked={includeAuth}
+          aria-label={t("data.apiKeys.title")}
           onClick={() => setIncludeAuth(!includeAuth)}
           className={cn(
             "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",

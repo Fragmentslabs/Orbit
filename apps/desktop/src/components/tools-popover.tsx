@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useSessionTools, useToolsServers } from "@/src/stores/session-tools"
 import { useSkillsStore } from "@/src/stores/skills-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Servidores MCP da conversa — controle FIXO do composer, ao lado do medidor
@@ -55,7 +56,6 @@ export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; icon
         render={
           <button
             type="button"
-            title={t("toolsPopover.title")}
             aria-label={t("toolsPopover.title")}
             onContextMenu={(event) => {
               event.preventDefault()
@@ -99,9 +99,13 @@ export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; icon
                   className="flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs">{server.config.name}</p>
+                    <Truncate text={server.config.name}>
+                      <p className="truncate text-xs">{server.config.name}</p>
+                    </Truncate>
                     {detail && (
-                      <p className="truncate text-[10px] text-muted-foreground">{detail}</p>
+                      <Truncate text={detail}>
+                        <p className="truncate text-[10px] text-muted-foreground">{detail}</p>
+                      </Truncate>
                     )}
                   </div>
                   <Switch

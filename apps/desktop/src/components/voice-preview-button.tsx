@@ -4,6 +4,7 @@ import { Play, Square } from "lucide-react"
 import type { VoiceTtsEngine } from "@shared/voice"
 import { useSpeak } from "@/src/hooks/use-speak"
 import { cn } from "@/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Frase de amostra por idioma da LEITURA (`voice.tts.lang`), não da interface:
@@ -60,14 +61,15 @@ export function VoicePreviewButton({
   return (
     <div className="flex items-center gap-1.5">
       {error && !speaking && (
-        <span role="status" title={error} className="max-w-40 truncate text-[11px] text-destructive">
-          {t("voice.tts.error")}
-        </span>
+        <Truncate text={t("voice.tts.error")}>
+          <span role="status"  className="max-w-40 truncate text-[11px] text-destructive">
+            {t("voice.tts.error")}
+          </span>
+        </Truncate>
       )}
       <button
         type="button"
         aria-label={label}
-        title={label}
         onClick={() => (speaking ? stop() : speak(voiceSample(sampleLang), { voice, lang, speed, engine }))}
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-md border border-input transition-colors",

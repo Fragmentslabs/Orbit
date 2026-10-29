@@ -10,6 +10,7 @@ import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
 import { computerApi, windowApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Preferências → Computador: o interruptor geral, o ponteiro e as permissões do macOS (no Windows, o estado do host de UI Automation). */
 export function ComputerPanel() {
@@ -171,9 +172,11 @@ export function ComputerPanel() {
         <SettingRow icon={FlaskConical} title={t("computerSettings.test.title")} description={t("computerSettings.test.description")}>
           <div className="flex items-center gap-2">
             {test && test !== "busy" && (
-              <span className={cn("max-w-48 truncate text-[11px]", test.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                {testText(test)}
-              </span>
+              <Truncate text={testText(test)}>
+                <span className={cn("max-w-48 truncate text-[11px]", test.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                  {testText(test)}
+                </span>
+              </Truncate>
             )}
             <Button variant="outline" size="sm" disabled={test === "busy"} onClick={() => void runTest()}>
               {t("computerSettings.test.button")}

@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next"
 import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, LoaderIcon, MessageSquareIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
 import type { FaseTarefaOrquestra } from "@shared/chat"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export interface TaskItem {
   id: string
@@ -100,13 +102,15 @@ export function TaskProgress({
           </div>
         </button>
         {allDoneOrError && onDismiss && (
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="mr-2 flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("common.dismiss")}>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="mr-2 flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         )}
       </div>
 
@@ -115,7 +119,9 @@ export function TaskProgress({
           {acompanhamento.atividade && (
             <span className="flex min-w-0 items-center gap-1.5 text-foreground">
               <EyeIcon className="size-3 shrink-0 text-primary" />
-              <span className="truncate">{acompanhamento.atividade}</span>
+              <Truncate text={acompanhamento.atividade}>
+                <span className="truncate">{acompanhamento.atividade}</span>
+              </Truncate>
             </span>
           )}
           {acompanhamento.tetoAjustes > 0 && (
@@ -164,15 +170,16 @@ export function TaskProgress({
                 ) : task.mode === "chat" ? (
                   <MessageSquareIcon className="size-3 shrink-0 text-muted-foreground" />
                 ) : null}
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate",
-                    isDone && "line-through text-muted-foreground",
-                  )}
-                  title={task.title}
-                >
-                  {task.title}
-                </span>
+                <Truncate text={task.title}>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate",
+                      isDone && "line-through text-muted-foreground",
+                    )}
+                  >
+                    {task.title}
+                  </span>
+                </Truncate>
                 {task.extra && (
                   <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("taskProgress.extra")}</span>
                 )}

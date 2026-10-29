@@ -5,6 +5,7 @@ import { Bot, Brain, Code2, Eye, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ModelScores, OrbitModel } from "@shared/models"
 import { useModelsStore } from "@/src/stores/models-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Orbit Intelligence — rankings "Best For": top 3 por categoria, calculado
@@ -56,7 +57,10 @@ export function BestForSection({ models, className }: { models: OrbitModel[]; cl
                   <span className={cn("w-3 shrink-0 tabular-nums text-[10px]", i === 0 ? "text-amber-500" : "text-muted-foreground")}>
                     {i + 1}
                   </span>
-                  <span className="truncate">{model.name}</span>
+                  
+                    <Truncate>
+                        <span className="truncate">{model.name}</span>
+                    </Truncate>
                   <span className="ml-auto shrink-0 tabular-nums text-[10px] text-muted-foreground">
                     {model.scores[cat.key]}
                   </span>

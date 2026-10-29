@@ -16,6 +16,8 @@ import { sessionReasoningFor } from "@/src/stores/session-reasoning"
 import { readVisionModel, useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * O painel do overlay (⇧⌘espaço), no rodapé da tela.
@@ -353,16 +355,20 @@ export function OverlayApp() {
                     </span>
                   )}
                 </span>
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-[13px]",
-                    live && call.partial ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {live
+                <Truncate text={live
                     ? call.partial || t("overlay.listening")
-                    : heard || t(call.phase === "thinking" ? "overlay.thinking" : "overlay.speaking")}
-                </span>
+                    : heard || t(call.phase === "thinking" ? "overlay.thinking" : "overlay.speaking")}>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-[13px]",
+                      live && call.partial ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {live
+                      ? call.partial || t("overlay.listening")
+                      : heard || t(call.phase === "thinking" ? "overlay.thinking" : "overlay.speaking")}
+                  </span>
+                </Truncate>
               </div>
             ) : (
               <CompactInput
@@ -379,38 +385,44 @@ export function OverlayApp() {
             // Voltar a digitar sem fechar o painel: desliga a escuta e devolve o
             // foco ao campo. Sem isto, quem abre falando ficaria preso no modo
             // chamada até fechar e reabrir (e o atalho reabre falando).
-            <button
-              type="button"
-              onClick={() => {
-                call.hangUp()
-                requestAnimationFrame(() => inputRef.current?.focus())
-              }}
-              title={t("overlay.type")}
-              aria-label={t("overlay.type")}
-              className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Keyboard className="size-4" />
-            </button>
+            <Hint label={t("overlay.type")}>
+              <button
+                type="button"
+                onClick={() => {
+                  call.hangUp()
+                  requestAnimationFrame(() => inputRef.current?.focus())
+                }}
+
+                aria-label={t("overlay.type")}
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Keyboard className="size-4" />
+              </button>
+            </Hint>
           ) : (
+            <Hint label={t("overlay.speak")}>
+              <button
+                type="button"
+                onClick={startCall}
+
+                aria-label={t("overlay.speak")}
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <AudioLines className="size-4" />
+              </button>
+            </Hint>
+          )}
+          <Hint label={t("overlay.close")}>
             <button
               type="button"
-              onClick={startCall}
-              title={t("overlay.speak")}
-              aria-label={t("overlay.speak")}
+              onClick={() => void overlayApi.close()}
+
+              aria-label={t("overlay.close")}
               className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <AudioLines className="size-4" />
+              <X className="size-4" />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void overlayApi.close()}
-            title={t("overlay.close")}
-            aria-label={t("overlay.close")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
+          </Hint>
         </div>
 
         {otherAsks.length > 0 && sessionId && (
@@ -533,19 +545,23 @@ function OverlayPermission({ ask }: { ask: PendingAskUI }) {
   return (
     <div className="flex items-center gap-2 border-b border-border/70 py-1.5 pl-3 pr-1.5">
       <ShieldAlert className={cn("size-3.5 shrink-0", critical ? "text-destructive" : "text-primary")} aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-[12px] text-foreground" title={ask.claim?.detail ?? ask.claim?.title}>
-        {ask.claim?.title ?? t("overlay.permissionFallback")}
-      </span>
-      <button
-        type="button"
-        disabled={sent}
-        onClick={() => reply("deny")}
-        aria-label={t("permissions.deny")}
-        title={t("permissions.deny")}
-        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-      >
-        <X className="size-3.5" />
-      </button>
+      <Truncate text={ask.claim?.title ?? t("overlay.permissionFallback")}>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground" >
+          {ask.claim?.title ?? t("overlay.permissionFallback")}
+        </span>
+      </Truncate>
+      <Hint label={t("permissions.deny")}>
+        <button
+          type="button"
+          disabled={sent}
+          onClick={() => reply("deny")}
+          aria-label={t("permissions.deny")}
+
+          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        >
+          <X className="size-3.5" />
+        </button>
+      </Hint>
       <button
         type="button"
         disabled={sent}

@@ -7,6 +7,7 @@ import { DocumentDownloadMenu } from "@/src/components/ai/document-actions"
 import { artifactApi, documentApi } from "@/src/lib/ipc"
 import { openDocumentInPanel } from "@/src/lib/open-document"
 import { firstLine } from "@/src/lib/document-preview"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Documento entregável na resposta (create_document, update_document,
@@ -125,12 +126,17 @@ export function DocumentPartView({
           <FileText className="size-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{part.title}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {info?.kind ?? " "}
-            {(part.revision ?? 1) > 1 && ` · ${t("artifacts.revision", { n: part.revision })}`}
-            {info?.preview && ` · ${info.preview}`}
-          </p>
+          <Truncate text={part.title}>
+            <p className="truncate text-sm font-medium text-foreground">{part.title}</p>
+          </Truncate>
+          
+            <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">
+              {info?.kind ?? " "}
+              {(part.revision ?? 1) > 1 && ` · ${t("artifacts.revision", { n: part.revision })}`}
+              {info?.preview && ` · ${info.preview}`}
+            </p>
+            </Truncate>
         </div>
         {/* Baixar não abre o painel: o clique para aqui. */}
         <div className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>

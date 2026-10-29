@@ -57,6 +57,8 @@ import type { NodaraStatus } from "@shared/nodara"
 import type { Skill } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
 import fractaLogo from "@/src/assets/fracta-logo.png"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Regex de slug válido: apenas minúsculas, números e underscores */
 const SLUG_REGEX = /^[a-z0-9_]+$/
@@ -135,13 +137,15 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
             placeholder={valuePlaceholder ?? t("mcp.kv.value")}
             className="h-7 flex-1 text-xs"
           />
-          <button
-            type="button"
-            onClick={() => remove(index)}
-            className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("common.remove")}>
+            <button
+              type="button"
+              onClick={() => remove(index)}
+              className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         </div>
       ))}
       <button
@@ -412,6 +416,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
                 type="button"
                 role="switch"
                 aria-checked={autoReconnect}
+                aria-label={t("mcp.servers.dialog.autoReconnect")}
                 onClick={() => setAutoReconnect(!autoReconnect)}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   autoReconnect ? "bg-primary" : "bg-input"
@@ -753,7 +758,9 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
           )}
         </div>
         <p className="mt-0.5 text-[11px] text-muted-foreground">{t(`mcp.integrations.${def.i18nKey}Description`)}</p>
-        {status && <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{integrationHint(def, status, t)}</p>}
+        {status && <Truncate text={integrationHint(def, status, t)}>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{integrationHint(def, status, t)}</p>
+        </Truncate>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {connected && (
@@ -906,9 +913,11 @@ export function McpSkillsPanel() {
                         </summary>
                         <div className="mt-1 flex flex-col gap-0.5">
                           {server.toolNames.map((name) => (
-                            <div key={name} className="truncate rounded bg-muted/50 px-2 py-1 text-[10px] font-mono text-muted-foreground">
-                              {name}
-                            </div>
+                            <Truncate text={name}>
+                              <div key={name} className="truncate rounded bg-muted/50 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                                {name}
+                              </div>
+                            </Truncate>
                           ))}
                         </div>
                       </details>
@@ -923,34 +932,42 @@ export function McpSkillsPanel() {
                       onCheckedChange={(checked) => void toggleServer(server.config.name, checked)}
                     />
                     {needsAuth(server) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1"
-                        disabled={busy === server.config.name}
-                        title={t("mcp.servers.authorizeHint")}
-                        onClick={() => void runServerAction(server.config.name, () => mcpApi.auth(server.config.name))}
-                      >
-                        {busy === server.config.name
+                      <Hint label={t("mcp.servers.authorizeHint")}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          disabled={busy === server.config.name}
+                          onClick={() => void runServerAction(server.config.name, () => mcpApi.auth(server.config.name))}
+                        >
+       
+                                       {busy === server.config.name
                           ? <LoaderCircle className="size-3 animate-spin" />
                           : <KeyRound className="size-3" />}
                         {server.authorized ? t("mcp.servers.reauthorize") : t("mcp.servers.authorize")}
                       </Button>
+                      </Hint>
                     )}
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.reconnect")} disabled={busy === server.config.name} onClick={() => void runServerAction(server.config.name, () => mcpApi.reconnect(server.config.name))}>
-                      <RefreshCw className={cn("size-3.5", busy === server.config.name && "animate-spin")} />
-                    </Button>
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.edit")} onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
-                      <ExternalLink className="size-3.5" />
-                    </Button>
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
-                      const config = await mcpApi.config()
-                      config.servers = config.servers.filter((s) => s.name !== server.config.name)
-                      await mcpApi.save(config)
-                      await refresh()
-                    }}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <Hint label={t("mcp.servers.reconnect")}>
+                      <Button size="icon-sm" variant="ghost"  disabled={busy === server.config.name} onClick={() => void runServerAction(server.config.name, () => mcpApi.reconnect(server.config.name))}>
+                        <RefreshCw className={cn("size-3.5", busy === server.config.name && "animate-spin")} />
+                      </Button>
+                    </Hint>
+                    <Hint label={t("mcp.servers.edit")}>
+                      <Button size="icon-sm" variant="ghost"  onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
+                        <ExternalLink className="size-3.5" />
+                      </Button>
+                    </Hint>
+                    <Hint label={t("mcp.servers.remove")}>
+                      <Button size="icon-sm" variant="ghost"  className="text-destructive hover:text-destructive" onClick={async () => {
+                        const config = await mcpApi.config()
+                        config.servers = config.servers.filter((s) => s.name !== server.config.name)
+                        await mcpApi.save(config)
+                        await refresh()
+                      }}>
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </Hint>
                   </div>
                 </div>
               )
@@ -1050,15 +1067,19 @@ export function McpSkillsPanel() {
                     sobrescreve a nativa). */}
                 {skill.source !== "builtin" && (
                   <div className="flex items-center gap-1 self-start pt-1">
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.skills.edit")} onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.skills.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
-                      await skillsApi.remove(skill.slug)
-                      await refresh()
-                    }}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <Hint label={t("mcp.skills.edit")}>
+                      <Button size="icon-sm" variant="ghost"  onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </Hint>
+                    <Hint label={t("mcp.skills.remove")}>
+                      <Button size="icon-sm" variant="ghost"  className="text-destructive hover:text-destructive" onClick={async () => {
+                        await skillsApi.remove(skill.slug)
+                        await refresh()
+                      }}>
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </Hint>
                   </div>
                 )}
               </div>

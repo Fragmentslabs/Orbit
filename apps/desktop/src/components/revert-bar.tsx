@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { SessionInfo } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Barra exibida acima do input enquanto um revert está ativo:
@@ -47,18 +49,23 @@ export function RevertBar({ session }: { session: SessionInfo }) {
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs">
         <div className="flex items-center gap-2 px-3 py-2">
           <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-          <span className="flex-1 truncate" title={detail || undefined}>
-            {noticeLabel}
-            {!notice.filesError && <span className="text-muted-foreground"> {t("revert.keptHint")}</span>}
-          </span>
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={dismissNotice}
-            title={t("common.close")}
-          >
-            <X className="size-3.5" />
-          </button>
+          
+            <Truncate>
+                <span className="flex-1 truncate" title={detail || undefined}>
+                {noticeLabel}
+                {!notice.filesError && <span className="text-muted-foreground"> {t("revert.keptHint")}</span>}
+            </span>
+            </Truncate>
+          <Hint label={t("common.close")}>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={dismissNotice}
+
+            >
+              <X className="size-3.5" />
+            </button>
+          </Hint>
         </div>
       </div>
     )
@@ -146,24 +153,26 @@ export function RevertBar({ session }: { session: SessionInfo }) {
             ? <History className="size-3.5 shrink-0 text-muted-foreground" />
             : <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
         }
-        <span className="flex-1 truncate" title={title || label}>
-          {label}
-          {mediaLabel && <span className={cn(mediaFailed && "text-amber-600 dark:text-amber-400")}> · {mediaLabel}</span>}
-          {keptLabel && (
-            <span
-              className="text-amber-600 dark:text-amber-400"
-              title={keptDetail || undefined}
-            >
-              {" "}· {keptLabel}
-            </span>
-          )}
-          {uncertainLabel && (
-            <span className="text-muted-foreground" title={uncertainDetail}>
-              {" "}· {uncertainLabel}
-            </span>
-          )}
-          <span className="text-muted-foreground"> — {t("revert.continueFromHere")}</span>
-        </span>
+        <Truncate>
+            <span className="flex-1 truncate" title={title || label}>
+            {label}
+            {mediaLabel && <span className={cn(mediaFailed && "text-amber-600 dark:text-amber-400")}> · {mediaLabel}</span>}
+            {keptLabel && (
+              <span
+                className="text-amber-600 dark:text-amber-400"
+                title={keptDetail || undefined}
+              >
+                {" "}· {keptLabel}
+              </span>
+            )}
+            {uncertainLabel && (
+              <span className="text-muted-foreground" title={uncertainDetail}>
+                {" "}· {uncertainLabel}
+              </span>
+            )}
+            <span className="text-muted-foreground"> — {t("revert.continueFromHere")}</span>
+          </span>
+        </Truncate>
         {revert.diff && (
           <button
             type="button"
@@ -175,19 +184,21 @@ export function RevertBar({ session }: { session: SessionInfo }) {
           </button>
         )}
         {uncertainLabel && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            disabled={revertingUncertain}
-            title={uncertainDetail}
-            onClick={() => {
-              setRevertingUncertain(true)
-              void revertUncertain(session.id).finally(() => setRevertingUncertain(false))
-            }}
-          >
-            {t("revert.revertUncertain")}
+          <Hint label={uncertainDetail}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              disabled={revertingUncertain}
+              onClick={() => {
+                setRevertingUncertain(true)
+                void revertUncertain(session.id).finally(() => setRevertingUncertain(false))
+              }}
+            >
+       
+               {t("revert.revertUncertain")}
           </Button>
+          </Hint>
         )}
         <Button
           variant="outline"
@@ -198,14 +209,16 @@ export function RevertBar({ session }: { session: SessionInfo }) {
           <Undo2 className="size-3" />
           {t("revert.unrevert")}
         </Button>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => setDismissed(true)}
-          title={t("common.close")}
-        >
-          <X className="size-3.5" />
-        </button>
+        <Hint label={t("common.close")}>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setDismissed(true)}
+
+          >
+            <X className="size-3.5" />
+          </button>
+        </Hint>
       </div>
       {showDiff && revert.diff && (
         <pre className="max-h-56 overflow-auto border-t px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">

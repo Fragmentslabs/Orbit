@@ -13,6 +13,8 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { PlanDialog } from "@/src/components/plan-dialog"
 import type { PlanReview } from "@shared/chat"
 import type { PermissionMode } from "@shared/chat"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 const ALL_MODES: { id: PermissionMode; labelKey: string }[] = [
   { id: "ask", labelKey: "planReview.modeAsk" },
@@ -62,9 +64,11 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
       <div className="rounded-xl border border-sidebar-border bg-sidebar/50 px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
           <FileTextIcon className="size-4 shrink-0 text-primary" />
-          <span className="font-medium truncate">
-            {isProposed ? t("planReview.proposed") : t("planReview.implementing")}
-          </span>
+          <Truncate text={isProposed ? t("planReview.proposed") : t("planReview.implementing")}>
+            <span className="font-medium truncate">
+              {isProposed ? t("planReview.proposed") : t("planReview.implementing")}
+            </span>
+          </Truncate>
           {checkboxCount > 0 && (
             <span className="shrink-0 text-muted-foreground">
               {checkedCount}/{checkboxCount}
@@ -92,9 +96,11 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                     {t("planReview.accept", { mode: t(MODE_LABEL[currentMode]) })}
                   </Button>
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button size="sm" className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5">
-                      <ChevronDown className="size-3" />
-                    </Button>} />
+                    <DropdownMenuTrigger render={<Hint label={t("common.dismiss")}>
+                      <Button size="sm" className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5">
+                        <ChevronDown className="size-3" />
+                      </Button>
+                    </Hint>} />
                     <DropdownMenuContent align="end" side="top">
                       {otherModes.map((m) => (
                         <DropdownMenuItem key={m.id} onClick={() => acceptPlanReview(sessionId, m.id)}>
@@ -110,13 +116,15 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => dismissPlanReview(sessionId)}
-                  className="ml-0.5 flex size-5 items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
-                >
-                  <X className="size-3" />
-                </button>
+                <Hint label={t("common.dismiss")}>
+                  <button
+                    type="button"
+                    onClick={() => dismissPlanReview(sessionId)}
+                    className="ml-0.5 flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Hint>
               </>
             )}
           </div>

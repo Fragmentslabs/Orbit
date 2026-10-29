@@ -46,7 +46,9 @@ import {
   toCssLength,
 } from "./design-controls"
 import type { DesignElementInfo } from "./design-protocol"
+import { Truncate } from "@/components/ui/truncated-text"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Painel de propriedades do canvas de design — o inspetor do Figma/Lummia no
  * design system do Orbit: modo de layout em botões, grade de alinhamento 3×3,
@@ -585,7 +587,9 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
         <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <LayoutGrid className="size-3.5 shrink-0 text-primary" />
-            <span className="truncate text-xs font-medium">{board.title ?? board.file}</span>
+            <Truncate text={board.title ?? board.file}>
+              <span className="truncate text-xs font-medium">{board.title ?? board.file}</span>
+            </Truncate>
           </div>
           <IconAction icon={MessageSquarePlus} label={t("design.comment")} onClick={onComment} />
         </div>
@@ -772,7 +776,9 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{info.tag}</span>
-          <span className="truncate text-xs font-medium">{info.label || (info.text ?? "").trim().slice(0, 40) || info.tag}</span>
+          <Truncate text={info.label || (info.text ?? "").trim().slice(0, 40) || info.tag}>
+            <span className="truncate text-xs font-medium">{info.label || (info.text ?? "").trim().slice(0, 40) || info.tag}</span>
+          </Truncate>
           {/* Mais de um selecionado: o painel edita TODOS eles. */}
           {target.count && target.count > 1 && (
             <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
@@ -840,17 +846,19 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
                 title={t("design.props.gap")}
                 onCommit={(v) => style("gap", toCssLength(v))}
                 trailing={
-                  <button
-                    type="button"
-                    onClick={toggleSpace}
-                    title={t("design.props.spaceBetween")}
-                    className={cn(
-                      "flex h-4 shrink-0 items-center rounded px-1.5 text-[8px] font-bold transition-colors",
-                      spaceBetween ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground/60 hover:text-foreground",
-                    )}
-                  >
-                    {spaceBetween ? "auto" : "px"}
+                  <Hint label={t("design.props.spaceBetween")}>
+                    <button
+                      type="button"
+                      onClick={toggleSpace}
+                      className={cn(
+                        "flex h-4 shrink-0 items-center rounded px-1.5 text-[8px] font-bold transition-colors",
+                        spaceBetween ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground/60 hover:text-foreground",
+                      )}
+                    >
+       
+                               {spaceBetween ? "auto" : "px"}
                   </button>
+                  </Hint>
                 }
               />
             </div>

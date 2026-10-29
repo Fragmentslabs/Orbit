@@ -100,6 +100,7 @@ import {
   type SidebarDropTarget,
 } from "@/src/components/session-drag"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
+import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
 
@@ -429,7 +430,9 @@ function AccordionGroup({ label, defaultExpanded = true, action, dropTarget, chi
         className="flex cursor-pointer items-center gap-2"
         onClick={() => setExpanded((prev) => !prev)}
       >
-        <span className="flex-1 truncate">{label}</span>
+        <Truncate text={label}>
+          <span className="flex-1 truncate">{label}</span>
+        </Truncate>
         {action}
         <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
       </SidebarGroupLabel>
@@ -807,47 +810,50 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           buttonClassName,
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
-          {selectionMode ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                toggle(session.id)
-              }}
-              className="flex size-4 shrink-0 items-center justify-center rounded border border-sidebar-border hover:bg-sidebar-accent transition-colors"
-            >
-              {isSelected && <Check className="size-3 text-primary" />}
-            </button>
-          ) : inCallHere ? (
-            // Chamada nesta conversa: o telefone TOMA o lugar do balão de chat
-            // em vez de somar mais um ícone na linha.
-            <Phone aria-label={t("voice.call.inCall")} className="size-4 shrink-0 text-primary" />
-          ) : (
-            <Icon className="size-4 shrink-0" />
-          )}
-          <TooltipProvider delay={600}>
-            <Tooltip>
-              <TooltipTrigger render={<span className="truncate" />}>{session.title}</TooltipTrigger>
-              <TooltipContent side="right" align="start" sideOffset={6}>
-                {session.title}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
-            <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-          )}
-          {hasPendingAsk && (
-            <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />
-          )}
-          {statusDot === "error" && (
-            <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-          )}
-          {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
-            <span className="size-2 shrink-0 rounded-full bg-primary" />
-          )}
-          {trailing}
-        </div>
+        
+          <Truncate>
+              <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
+              {selectionMode ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggle(session.id)
+                  }}
+                  className="flex size-4 shrink-0 items-center justify-center rounded border border-sidebar-border hover:bg-sidebar-accent transition-colors"
+                >
+                  {isSelected && <Check className="size-3 text-primary" />}
+                </button>
+              ) : inCallHere ? (
+                // Chamada nesta conversa: o telefone TOMA o lugar do balão de chat
+                // em vez de somar mais um ícone na linha.
+                <Phone aria-label={t("voice.call.inCall")} className="size-4 shrink-0 text-primary" />
+              ) : (
+                <Icon className="size-4 shrink-0" />
+              )}
+              <TooltipProvider delay={600}>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="truncate" />}>{session.title}</TooltipTrigger>
+                  <TooltipContent side="right" align="start" sideOffset={6}>
+                    {session.title}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
+                <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+              )}
+              {hasPendingAsk && (
+                <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />
+              )}
+              {statusDot === "error" && (
+                <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+              )}
+              {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
+                <span className="size-2 shrink-0 rounded-full bg-primary" />
+              )}
+              {trailing}
+            </div>
+          </Truncate>
         {session.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
       </ButtonComponent>
       <EllipsisMenu
@@ -996,7 +1002,9 @@ function ArchivedFolderGroup({ folder, sessions }: {
         >
           <Folder className="size-4 shrink-0" />
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-            <span className="truncate">{folder.name}</span>
+            <Truncate text={folder.name}>
+              <span className="truncate">{folder.name}</span>
+            </Truncate>
             <span className="shrink-0 text-[10px] text-sidebar-foreground/40">{sessions.length}</span>
             <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
           </div>
@@ -1072,7 +1080,9 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
             <Folder className="size-4 shrink-0" />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-            <span className="truncate">{folder.name}</span>
+            <Truncate text={folder.name}>
+              <span className="truncate">{folder.name}</span>
+            </Truncate>
             {!selectionMode && <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />}
           </div>
           {folder.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
@@ -1466,18 +1476,24 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
           <AvatarImage src="" />
           <AvatarFallback>OR</AvatarFallback>
         </Avatar>
-        <div className="flex flex-col truncate">
-          <span className="truncate font-medium">Orbit</span>
-          <a
-            href="https://fragmentslabs.com"
-            target="_blank"
-            rel="noreferrer"
-            className="truncate text-sidebar-foreground/60 hover:text-sidebar-foreground hover:underline"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {t("sidebar.account.byFragmentsLabs")}
-          </a>
-        </div>
+        
+          <Truncate>
+              <div className="flex flex-col truncate">
+            
+                <Truncate>
+                    <span className="truncate font-medium">Orbit</span>
+                </Truncate>
+              <a
+                href="https://fragmentslabs.com"
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-sidebar-foreground/60 hover:text-sidebar-foreground hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {t("sidebar.account.byFragmentsLabs")}
+            </a>
+          </div>
+          </Truncate>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"

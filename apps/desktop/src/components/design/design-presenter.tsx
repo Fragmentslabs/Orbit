@@ -10,6 +10,8 @@ import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { cn } from "@/lib/utils"
 import { DESIGN_SOURCE, boardForHref, parseRuntimeMessage } from "./design-protocol"
 import { planDesignReload } from "./design-reload"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modo apresentação do canvas, na aba própria: uma tela por vez, na proporção
@@ -195,7 +197,9 @@ export function DesignPresenter({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Play className="size-3.5 shrink-0 text-muted-foreground" fill="currentColor" />
-          <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          <Truncate text={title}>
+            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          </Truncate>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {history.length > 0 && <IconAction icon={ArrowLeft} label={t("design.present.back")} onClick={back} />}
@@ -209,28 +213,32 @@ export function DesignPresenter({
             }}
           />
           <div className="mx-1 h-4 w-px bg-border" />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(fit && "bg-primary/15 text-primary hover:bg-primary/20")}
-            aria-pressed={fit}
-            title={t("design.present.fit")}
-            aria-label={t("design.present.fit")}
-            onClick={() => setMode("fit")}
-          >
-            <Expand className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(!fit && "bg-primary/15 text-primary hover:bg-primary/20")}
-            aria-pressed={!fit}
-            title={t("design.present.real")}
-            aria-label={t("design.present.real")}
-            onClick={() => setMode("real")}
-          >
-            <Frame className="size-3.5" />
-          </Button>
+          <Hint label={t("design.present.fit")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(fit && "bg-primary/15 text-primary hover:bg-primary/20")}
+              aria-pressed={fit}
+
+              aria-label={t("design.present.fit")}
+              onClick={() => setMode("fit")}
+            >
+              <Expand className="size-3.5" />
+            </Button>
+          </Hint>
+          <Hint label={t("design.present.real")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(!fit && "bg-primary/15 text-primary hover:bg-primary/20")}
+              aria-pressed={!fit}
+
+              aria-label={t("design.present.real")}
+              onClick={() => setMode("real")}
+            >
+              <Frame className="size-3.5" />
+            </Button>
+          </Hint>
           <div className="mx-1 h-4 w-px bg-border" />
           <IconAction
             icon={fullscreen ? Minimize2 : Maximize2}
@@ -324,7 +332,10 @@ export function DesignPresenter({
                       : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                   )}
                 >
-                  <span className="truncate">{b.title ?? b.file}</span>
+                  
+                    <Truncate>
+                        <span className="truncate">{b.title ?? b.file}</span>
+                    </Truncate>
                 </button>
               ))}
             </div>
@@ -337,20 +348,22 @@ export function DesignPresenter({
       {!fullscreen && boards.length > 1 && (
         <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border/60 p-2">
           {boards.map((b) => (
-            <button
-              key={b.file}
-              type="button"
-              onClick={() => goTo(b.file)}
-              title={b.title ?? b.file}
-              className={cn(
-                "shrink-0 rounded-md px-2.5 py-1 text-[11px] transition-colors",
-                b.file === current
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <span className="block max-w-[10rem] truncate">{b.title ?? b.file}</span>
+            <Hint label={b.title ?? b.file}>
+              <button
+                key={b.file}
+                type="button"
+                onClick={() => goTo(b.file)}
+                className={cn(
+                  "shrink-0 rounded-md px-2.5 py-1 text-[11px] transition-colors",
+                  b.file === current
+                    ? "bg-accent font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+       
+                   <span className="block max-w-[10rem] truncate">{b.title ?? b.file}</span>
             </button>
+            </Hint>
           ))}
         </div>
       )}

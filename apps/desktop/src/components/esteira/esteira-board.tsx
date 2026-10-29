@@ -20,6 +20,8 @@ import { TaskCreateDialog } from "./task-create-dialog"
 import { EsteiraFooter } from "./esteira-footer"
 import { TaskCard } from "./task-card"
 import { TaskModal } from "./task-modal"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Página Esteira (modo código, na sidebar). Dois níveis:
@@ -115,7 +117,10 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
               >
                 <div className="flex items-center gap-2">
                   <LayersIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{esteira.nome}</span>
+                  
+                    <Truncate>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{esteira.nome}</span>
+                    </Truncate>
                   {emAndamento > 0 && (
                     <span title={t("esteira.emAndamento")}>
                       <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
@@ -134,19 +139,28 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
                     />
                   )}
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {esteira.fases.map((f) => f.nome).join(" → ")}
-                </p>
+                
+                  <Truncate>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                      {esteira.fases.map((f) => f.nome).join(" → ")}
+                    </p>
+                  </Truncate>
                 {projeto && projeto.pastas.length > 0 && (
-                  <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-                    <FolderIcon className="size-3 shrink-0" />
-                    {projeto.pastas[0]}
-                    {projeto.pastas.length > 1 && ` +${projeto.pastas.length - 1}`}
-                  </p>
+                  
+                    <Truncate>
+                      <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                      <FolderIcon className="size-3 shrink-0" />
+                      {projeto.pastas[0]}
+                      {projeto.pastas.length > 1 && ` +${projeto.pastas.length - 1}`}
+                    </p>
+                    </Truncate>
                 )}
                 <div className="mt-auto flex items-center gap-2 text-[11px] text-muted-foreground">
                   <span>{t("esteira.tasksResumo", { total: tasks.length, concluidas })}</span>
-                  {esteira.branch && <span className="truncate">· {esteira.branch}</span>}
+                  {esteira.branch && 
+                    <Truncate>
+                        <span className="truncate">· {esteira.branch}</span>
+                    </Truncate>}
                 </div>
               </button>
             )
@@ -279,20 +293,25 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header da esteira: voltar + nome + controles */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
-        <button
-          type="button"
-          onClick={onVoltar}
-          title={t("esteira.voltar")}
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <ArrowLeftIcon className="size-4" />
-        </button>
+        <Hint label={t("esteira.voltar")}>
+          <button
+            type="button"
+            onClick={onVoltar}
+            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeftIcon className="size-4" />
+          </button>
+        </Hint>
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-foreground">{esteira.nome}</h2>
-          <p className="truncate text-[11px] text-muted-foreground">
+          <Truncate>
+              <h2 className="truncate text-sm font-semibold text-foreground">{esteira.nome}</h2>
+          </Truncate>
+          <Truncate>
+            <p className="truncate text-[11px] text-muted-foreground">
             {esteira.fases.map((f) => f.nome).join(" → ")}
             {esteira.branch && ` · ${esteira.branch}`}
           </p>
+          </Truncate>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -300,18 +319,20 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
             <PlusIcon className="size-4" />
             {t("esteira.adicionarTarefa")}
           </Button>
-          <button
-            type="button"
-            onClick={() => void alternarFila(esteira.id, !filaLigada)}
-            title={t("esteira.filaDica")}
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
-              filaLigada ? "border-primary/50 bg-primary/10 text-primary" : "hover:bg-accent",
-            )}
-          >
-            {filaLigada ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+          <Hint label={t("esteira.filaDica")}>
+            <button
+              type="button"
+              onClick={() => void alternarFila(esteira.id, !filaLigada)}
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
+                filaLigada ? "border-primary/50 bg-primary/10 text-primary" : "hover:bg-accent",
+              )}
+            >
+       
+               {filaLigada ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
             {filaLigada ? t("esteira.filaLigada") : t("esteira.filaDesligada")}
           </button>
+          </Hint>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
               <MoreHorizontalIcon className="size-4" />
@@ -457,11 +478,15 @@ function Coluna({
     >
       <div className="flex shrink-0 items-center gap-1.5 px-2.5 py-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-foreground">{titulo}</p>
+          <Truncate text={titulo}>
+            <p className="truncate text-xs font-medium text-foreground">{titulo}</p>
+          </Truncate>
           {rotuloModelo && (
-            <p className="truncate text-[10px] text-muted-foreground" title={rotuloModelo}>
-              {rotuloModelo}
-            </p>
+            <Truncate text={rotuloModelo}>
+              <p className="truncate text-[10px] text-muted-foreground" >
+                {rotuloModelo}
+              </p>
+            </Truncate>
           )}
         </div>
         <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">{tasks.length}</span>

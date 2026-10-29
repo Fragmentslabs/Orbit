@@ -5,6 +5,7 @@ import type { ToolPart } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { motionApi } from "@/src/lib/ipc"
 import { motionRefOf } from "@/src/lib/motion-part-ref"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Card da peça de motion (motion_preview, motion_write, motion_edit): o caminho
@@ -74,11 +75,16 @@ export function MotionPartView({ part, sessionId }: { part: ToolPart; sessionId?
           <Clapperboard className="size-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{ref.label}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {path ?? t("motion.composition")}
-            {ref.format && ` · ${ref.format}`}
-          </p>
+          <Truncate text={ref.label}>
+            <p className="truncate text-sm font-medium text-foreground">{ref.label}</p>
+          </Truncate>
+          
+            <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">
+              {path ?? t("motion.composition")}
+              {ref.format && ` · ${ref.format}`}
+            </p>
+            </Truncate>
         </div>
         {opening && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
       </div>

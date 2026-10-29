@@ -5,6 +5,7 @@ import type { ToolPart } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { designApi } from "@/src/lib/ipc"
 import { designRefOf } from "@/src/lib/design-part-ref"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Card do canvas de design (design_write/design_edit): o caminho de volta para
@@ -59,11 +60,16 @@ export function DesignPartView({ part, sessionId }: { part: ToolPart; sessionId?
           <LayoutGrid className="size-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{ref.label}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {path ?? t("design.composition")}
-            {ref.boards ? ` · ${t("design.boardsCount", { count: ref.boards })}` : ""}
-          </p>
+          <Truncate text={ref.label}>
+            <p className="truncate text-sm font-medium text-foreground">{ref.label}</p>
+          </Truncate>
+          
+            <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">
+              {path ?? t("design.composition")}
+              {ref.boards ? ` · ${t("design.boardsCount", { count: ref.boards })}` : ""}
+            </p>
+            </Truncate>
         </div>
         {opening && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
       </div>

@@ -77,6 +77,7 @@ import {
   isLargeMediaType,
   rememberAttachmentPath,
 } from "@/src/lib/message-utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 // ============================================================================
 // Provider Context & Types
@@ -416,27 +417,28 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
   return (
     <>
       <PromptInputHoverCard>
-        <HoverCardTrigger render={<div className={cn(
-                        // max-w: o chip cresce com o nome do arquivo, e nome
-                        // longo (um texto colado, um PDF baixado) virava uma
-                        // barra atravessando o composer. Com o teto, o
-                        // `truncate` do label finalmente tem onde cortar.
-                        "group relative flex h-8 max-w-64 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-                        className,
-                      )} key={data.id} {...props} onClick={(e) => { props.onClick?.(e); if (isImage) setLightboxOpen(true) }} />}><div className="relative size-5 shrink-0">
-                        <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
-                          {isImage ? (
-                            <img
-                              alt={filename || t("attachments.attachment")}
-                              className="size-5 object-cover"
-                              height={20}
-                              src={data.url}
-                              width={20}
-                            />
-                          ) : data.pastedText !== undefined ? (
-                            <div className="flex size-5 items-center justify-center text-muted-foreground">
-                              <FileTextIcon className="size-3" />
-                            </div>
+        <HoverCardTrigger render={
+          <div className={cn(
+                          // max-w: o chip cresce com o nome do arquivo, e nome
+                          // longo (um texto colado, um PDF baixado) virava uma
+                          // barra atravessando o composer. Com o teto, o
+                          // `truncate` do label finalmente tem onde cortar.
+                          "group relative flex h-8 max-w-64 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+                          className,
+                        )} key={data.id} {...props} onClick={(e) => { props.onClick?.(e); if (isImage) setLightboxOpen(true) }} />}><div className="relative size-5 shrink-0">
+                          <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
+                            {isImage ? (
+                              <img
+                                alt={filename || t("attachments.attachment")}
+                                className="size-5 object-cover"
+                                height={20}
+                                src={data.url}
+                                width={20}
+                              />
+                            ) : data.pastedText !== undefined ? (
+                              <div className="flex size-5 items-center justify-center text-muted-foreground">
+                                <FileTextIcon className="size-3" />
+                              </div>
                           ) : (
                             <div className="flex size-5 items-center justify-center text-muted-foreground">
                               <PaperclipIcon className="size-3" />
@@ -456,7 +458,9 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                           <XIcon />
                           <span className="sr-only">{t("attachments.remove")}</span>
                         </Button>
-                      </div><span className="flex-1 truncate">{attachmentLabel}</span></HoverCardTrigger>
+                      </div><Truncate text={attachmentLabel}>
+                        <span className="flex-1 truncate">{attachmentLabel}</span>
+                      </Truncate></HoverCardTrigger>
       {/* `w-auto` sem teto + título com `truncate`: o título é nowrap, então o
           card crescia até a largura do nome inteiro (e o preview, de largura
           fixa, ficava pequeno dentro dele). Com max-w, o truncate corta. */}
@@ -479,7 +483,9 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                 {filename || (isImage ? t("attachments.image") : t("attachments.file"))}
               </h4>
               {data.mediaType && (
-                <p className="truncate font-mono text-muted-foreground text-xs">{data.mediaType}</p>
+                <Truncate text={data.mediaType}>
+                  <p className="truncate font-mono text-muted-foreground text-xs">{data.mediaType}</p>
+                </Truncate>
               )}
             </div>
           </div>

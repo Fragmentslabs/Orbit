@@ -20,6 +20,8 @@ import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selecti
 import { DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { locateLines } from "@/src/lib/document-quote"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Visualizador de uma fonte no painel lateral, aberto pelo clique no anexo,
@@ -339,28 +341,33 @@ export function SourceViewer({
   return (
     <div ref={rootRef} className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-1 border-b border-border/60 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setOutlineOpen((open) => !open)}
-          className={cn(iconButton, outlineOpen && "bg-primary/15 text-primary")}
-          title={t("sources.outline")}
-        >
-          <List className="size-3.5" />
-        </button>
+        <Hint label={t("sources.outline")}>
+          <button
+            type="button"
+            onClick={() => setOutlineOpen((open) => !open)}
+            className={cn(iconButton, outlineOpen && "bg-primary/15 text-primary")}
+          >
+            <List className="size-3.5" />
+          </button>
+        </Hint>
 
         <div className="min-w-0 flex-1 px-1">
-          <p className="truncate text-xs font-medium text-foreground">{data?.filename ?? docId}</p>
+          <Truncate text={data?.filename ?? docId}>
+            <p className="truncate text-xs font-medium text-foreground">{data?.filename ?? docId}</p>
+          </Truncate>
           {/*
             O id mostrado é o de AGORA, não o que foi clicado: arrastar o
             arquivo entre as áreas troca doc1 por src1, e a citação gravada na
             conversa continua com o endereço antigo. Dizer "src1 (era doc1)" é
             o que impede a mudança de parecer o arquivo errado.
           */}
-          <p className="truncate text-[11px] text-muted-foreground">
+          <Truncate>
+            <p className="truncate text-[11px] text-muted-foreground">
             {data?.id ?? docId}
             {data?.movedFrom ? ` · ${t("sources.movedFrom", { id: data.movedFrom })}` : ""}
             {data ? ` · ${t("sources.unitPages", { count: data.totalPages })}` : ""}
           </p>
+          </Truncate>
         </div>
 
         {data?.hasOriginal && (
@@ -385,70 +392,77 @@ export function SourceViewer({
 
         {mode === "original" && (
           <>
-            <button
-              type="button"
-              disabled={zoom <= ZOOM_MIN}
-              onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
-              className={iconButton}
-              title={t("sources.zoomOut")}
-            >
-              <Minus className="size-3.5" />
-            </button>
+            <Hint label={t("sources.zoomOut")}>
+              <button
+                type="button"
+                disabled={zoom <= ZOOM_MIN}
+                onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
+                className={iconButton}
+              >
+                <Minus className="size-3.5" />
+              </button>
+            </Hint>
             <span className="w-9 shrink-0 text-center text-[11px] tabular-nums text-muted-foreground">
               {Math.round((zoom / ZOOM_BASE) * 100)}%
             </span>
-            <button
-              type="button"
-              disabled={zoom >= ZOOM_MAX}
-              onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
-              className={iconButton}
-              title={t("sources.zoomIn")}
-            >
-              <Plus className="size-3.5" />
-            </button>
+            <Hint label={t("sources.zoomIn")}>
+              <button
+                type="button"
+                disabled={zoom >= ZOOM_MAX}
+                onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
+                className={iconButton}
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </Hint>
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => setFindOpen((open) => !open)}
-          className={cn(iconButton, findOpen && "bg-primary/15 text-primary")}
-          title={t("sources.find")}
-        >
-          <Search className="size-3.5" />
-        </button>
+        <Hint label={t("sources.find")}>
+          <button
+            type="button"
+            onClick={() => setFindOpen((open) => !open)}
+            className={cn(iconButton, findOpen && "bg-primary/15 text-primary")}
+          >
+            <Search className="size-3.5" />
+          </button>
+        </Hint>
         {agentDocument && sessionId && docId && (
           <DocumentSourceBadge documentId={docId} sessionId={sessionId} onError={setErro} />
         )}
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => void run("export")}
-          className={iconButton}
-          title={t("sources.download")}
-        >
-          {busy === "export" ? (
+        <Hint label={t("sources.download")}>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void run("export")}
+            className={iconButton}
+          >
+       
+           {busy === "export" ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <Download className="size-3.5" />
           )}
         </button>
+        </Hint>
         {/* Só o PDF: imprimir manda o arquivo ao Chromium, que pagina PDF para
             papel e não sabe o que fazer com um .docx. */}
         {data?.originalKind === "pdf" && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void run("print")}
-            className={iconButton}
-            title={t("sources.print")}
-          >
-            {busy === "print" ? (
+          <Hint label={t("sources.print")}>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void run("print")}
+              className={iconButton}
+            >
+       
+               {busy === "print" ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Printer className="size-3.5" />
             )}
           </button>
+          </Hint>
         )}
         {data?.sourceUrl && (
           <a
@@ -466,13 +480,15 @@ export function SourceViewer({
       {erro && (
         <div className="flex items-start gap-2 border-b border-border/60 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
           <p className="min-w-0 flex-1">{erro}</p>
-          <button
-            type="button"
-            onClick={() => setErro(null)}
-            className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/20"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("common.dismiss")}>
+            <button
+              type="button"
+              onClick={() => setErro(null)}
+              className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/20"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         </div>
       )}
 
@@ -504,29 +520,35 @@ export function SourceViewer({
                 ? "0"
                 : ""}
           </span>
-          <button
-            type="button"
-            disabled={matches.length === 0}
-            onClick={() => setMatchIndex((i) => (i - 1 + matches.length) % matches.length)}
-            className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
-          >
-            <ChevronUp className="size-3" />
-          </button>
-          <button
-            type="button"
-            disabled={matches.length === 0}
-            onClick={() => setMatchIndex((i) => (i + 1) % matches.length)}
-            className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
-          >
-            <ChevronDown className="size-3" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setFindOpen(false)}
-            className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("common.previous")}>
+            <button
+              type="button"
+              disabled={matches.length === 0}
+              onClick={() => setMatchIndex((i) => (i - 1 + matches.length) % matches.length)}
+              className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
+            >
+              <ChevronUp className="size-3" />
+            </button>
+          </Hint>
+          <Hint label={t("common.next")}>
+            <button
+              type="button"
+              disabled={matches.length === 0}
+              onClick={() => setMatchIndex((i) => (i + 1) % matches.length)}
+              className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
+            >
+              <ChevronDown className="size-3" />
+            </button>
+          </Hint>
+          <Hint label={t("common.close")}>
+            <button
+              type="button"
+              onClick={() => setFindOpen(false)}
+              className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         </div>
       )}
 
@@ -729,20 +751,25 @@ function OutlinePanel({
                 onClick={() => onGo(item.page as number)}
                 className="flex shrink-0 cursor-pointer items-baseline gap-1.5 rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <span className="max-w-44 truncate">{item.title || "—"}</span>
+                
+                  <Truncate>
+                      <span className="max-w-44 truncate">{item.title || "—"}</span>
+                  </Truncate>
                 <span className="tabular-nums opacity-60">{item.page}</span>
               </button>
             ))
           : Array.from({ length: total }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => onGo(n)}
-                title={label(n)}
-                className="min-w-7 shrink-0 cursor-pointer rounded-full border border-border/60 px-2 py-0.5 text-center text-[11px] tabular-nums text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                {n}
+              <Hint label={label(n)}>
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onGo(n)}
+                  className="min-w-7 shrink-0 cursor-pointer rounded-full border border-border/60 px-2 py-0.5 text-center text-[11px] tabular-nums text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+       
+                       {n}
               </button>
+              </Hint>
             ))}
       </div>
     )
@@ -760,7 +787,10 @@ function OutlinePanel({
                 style={{ paddingLeft: `${0.75 + item.level * 0.75}rem` }}
                 className="flex w-full cursor-pointer items-baseline gap-2 py-1 pr-2 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <span className="min-w-0 flex-1 truncate">{item.title || "—"}</span>
+                
+                  <Truncate>
+                      <span className="min-w-0 flex-1 truncate">{item.title || "—"}</span>
+                  </Truncate>
                 <span className="shrink-0 tabular-nums opacity-60">{item.page}</span>
               </button>
             </li>

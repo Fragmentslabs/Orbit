@@ -4,6 +4,7 @@ import { CheckIcon, SearchIcon } from "lucide-react"
 
 import type { Task } from "@shared/esteira"
 import { cn } from "@/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Conteúdo de um seletor de tasks: campo de busca no topo e a listagem
@@ -69,7 +70,10 @@ export function ListaTasksBuscavel({ tasks, selecionadas, onEscolher }: {
                     {marcada && <CheckIcon className="size-2.5" />}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 truncate">{task.titulo}</span>
+                
+                  <Truncate>
+                      <span className="min-w-0 flex-1 truncate">{task.titulo}</span>
+                  </Truncate>
                 <span className="shrink-0 text-[10px] text-muted-foreground">
                   {t(`esteira.status.${task.status}`)}
                 </span>

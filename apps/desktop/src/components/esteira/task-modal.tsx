@@ -4,6 +4,7 @@ import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpe
 import type { Esteira, Task } from "@shared/esteira"
 import { anotacoesDaRodada, devolucaoDaRodada, instrucoesDaRodada, rodadaDaTask } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Hint } from "@/components/ui/hint"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
@@ -19,6 +20,7 @@ import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { formatarCusto, formatarDuracao } from "./task-card"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modal da task (§13): título editável, tabs de fases com a anotação em
@@ -201,7 +203,9 @@ export function TaskModal({
           <div className="mx-4 mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span className="flex min-w-0 items-center gap-1.5" title={t("esteira.worktreeBase", { base: task.worktree.base })}>
               <GitBranchIcon className="size-3.5 shrink-0" />
-              <span className="truncate font-mono text-foreground">{task.worktree.branch}</span>
+              <Truncate text={task.worktree.branch}>
+                <span className="truncate font-mono text-foreground">{task.worktree.branch}</span>
+              </Truncate>
             </span>
             <button
               type="button"
@@ -393,14 +397,18 @@ export function TaskModal({
                 {dependencias.map((dep) => (
                   <li key={dep.id} className="flex items-center gap-1.5">
                     <span className={cn("size-1.5 shrink-0 rounded-full", dep.status === "concluida" ? "bg-emerald-500" : "bg-amber-500")} />
-                    <span className="min-w-0 flex-1 truncate">{dep.titulo}</span>
-                    <button
-                      type="button"
-                      onClick={() => void alterarDependencias(task.dependeDe.filter((id) => id !== dep.id))}
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
+                    <Truncate text={dep.titulo}>
+                      <span className="min-w-0 flex-1 truncate">{dep.titulo}</span>
+                    </Truncate>
+                    <Hint label={t("common.remove")}>
+                      <button
+                        type="button"
+                        onClick={() => void alterarDependencias(task.dependeDe.filter((id) => id !== dep.id))}
+                        className="shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </Hint>
                   </li>
                 ))}
               </ul>

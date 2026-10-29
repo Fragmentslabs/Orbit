@@ -5,7 +5,9 @@ import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GitBranchIcon, GlobeIco
 import type { Esteira, Task } from "@shared/esteira"
 import { rodadaDaTask } from "@shared/esteira"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
 import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Formata milissegundos como "12min" / "1h 05min". */
 export function formatarDuracao(ms: number): string {
@@ -88,59 +90,65 @@ export function TaskCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{task.titulo}</span>
+        <Truncate text={task.titulo}>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{task.titulo}</span>
+        </Truncate>
         {emExecucao ? (
-          <button
-            type="button"
-            title={t("esteira.pausar")}
-            onClick={(e) => {
-              e.stopPropagation()
-              onPausar()
-            }}
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <PauseIcon className="size-3" />
-          </button>
+          <Hint label={t("esteira.pausar")}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPausar()
+              }}
+              className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <PauseIcon className="size-3" />
+            </button>
+          </Hint>
         ) : task.status !== "concluida" ? (
           <>
           {task.status === "pausada" && (
+            <Hint label={t("esteira.retomarComInstrucao")}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRetomarComInstrucao()
+                }}
+                className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <MessageSquarePlusIcon className="size-3" />
+              </button>
+            </Hint>
+          )}
+          <Hint label={comErro ? t("esteira.retomar") : t("esteira.iniciar")}>
             <button
               type="button"
-              title={t("esteira.retomarComInstrucao")}
               onClick={(e) => {
                 e.stopPropagation()
-                onRetomarComInstrucao()
+                if (task.status === "pausada") onRetomar()
+                else onIniciar()
               }}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <MessageSquarePlusIcon className="size-3" />
+              <PlayIcon className="size-3" />
             </button>
-          )}
-          <button
-            type="button"
-            title={comErro ? t("esteira.retomar") : t("esteira.iniciar")}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (task.status === "pausada") onRetomar()
-              else onIniciar()
-            }}
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <PlayIcon className="size-3" />
-          </button>
+          </Hint>
           </>
         ) : (
-          <button
-            type="button"
-            title={t("esteira.devolver")}
-            onClick={(e) => {
-              e.stopPropagation()
-              onDevolver()
-            }}
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <CornerUpLeftIcon className="size-3" />
-          </button>
+          <Hint label={t("esteira.devolver")}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDevolver()
+              }}
+              className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <CornerUpLeftIcon className="size-3" />
+            </button>
+          </Hint>
         )}
       </div>
 
@@ -164,7 +172,9 @@ export function TaskCard({
             className="flex max-w-full items-center gap-1 rounded-full bg-muted px-1.5 py-0.5"
           >
             <ClockIcon className="size-2.5 shrink-0" />
-            <span className="truncate">{t("esteira.aguardando", { titulo: aguardandoTitulo })}</span>
+            <Truncate text={t("esteira.aguardando", { titulo: aguardandoTitulo })}>
+              <span className="truncate">{t("esteira.aguardando", { titulo: aguardandoTitulo })}</span>
+            </Truncate>
           </span>
         )}
         {eProxima && (
@@ -174,18 +184,20 @@ export function TaskCard({
           </span>
         )}
         {browserAtivo && (
-          <button
-            type="button"
-            title={t("esteira.browserEmUso")}
-            onClick={(e) => {
-              e.stopPropagation()
-              usePanelStore.getState().openAgentBrowser(browserSessionId)
-            }}
-            className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
-          >
-            <GlobeIcon className="size-2.5" />
+          <Hint label={t("esteira.browserEmUso")}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                usePanelStore.getState().openAgentBrowser(browserSessionId)
+              }}
+              className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
+            >
+       
+               <GlobeIcon className="size-2.5" />
             {t("chat.browser.testing")}
           </button>
+          </Hint>
         )}
         {emExecucao && (
           <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-primary">

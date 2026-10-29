@@ -67,6 +67,7 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { pickWelcomeTitle } from "@shared/welcome-title"
 import { VOICE_DEFAULTS } from "@shared/voice"
 
+import { Hint } from "@/components/ui/hint"
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
@@ -130,16 +131,18 @@ function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string 
   }
 
   return (
-    <button
-      type="button"
-      disabled={!openable}
-      onClick={() => void open()}
-      title={openable ? t("sources.openInPanel") : undefined}
-      className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
-    >
-      <PaperclipIcon className="size-3 text-muted-foreground" />
+    <Hint label={openable ? t("sources.openInPanel") : ""}>
+      <button
+        type="button"
+        disabled={!openable}
+        onClick={() => void open()}
+        className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
+      >
+        <
+    PaperclipIcon className="size-3 text-muted-foreground" />
       <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
     </button>
+    </Hint>
   )
 }
 

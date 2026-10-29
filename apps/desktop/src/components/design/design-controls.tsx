@@ -84,7 +84,6 @@ export function ToggleButton({
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
       aria-pressed={active}
       onClick={onClick}
@@ -130,7 +129,6 @@ export function Segmented<T extends string>({
         <button
           key={option.value}
           type="button"
-          title={option.label}
           aria-label={option.label}
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}

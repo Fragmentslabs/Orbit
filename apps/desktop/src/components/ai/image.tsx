@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import type { ImagePart } from "@shared/chat"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Imagem enviada pelo assistente na resposta (tool show_image → ImagePart).
@@ -31,20 +33,21 @@ export function Image({ src, alt, className }: {
   return (
     <>
       <figure className={cn("not-prose my-2 w-fit max-w-full", className)}>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          title={t("images.enlarge")}
-          className="block cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
-        >
-          <img
-            src={src}
-            alt={alt ?? t("images.assistantImage")}
-            loading="lazy"
-            onError={() => setFailed(true)}
-            className="max-h-80 w-auto max-w-full object-contain"
-          />
-        </button>
+        <Hint label={t("images.enlarge")}>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="block cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
+          >
+            <img
+              src={src}
+              alt={alt ?? t("images.assistantImage")}
+              loading="lazy"
+              onError={() => setFailed(true)}
+              className="max-h-80 w-auto max-w-full object-contain"
+            />
+          </button>
+        </Hint>
         {alt && (
           <figcaption className="mt-1 px-0.5 text-[11px] text-muted-foreground">{alt}</figcaption>
         )}
@@ -152,22 +155,24 @@ export function ImageLightbox({
           />
           {hasGroup && (
             <>
-              <button
-                type="button"
-                onClick={() => goTo(index - 1)}
-                title={t("images.previous")}
-                className="absolute top-1/2 left-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => goTo(index + 1)}
-                title={t("images.next")}
-                className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
-              >
-                <ChevronRight className="size-4" />
-              </button>
+              <Hint label={t("images.previous")}>
+                <button
+                  type="button"
+                  onClick={() => goTo(index - 1)}
+                  className="absolute top-1/2 left-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+              </Hint>
+              <Hint label={t("images.next")}>
+                <button
+                  type="button"
+                  onClick={() => goTo(index + 1)}
+                  className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </Hint>
               <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground backdrop-blur">
                 {t("images.counter", { current: index + 1, total })}
               </span>
@@ -193,7 +198,9 @@ export function ImageLightbox({
             {done === "saved" ? <Check className="size-3.5" /> : <Download className="size-3.5" />}
             {done === "saved" ? t("images.saved") : t("images.save")}
           </button>
-          {alt && <p className="ml-auto truncate text-xs text-muted-foreground">{alt}</p>}
+          {alt && <Truncate text={alt}>
+            <p className="ml-auto truncate text-xs text-muted-foreground">{alt}</p>
+          </Truncate>}
         </div>
       </DialogContent>
     </Dialog>
@@ -239,21 +246,22 @@ export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
                 <ImageOff className="size-4" />
               </div>
             ) : (
-              <button
-                key={part.id}
-                type="button"
-                onClick={() => setOpenIndex(i)}
-                title={part.alt ?? t("images.enlarge")}
-                className="block size-20 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
-              >
-                <img
-                  src={part.src}
-                  alt={part.alt ?? t("images.assistantImage")}
-                  loading="lazy"
-                  onError={() => setFailed((prev) => new Set(prev).add(part.id))}
-                  className="size-full object-cover"
-                />
-              </button>
+              <Hint label={part.alt ?? t("images.enlarge")}>
+                <button
+                  key={part.id}
+                  type="button"
+                  onClick={() => setOpenIndex(i)}
+                  className="block size-20 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
+                >
+                  <img
+                    src={part.src}
+                    alt={part.alt ?? t("images.assistantImage")}
+                    loading="lazy"
+                    onError={() => setFailed((prev) => new Set(prev).add(part.id))}
+                    className="size-full object-cover"
+                  />
+                </button>
+              </Hint>
             ),
           )}
         </div>

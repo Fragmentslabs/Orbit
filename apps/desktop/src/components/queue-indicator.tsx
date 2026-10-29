@@ -7,6 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "~/components/ui/collapsible"
+import { Hint } from "@/components/ui/hint"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
@@ -96,67 +97,76 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 {/* O primeiro da fila é o próximo a sair: o botão não teria o
                     que fazer nele. */}
                 {index > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => moveToFront(sessionId, msg.id)}
-                    title={t("queue.sendFirst")}
-                    className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <ArrowUpToLine className="size-3.5" />
-                  </button>
+                  <Hint label={t("queue.sendFirst")}>
+                    <button
+                      type="button"
+                      onClick={() => moveToFront(sessionId, msg.id)}
+                      className="cursor-pointer rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <ArrowUpToLine className="size-3.5" />
+                    </button>
+                  </Hint>
                 )}
                 {paused && (
+                  <Hint label={t("queue.sendNow")}>
+                    <button
+                      type="button"
+                      onClick={() => sendNow(sessionId, msg.id)}
+
+                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <SendIcon className="size-3.5" />
+                    </button>
+                  </Hint>
+                )}
+                <Hint label={editingId === msg.id ? t("queue.cancelEdit") : t("queue.edit")}>
                   <button
                     type="button"
-                    onClick={() => sendNow(sessionId, msg.id)}
-                    title={t("queue.sendNow")}
+                    onClick={() => {
+                      // Era ESTE item que estava em edição: o lápis cancela (o
+                      // texto do input fica onde está — nunca apagamos o que a
+                      // pessoa escreveu).
+                      if (editingId === msg.id) {
+                        cancelEdit(sessionId)
+                        return
+                      }
+                      // O texto do item vai para o input principal; o Enter grava
+                      // de volta aqui, sem mudar a ordem da fila.
+                      startEdit(sessionId, msg.id)
+                    }}
+
+                    className={cn(
+                      "rounded p-0.5 transition-colors hover:bg-accent hover:text-accent-foreground",
+                      editingId === msg.id ? "text-primary" : "text-muted-foreground/50",
+                    )}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </button>
+                </Hint>
+                <Hint label={t("queue.copy")}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(msg.text)
+                      setCopiedId(msg.id)
+                      setTimeout(() => setCopiedId((current) => (current === msg.id ? null : current)), 1500)
+                    }}
                     className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
                   >
-                    <SendIcon className="size-3.5" />
+       
+                           {copiedId === msg.id ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+                </button>
+                </Hint>
+                <Hint label={t("queue.cancelSend")}>
+                  <button
+                    type="button"
+                    onClick={() => remove(sessionId, msg.id)}
+
+                    className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="size-3.5" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Era ESTE item que estava em edição: o lápis cancela (o
-                    // texto do input fica onde está — nunca apagamos o que a
-                    // pessoa escreveu).
-                    if (editingId === msg.id) {
-                      cancelEdit(sessionId)
-                      return
-                    }
-                    // O texto do item vai para o input principal; o Enter grava
-                    // de volta aqui, sem mudar a ordem da fila.
-                    startEdit(sessionId, msg.id)
-                  }}
-                  title={editingId === msg.id ? t("queue.cancelEdit") : t("queue.edit")}
-                  className={cn(
-                    "rounded p-0.5 transition-colors hover:bg-accent hover:text-accent-foreground",
-                    editingId === msg.id ? "text-primary" : "text-muted-foreground/50",
-                  )}
-                >
-                  <PencilIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(msg.text)
-                    setCopiedId(msg.id)
-                    setTimeout(() => setCopiedId((current) => (current === msg.id ? null : current)), 1500)
-                  }}
-                  title={t("queue.copy")}
-                  className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
-                >
-                  {copiedId === msg.id ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(sessionId, msg.id)}
-                  title={t("queue.cancelSend")}
-                  className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <X className="size-3.5" />
-                </button>
+                </Hint>
               </span>
             </div>
           ))}
@@ -169,14 +179,16 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
         <div className="mx-1 mb-1 flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary">
           <PencilIcon className="size-3" />
           {t("queue.editing")}
-          <button
-            type="button"
-            onClick={() => cancelEdit(sessionId)}
-            title={t("queue.cancelEdit")}
-            className="ml-auto rounded-sm p-0.5 transition-colors hover:bg-primary/20"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("queue.cancelEdit")}>
+            <button
+              type="button"
+              onClick={() => cancelEdit(sessionId)}
+
+              className="ml-auto rounded-sm p-0.5 transition-colors hover:bg-primary/20"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         </div>
       )}
     </Collapsible>

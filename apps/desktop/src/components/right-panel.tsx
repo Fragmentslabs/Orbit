@@ -23,6 +23,8 @@ import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
 import { MemoryTab } from "@/src/components/memory-tab"
+import { Hint } from "@/components/ui/hint"
+import { Truncate, TruncatedText } from "@/components/ui/truncated-text"
 
 import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
@@ -176,7 +178,9 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
     // z-20: o `@container` cria stacking context (layout containment), então
     // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat
     <div className="@container relative z-20 flex min-w-0 items-center gap-2 px-1 pb-2">
-      <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
+      <Truncate text={session.title}>
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
+      </Truncate>
       <div className="hidden min-w-0 items-center gap-2 @xl:flex">
         {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
         {folders.length > 0 && <FolderSelector folders={folders} onFoldersChange={handleFoldersChange} compact />}
@@ -498,7 +502,9 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
                       )}
                     />
                     <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                    <Truncate text={p.label}>
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                    </Truncate>
                     <span className="hidden shrink-0 items-center gap-1 text-[10px] text-sidebar-foreground/60 @xl:flex">
                       <span>PID {p.pid}</span>
                       <span>·</span>
@@ -511,27 +517,31 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
                       )}
                     </span>
                     {p.status === "running" && p.urls?.length ? (
+                      <Hint label={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                          }}
+                          className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
+                        >
+                          <Globe className="size-3" />
+                        </button>
+                      </Hint>
+                    ) : null}
+                    <Hint label={t("panel.processes.kill")}>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                          void killProcess(p.pid, p.sessionId)
                         }}
-                        title={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}
-                        className="flex size-5 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
+                        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
                       >
-                        <Globe className="size-3" />
+                        <Trash2 className="size-3" />
                       </button>
-                    ) : null}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void killProcess(p.pid, p.sessionId)
-                      }}
-                      title={t("panel.processes.kill")}
-                      className="flex size-5 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
+                    </Hint>
                   </div>
                 )
               })
@@ -836,15 +846,18 @@ export function RightPanel() {
             const hasUnread = isChatTab && (unreadCounts[tab.sessionId!] ?? 0) > 0
             const closeOnLeft = tabClosePosition === "left"
             const closeButton = (
-              <button
-                onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
-                className={cn(
-                  "flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10",
-                  closeOnLeft ? "mr-0.5" : "ml-0.5",
-                )}
-              >
-                <X className="size-2.5" />
-              </button>
+              <Hint label={t("panel.closeTab")}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
+                  className={cn(
+                    "flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10",
+                    closeOnLeft ? "mr-0.5" : "ml-0.5",
+                  )}
+                >
+                  <X className="size-2.5" />
+                </button>
+              </Hint>
             )
             return (
               <div
@@ -862,7 +875,7 @@ export function RightPanel() {
               >
                 {closeOnLeft && closeButton}
                 <TabIcon className="size-3.5 shrink-0" />
-                <span className="truncate max-w-24">{tab.title}</span>
+                <TruncatedText text={tab.title} className="max-w-24" />
                 {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
                 {isError && (
                   <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
@@ -877,18 +890,20 @@ export function RightPanel() {
           {/* O "+" abre a tela inicial do painel (grade de abas + processos em
               background) em vez de um dropdown: uma aba nova vira uma escolha
               informada, e o rodapé de processos fica sempre alcançável. */}
-          <button
-            onClick={() => setSelectorOpen(!selectorOpen)}
-            title={t("panel.selector.title")}
-            className={cn(
-              "ml-auto flex size-5 shrink-0 items-center justify-center rounded-md transition-colors",
-              selectorOpen
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent",
-            )}
-          >
-            <PlusIcon className="size-3.5" />
-          </button>
+          <Hint label={t("panel.selector.title")}>
+            <button
+              type="button"
+              onClick={() => setSelectorOpen(!selectorOpen)}
+              className={cn(
+                "ml-auto flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors",
+                selectorOpen
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+              )}
+            >
+              <PlusIcon className="size-3.5" />
+            </button>
+          </Hint>
         </div>
       )}
 

@@ -69,6 +69,7 @@ export function SystemPanel() {
               type="button"
               role="switch"
               aria-checked={enabled}
+              aria-label={t("system.openWith.enabled")}
               disabled={!status?.supported}
               onClick={() => void toggle()}
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${

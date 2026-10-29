@@ -7,6 +7,7 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { fsApi, windowApi } from "@/src/lib/ipc"
 import { collectFolderPaths, missingFolders, type MissingFolder } from "@/src/lib/relocate"
 import { useSessionStore } from "@/src/stores/session-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Pastas que sumiram do disco.
@@ -107,10 +108,14 @@ export function MissingFoldersBanner() {
             className="flex items-center gap-2 rounded-md bg-background/60 px-2 py-1"
           >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs/relaxed font-medium">{folder.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground" title={folder.path}>
-                {folder.path}
-              </p>
+              <Truncate text={folder.name}>
+                <p className="truncate text-xs/relaxed font-medium">{folder.name}</p>
+              </Truncate>
+              <Truncate text={folder.path}>
+                <p className="truncate text-[11px] text-muted-foreground" >
+                  {folder.path}
+                </p>
+              </Truncate>
             </div>
             <Button variant="outline" size="xs" onClick={() => void relocate(folder.path)}>
               <FolderSearch />

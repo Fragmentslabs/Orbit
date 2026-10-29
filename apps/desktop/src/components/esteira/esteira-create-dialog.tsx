@@ -27,6 +27,8 @@ import { useReasoningPrefsStore } from "@/src/stores/reasoning-prefs"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { cn } from "@/lib/utils"
 import { FaseEditor, useRotuloModelo, useSalvarTemplateDaFase, type DestinoFase } from "./fase-editor"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modal "Nova Esteira" (§3).
@@ -309,9 +311,12 @@ export function EsteiraCreateDialog({
                 {pastas[0] && <BranchSelector repoPath={pastas[0]} />}
               </div>
               {pastas.length > 0 && (
-                <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                  {t("esteira.repositorioPrincipal")}: <span className="text-foreground">{pastas[0]}</span>
-                </p>
+                
+                  <Truncate>
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {t("esteira.repositorioPrincipal")}: <span className="text-foreground">{pastas[0]}</span>
+                    </p>
+                  </Truncate>
               )}
             </Campo>
 
@@ -362,25 +367,30 @@ export function EsteiraCreateDialog({
                     {disponiveis.map((tpl) => (
                       <DropdownMenuItem key={tpl.id} onClick={() => setFases((atual) => [...atual, doTemplate(tpl)])}>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs">{rotulo(tpl).nome}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">{rotulo(tpl).descricao}</p>
+                          <Truncate text={rotulo(tpl).nome}>
+                            <p className="truncate text-xs">{rotulo(tpl).nome}</p>
+                          </Truncate>
+                          <Truncate text={rotulo(tpl).descricao}>
+                            <p className="truncate text-[10px] text-muted-foreground">{rotulo(tpl).descricao}</p>
+                          </Truncate>
                         </div>
                         {/* Só as criadas pelo usuário saem; as embutidas são do app. */}
                         {tpl.doUsuario && (
-                          <button
-                            type="button"
-                            aria-label={t("esteira.excluirFase")}
-                            title={t("esteira.excluirFase")}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              e.preventDefault()
-                              setMenuFasesAberto(false)
-                              setExcluindo(tpl)
-                            }}
-                            className="ml-2 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <XIcon className="size-3" />
-                          </button>
+                          <Hint label={t("esteira.excluirFase")}>
+                            <button
+                              type="button"
+                              aria-label={t("esteira.excluirFase")}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                setMenuFasesAberto(false)
+                                setExcluindo(tpl)
+                              }}
+                              className="ml-2 shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <XIcon className="size-3" />
+                            </button>
+                          </Hint>
                         )}
                       </DropdownMenuItem>
                     ))}
@@ -408,14 +418,15 @@ export function EsteiraCreateDialog({
               <div className="flex items-center gap-2">
                 <Switch checked={commitAoFinal} onCheckedChange={aoMudarCommit} />
                 <span className="text-xs text-foreground">{t("esteira.commit")}</span>
-                <button
-                  type="button"
-                  onClick={() => setPromptAberto(true)}
-                  title={t("esteira.commitPromptTitulo")}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Settings2Icon className="size-3.5" />
-                </button>
+                <Hint label={t("esteira.commitPromptTitulo")}>
+                  <button
+                    type="button"
+                    onClick={() => setPromptAberto(true)}
+                    className="cursor-pointer text-muted-foreground hover:text-foreground"
+                  >
+                    <Settings2Icon className="size-3.5" />
+                  </button>
+                </Hint>
               </div>
               <label className="flex cursor-pointer items-center gap-2">
                 {/* Push depende do commit final: sem ele, o push subiria um
@@ -545,39 +556,49 @@ function FaseLinha({
         {...attributes}
         {...listeners}
         type="button"
+        aria-label={t("common.reorder")}
         className="shrink-0 cursor-grab text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
       >
         <GripVerticalIcon className="size-3.5" />
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium">{fase.nome}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{fase.descricao}</p>
+        <Truncate text={fase.nome}>
+          <p className="truncate text-xs font-medium">{fase.nome}</p>
+        </Truncate>
+        <Truncate text={fase.descricao}>
+          <p className="truncate text-[11px] text-muted-foreground">{fase.descricao}</p>
+        </Truncate>
       </div>
       {rotuloModelo && (
-        <span
-          className={cn(
-            "max-w-44 shrink-0 truncate rounded px-1.5 py-0.5 text-[10px]",
-            proprio && mostrarPadrao ? "bg-primary/10 text-primary" : "text-muted-foreground",
-          )}
-          title={proprio || !mostrarPadrao ? rotuloModelo : `${rotuloModelo} (${t("esteira.padrao")})`}
-        >
-          {rotuloModelo}
-        </span>
+        <Truncate text={rotuloModelo}>
+          <span
+            className={cn(
+              "max-w-44 shrink-0 truncate rounded px-1.5 py-0.5 text-[10px]",
+              proprio && mostrarPadrao ? "bg-primary/10 text-primary" : "text-muted-foreground",
+            )}
+          >
+            {rotuloModelo}
+          </span>
+        </Truncate>
       )}
-      <button
-        type="button"
-        onClick={onEditar}
-        className="shrink-0 text-muted-foreground hover:text-foreground"
-      >
-        <PencilIcon className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={onRemover}
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-      >
-        <XIcon className="size-3.5" />
-      </button>
+      <Hint label={t("common.edit")}>
+        <button
+          type="button"
+          onClick={onEditar}
+          className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
+        >
+          <PencilIcon className="size-3.5" />
+        </button>
+      </Hint>
+      <Hint label={t("common.remove")}>
+        <button
+          type="button"
+          onClick={onRemover}
+          className="shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
+        >
+          <XIcon className="size-3.5" />
+        </button>
+      </Hint>
     </div>
   )
 }

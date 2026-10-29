@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ListaTasksBuscavel } from "./task-picker"
 import { cn } from "@/lib/utils"
 import { MediaEmbed } from "./media-embed"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modal de nova task: título, descrição e dependências.
@@ -147,7 +148,9 @@ export function SeletorDependencias({
                 key={task.id}
                 className="flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px]"
               >
-                <span className="truncate">{task.titulo}</span>
+                <Truncate text={task.titulo}>
+                  <span className="truncate">{task.titulo}</span>
+                </Truncate>
                 <span
                   role="button"
                   tabIndex={-1}

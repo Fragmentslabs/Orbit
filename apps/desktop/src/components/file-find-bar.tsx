@@ -20,6 +20,8 @@ import type {
 } from "@/src/components/code-editor";
 import { buildMatcher } from "@/src/lib/text-match";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export interface FileFindBarProps {
   /** O editor do arquivo aberto — a barra só manda; quem casa é ele. */
@@ -188,53 +190,61 @@ export function FileFindBar({ editor, onClose }: FileFindBarProps) {
             </PopoverContent>
           </Popover>
           <span className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+          <Hint label={t("workspaceSearch.replaceToggle")}>
+            <button
+              type="button"
+              onClick={() => setReplaceOpen((value) => !value)}
+
+              aria-label={t("workspaceSearch.replaceToggle")}
+              aria-expanded={replaceOpen}
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-accent",
+                replaceOpen
+                  ? "bg-primary/15 text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              <ChevronDownIcon
+                className={cn("size-3.5 transition-transform", !replaceOpen && "-rotate-90")}
+              />
+            </button>
+          </Hint>
+        </div>
+        <Hint label={t("fileFind.previous")}>
           <button
             type="button"
-            onClick={() => setReplaceOpen((value) => !value)}
-            title={t("workspaceSearch.replaceToggle")}
-            aria-label={t("workspaceSearch.replaceToggle")}
-            aria-expanded={replaceOpen}
-            className={cn(
-              "flex size-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-accent",
-              replaceOpen
-                ? "bg-primary/15 text-foreground"
-                : "text-muted-foreground",
-            )}
+            onClick={() => step("prev")}
+            disabled={found.total === 0}
+
+            aria-label={t("fileFind.previous")}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ChevronDownIcon
-              className={cn("size-3.5 transition-transform", !replaceOpen && "-rotate-90")}
-            />
+            <ChevronUpIcon className="size-3.5" />
           </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => step("prev")}
-          disabled={found.total === 0}
-          title={t("fileFind.previous")}
-          aria-label={t("fileFind.previous")}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ChevronUpIcon className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => step("next")}
-          disabled={found.total === 0}
-          title={t("fileFind.next")}
-          aria-label={t("fileFind.next")}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ChevronDownIcon className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          title={t("fileFind.close")}
-          aria-label={t("fileFind.close")}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <XIcon className="size-3.5" />
-        </button>
+        </Hint>
+        <Hint label={t("fileFind.next")}>
+          <button
+            type="button"
+            onClick={() => step("next")}
+            disabled={found.total === 0}
+
+            aria-label={t("fileFind.next")}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronDownIcon className="size-3.5" />
+          </button>
+        </Hint>
+        <Hint label={t("fileFind.close")}>
+          <button
+            type="button"
+            onClick={onClose}
+
+            aria-label={t("fileFind.close")}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        </Hint>
       </div>
       {replaceOpen && (
         <div className="flex min-w-0 items-center gap-1.5">
@@ -250,7 +260,6 @@ export function FileFindBar({ editor, onClose }: FileFindBarProps) {
             <button
               type="button"
               onClick={() => setPreserveCase((value) => !value)}
-              title={t("workspaceSearch.preserveCase")}
               aria-label={t("workspaceSearch.preserveCase")}
               aria-pressed={preserveCase}
               className={cn(
@@ -304,7 +313,10 @@ function FilterOption({
       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-accent"
     >
       <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      
+        <Truncate>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+        </Truncate>
       <CheckIcon
         className={cn("size-3 shrink-0 text-primary", !active && "opacity-0")}
       />

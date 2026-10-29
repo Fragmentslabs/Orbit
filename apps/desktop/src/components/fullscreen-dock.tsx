@@ -11,6 +11,8 @@ import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { UserMessageText } from "@/src/components/messages/shared"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Peças compartilhadas das telas cheias (browser, Motion e Design): o composer
@@ -121,17 +123,19 @@ export function FullscreenComposer({
       >
         <div className="relative flex h-7 items-center justify-center">
           <span className="h-1 w-10 rounded-full bg-muted-foreground/40" />
-          <button
-            type="button"
-            onClick={onTogglePin}
-            title={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}
-            className={cn(
-              "absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
-              pinned && "text-primary hover:text-primary",
-            )}
-          >
-            {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
+          <Hint label={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}>
+            <button
+              type="button"
+              onClick={onTogglePin}
+              className={cn(
+                "absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+                pinned && "text-primary hover:text-primary",
+              )}
+            >
+       
+               {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
           </button>
+          </Hint>
         </div>
         {/* Fundo opaco próprio: o InputGroup do CodeInput é semitransparente e,
             sobre a página em tela cheia, ficaria ilegível. */}
@@ -197,16 +201,18 @@ export function FloatingSidebar({
     >
       {/* Faixa de hover na borda: só enquanto a sidebar está fechada */}
       {!visible && <div className={cn("pointer-events-auto absolute inset-y-0 w-1.5", left ? "left-0" : "right-0")} />}
-      <button
-        type="button"
-        onClick={onToggle}
-        title={open ? closeLabel : openLabel}
-        aria-label={open ? closeLabel : openLabel}
-        className="pointer-events-auto absolute top-2 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 ease-linear hover:bg-muted hover:text-foreground"
-        style={left ? { left: toggleOffset } : { right: toggleOffset }}
-      >
-        <ToggleIcon open={open} className="size-4" />
-      </button>
+      <Hint label={open ? closeLabel : openLabel}>
+        <button
+          type="button"
+          onClick={onToggle}
+
+          aria-label={open ? closeLabel : openLabel}
+          className="pointer-events-auto absolute top-2 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 ease-linear hover:bg-muted hover:text-foreground"
+          style={left ? { left: toggleOffset } : { right: toggleOffset }}
+        >
+          <ToggleIcon open={open} className="size-4" />
+        </button>
+      </Hint>
       <div
         aria-hidden={!visible}
         className={cn(
@@ -382,13 +388,14 @@ export function FullscreenChatFeed({
         )}
       >
         {/* Alça: sempre visível; ponto pulsante = agente ativo (verde) ou ask pendente (âmbar) */}
-        <button
-          type="button"
-          onClick={onTogglePin}
-          title={expanded ? t("browser.hideChatFeed") : t("browser.showChatFeed")}
-          className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <span className="relative flex items-center justify-center">
+        <Hint label={expanded ? t("browser.hideChatFeed") : t("browser.showChatFeed")}>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          >
+       
+           <span className="relative flex items-center justify-center">
             <MessagesSquareIcon className="size-4" />
             {(isBusy || hasAsks) && (
               <span className="absolute -right-1.5 -top-1.5 flex size-2">
@@ -405,13 +412,16 @@ export function FullscreenChatFeed({
             )}
           </span>
         </button>
+        </Hint>
         {expanded && (
           <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2">
               <MessagesSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                {title ?? (fixedSessionId ? t("computer.panels.chat") : activeSession?.title) ?? t("browser.chatFeed")}
-              </span>
+              <Truncate text={title ?? (fixedSessionId ? t("computer.panels.chat") : activeSession?.title) ?? t("browser.chatFeed")}>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                  {title ?? (fixedSessionId ? t("computer.panels.chat") : activeSession?.title) ?? t("browser.chatFeed")}
+                </span>
+              </Truncate>
               {isBusy && (
                 <span className="flex shrink-0 items-center gap-1 text-[11px] text-emerald-500">
                   <span className="relative flex size-1.5">
@@ -421,17 +431,19 @@ export function FullscreenChatFeed({
                   {t("chat.code.analyzing")}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={onTogglePin}
-                title={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}
-                className={cn(
-                  "flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
-                  pinned && "text-primary hover:text-primary",
-                )}
-              >
-                {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
+              <Hint label={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}>
+                <button
+                  type="button"
+                  onClick={onTogglePin}
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+                    pinned && "text-primary hover:text-primary",
+                  )}
+                >
+       
+                       {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
               </button>
+              </Hint>
             </div>
             <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-3">
               {messages.length === 0 && !hasAsks ? (
@@ -581,22 +593,26 @@ export function ActionsFeed({
           expanded ? "h-[min(72vh,600px)] w-80" : "h-12 w-9",
         )}
       >
-        <button
-          type="button"
-          onClick={onTogglePin}
-          title={title}
-          className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <span className="relative flex items-center justify-center">
+        <Hint label={title}>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          >
+       
+           <span className="relative flex items-center justify-center">
             <Icon className="size-4" />
             {(running || isBusy) && <FeedPulse className="absolute -right-1.5 -top-1.5" />}
           </span>
         </button>
+        </Hint>
         {expanded && (
           <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2">
               <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+              <Truncate text={title}>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+              </Truncate>
               {headerExtra}
               <FeedPinButton pinned={pinned} onToggle={onTogglePin} />
             </div>
@@ -656,17 +672,19 @@ function ActionRow({ part, label, latest }: { part: ToolPart; label: string; lat
 export function FeedPinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
   const { t } = useTranslation()
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      title={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
-        pinned && "text-primary hover:text-primary",
-      )}
-    >
-      {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
+    <Hint label={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+          pinned && "text-primary hover:text-primary",
+        )}
+      >
+        {
+    pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
     </button>
+    </Hint>
   )
 }
 

@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatSizeMb } from "@/src/lib/voice-models"
 import { voiceApi } from "@/src/lib/voice-ipc"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Modelos do catálogo com o estado de cada um e as ações (baixar, cancelar,
@@ -210,9 +212,11 @@ export function VoiceModelsSection({
           <div key={model.id} className="rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
             <div className="flex items-center gap-2">
               <Icon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium" title={model.label}>
-                {shortModelName(model.label, model.id)}
-              </span>
+              <Truncate text={shortModelName(model.label, model.id)}>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium" >
+                  {shortModelName(model.label, model.id)}
+                </span>
+              </Truncate>
               {downloading ? (
                 <Button size="sm" variant="outline" onClick={() => cancelDownload(model.id)}>
                   {t("voice.settings.models.cancel")}
@@ -222,15 +226,17 @@ export function VoiceModelsSection({
                   <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
                 </span>
               ) : downloaded ? (
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="shrink-0"
-                  title={t("voice.settings.models.remove")}
-                  onClick={() => removeModel(model.id)}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                <Hint label={t("voice.settings.models.remove")}>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="shrink-0"
+
+                    onClick={() => removeModel(model.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </Hint>
               ) : (
                 <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => startDownload(model.id)}>
                   <Download className="size-3" />
@@ -246,9 +252,11 @@ export function VoiceModelsSection({
               <Badge variant="ghost" className="shrink-0 text-[10px] text-muted-foreground">
                 {t(kindLabelKey(model.kind))}
               </Badge>
-              <span className="min-w-0 truncate" title={meta}>
-                {meta}
-              </span>
+              <Truncate text={meta}>
+                <span className="min-w-0 truncate" >
+                  {meta}
+                </span>
+              </Truncate>
             </div>
 
             {/* Baixado e ainda não utilizável: o selo (baixado) continua valendo,

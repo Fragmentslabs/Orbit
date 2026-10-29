@@ -6,6 +6,7 @@ import { normalizeText } from "@shared/memory"
 import { SLASH_ACTION_COMMANDS } from "@/src/lib/slash-actions"
 import { commandMatches, type SlashCommand } from "@/src/lib/slash-commands"
 import { usePromptInputController } from "@/src/components/ai/prompt-input"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Paleta "/" dos inputs: abre quando o texto começa com "/", filtra conforme
@@ -140,9 +141,12 @@ export function SlashPalette({ commands, children, className }: {
                     >
                       <span className="shrink-0 font-medium">{command.label}</span>
                       {command.description && (
-                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                          {command.description}
-                        </span>
+                        
+                          <Truncate>
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                              {command.description}
+                            </span>
+                          </Truncate>
                       )}
                       {command.active !== undefined && (
                         <span

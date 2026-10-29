@@ -27,6 +27,7 @@ import { FolderSelector } from "@/src/components/folder-selector"
 import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
+import { Truncate } from "@/components/ui/truncated-text"
 
 interface ChatHeaderProps {
   title?: string
@@ -124,7 +125,9 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           preso dentro dele e o degrade do topo do chat (z-10, num irmão
           posterior) passa por cima do header inteiro. */}
       <div className="@container relative z-20 flex items-center gap-1 min-w-0 flex-1">
-        <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
+        <Truncate text={title ?? t("header.newChat")}>
+          <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
+        </Truncate>
         {workspaceMode === 'code' && (
           <>
             {!manyFolders && (

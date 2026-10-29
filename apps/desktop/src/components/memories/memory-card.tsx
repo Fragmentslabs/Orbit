@@ -22,6 +22,8 @@ import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CATEGORY_LABEL, KIND_BADGE, KIND_COLOR, KIND_LABEL, canPromote } from "./meta"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Quantos vínculos o card mostra antes de remeter ao painel de edição. */
 const MAX_RELATED_IN_CARD = 3
@@ -134,15 +136,17 @@ function EditDialog({ memory, open, onOpenChange }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 pr-6">
             {trail.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6 shrink-0"
-                title={t("memories.back")}
-                onClick={goBack}
-              >
-                <ArrowLeft className="size-3.5" />
-              </Button>
+              <Hint label={t("memories.back")}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 shrink-0"
+
+                  onClick={goBack}
+                >
+                  <ArrowLeft className="size-3.5" />
+                </Button>
+              </Hint>
             )}
             {t("memories.editTitle")}
           </DialogTitle>
@@ -257,7 +261,10 @@ function EditDialog({ memory, open, onOpenChange }: {
                         className="size-1.5 shrink-0 rounded-full"
                         style={{ backgroundColor: KIND_COLOR[r.kind] }}
                       />
-                      <span className="truncate">{r.text}</span>
+                      
+                        <Truncate>
+                            <span className="truncate">{r.text}</span>
+                        </Truncate>
                       {changed && <span className="shrink-0 text-[10px] text-primary">•</span>}
                     </button>
                   )
@@ -371,42 +378,52 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
         <p className="min-w-0 flex-1 text-sm leading-snug line-clamp-2">{memory.text}</p>
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/card:opacity-100">
           {memory.hasDoc && (
-            <Button variant="ghost" size="icon" className="size-6" title={t("memories.viewDoc")} onClick={() => setDocOpen(true)}>
-              <FileText className="size-3.5" />
-            </Button>
+            <Hint label={t("memories.viewDoc")}>
+              <Button variant="ghost" size="icon" className="size-6"  onClick={() => setDocOpen(true)}>
+                <FileText className="size-3.5" />
+              </Button>
+            </Hint>
           )}
           {originSession && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              title={t("memories.openOriginSession", { title: originSession.title })}
-              onClick={() => {
-                if (originSession.mode !== mode) setMode(originSession.mode)
-                setView("chat")
-                void selectSession(originSession.mode, originSession.id)
-              }}
-            >
-              <ExternalLink className="size-3.5" />
-            </Button>
+            <Hint label={t("memories.openOriginSession", { title: originSession.title })}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+
+                onClick={() => {
+                  if (originSession.mode !== mode) setMode(originSession.mode)
+                  setView("chat")
+                  void selectSession(originSession.mode, originSession.id)
+                }}
+              >
+                <ExternalLink className="size-3.5" />
+              </Button>
+            </Hint>
           )}
           {canPromote(memory) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              title={memory.kind === "seasonal" ? t("memories.promoteCore") : t("memories.promoteDecision")}
-              onClick={() => void promote(memory.id)}
-            >
-              <ArrowUpCircle className="size-3.5" />
-            </Button>
+            <Hint label={memory.kind === "seasonal" ? t("memories.promoteCore") : t("memories.promoteDecision")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+
+                onClick={() => void promote(memory.id)}
+              >
+                <ArrowUpCircle className="size-3.5" />
+              </Button>
+            </Hint>
           )}
-          <Button variant="ghost" size="icon" className="size-6" title={t("memories.edit")} onClick={() => setEditing(true)}>
-            <Pencil className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="size-6" title={t("memories.delete")} onClick={() => setConfirmDelete(true)}>
-            <Trash2 className="size-3.5" />
-          </Button>
+          <Hint label={t("memories.edit")}>
+            <Button variant="ghost" size="icon" className="size-6"  onClick={() => setEditing(true)}>
+              <Pencil className="size-3.5" />
+            </Button>
+          </Hint>
+          <Hint label={t("memories.delete")}>
+            <Button variant="ghost" size="icon" className="size-6"  onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </Hint>
         </div>
       </div>
 

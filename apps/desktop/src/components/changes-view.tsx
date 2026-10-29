@@ -21,12 +21,14 @@ import {
   ArtifactTitle,
 } from "@/src/components/ai/artifact";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/ui/hint";
 import {
   getBaseName,
   joinPath,
   type GitRepoEntry,
   type GitWorkingDiffResult,
 } from "@/src/lib/folders";
+import { Truncate } from "@/components/ui/truncated-text";
 
 /** Pedido de foco num arquivo: o `nonce` faz o mesmo arquivo valer de novo. */
 export interface RevealRequest {
@@ -187,12 +189,15 @@ function DiffSection({
               !open && "-rotate-90",
             )}
           />
-          <span
-            className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-            title={label}
-          >
-            {label}
-          </span>
+          
+            <Truncate>
+                <span
+                className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+                title={label}
+              >
+                {label}
+              </span>
+            </Truncate>
           <span className="ml-auto flex shrink-0 items-center gap-2 pl-2 font-mono text-[11px] tabular-nums">
             {file.added > 0 && (
               <span className="text-emerald-600 dark:text-emerald-400">
@@ -208,14 +213,16 @@ function DiffSection({
         </button>
         {/* A lista à direita leva ao diff, não ao arquivo. Sem esta porta, um
             arquivo alterado ficaria impossível de abrir para editar. */}
-        <button
-          type="button"
-          onClick={onOpenFile}
-          title={t("folders.openFile")}
-          className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <FileCode2Icon className="size-3.5" />
-        </button>
+        <Hint label={t("folders.openFile")}>
+          <button
+            type="button"
+            onClick={onOpenFile}
+
+            className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <FileCode2Icon className="size-3.5" />
+          </button>
+        </Hint>
       </div>
 
       {open &&
@@ -540,18 +547,21 @@ export function ChangesView({
                 <div key={group.repo.path}>
                   {showHeader && (
                     <div className="mb-2 flex items-center gap-2 border-b border-border/50 pb-1">
-                      <span
-                        className="min-w-0 truncate text-xs font-medium"
-                        title={group.repo.relative || group.repo.name}
-                      >
-                        {group.repo.name}
-                      </span>
+                      <Truncate text={group.repo.name}>
+                        <span
+                          className="min-w-0 truncate text-xs font-medium"
+                        >
+                          {group.repo.name}
+                        </span>
+                      </Truncate>
                       {/* Projeto aninhado: o caminho desfaz a dúvida de qual
                           "front" é este. */}
                       {group.repo.relative.includes("/") && (
-                        <span className="min-w-0 truncate text-[10px] text-muted-foreground">
-                          {group.repo.relative}
-                        </span>
+                        <Truncate text={group.repo.relative}>
+                          <span className="min-w-0 truncate text-[10px] text-muted-foreground">
+                            {group.repo.relative}
+                          </span>
+                        </Truncate>
                       )}
                       <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums">
                         <span className="text-muted-foreground">

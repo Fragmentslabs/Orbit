@@ -14,7 +14,9 @@ import {
 import type { MotionBundle, MotionBundleFile } from "@shared/media"
 import { cn } from "@/lib/utils"
 import { motionApi } from "@/src/lib/ipc"
+import { Truncate } from "@/components/ui/truncated-text"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * O card da PEÇA no chat: um lugar só para os arquivos que a composição foi
  * juntando enquanto era construída.
@@ -159,14 +161,20 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium text-foreground">{bundle.name}</span>
+              
+                <Truncate>
+                    <span className="truncate text-sm font-medium text-foreground">{bundle.name}</span>
+                </Truncate>
               {fresh > 0 && (
                 <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                   {t("motion.bundle.new", { count: fresh })}
                 </span>
               )}
             </div>
-            <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+            
+              <Truncate>
+                  <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+              </Truncate>
           </div>
           <ChevronRight
             className={cn(
@@ -206,15 +214,17 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
                 {opening ? <Loader2 className="size-3 animate-spin" /> : <Clapperboard className="size-3" />}
                 {t("motion.openTab")}
               </button>
-              <button
-                type="button"
-                onClick={revealFolder}
-                title={bundle.folder}
-                className="flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <FolderOpen className="size-3" />
+              <Hint label={bundle.folder}>
+                <button
+                  type="button"
+                  onClick={revealFolder}
+                  className="flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+       
+                       <FolderOpen className="size-3" />
                 {t("motion.bundle.openFolder")}
               </button>
+              </Hint>
             </div>
             {gone && (
               <p className="mt-1.5 text-[11px] text-destructive">{t("motion.gone")}</p>
@@ -274,15 +284,16 @@ function FileRow({ motionId, file }: { motionId: string; file: MotionBundleFile 
       ) : (
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
       )}
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-[12px]",
-          file.used ? "text-foreground" : "text-muted-foreground",
-        )}
-        title={file.name}
-      >
-        {file.name}
-      </span>
+      <Truncate text={file.name}>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[12px]",
+            file.used ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {file.name}
+        </span>
+      </Truncate>
       <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
         {formatBytes(file.size)}
       </span>

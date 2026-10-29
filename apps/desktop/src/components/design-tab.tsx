@@ -25,6 +25,7 @@ import {
 import { DESIGN_SCHEME } from "@shared/media"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Hint } from "@/components/ui/hint"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,6 +67,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { FloatingSidebar, FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Editor do canvas de design na aba do painel direito — navegável, selecionável
@@ -1371,7 +1373,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          <Truncate text={title}>
+            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+          </Truncate>
           {wide && boards.length > 0 && (
             <Badge variant="outline" className="shrink-0">
               {t("design.boardsCount", { count: boards.length })}
@@ -1379,38 +1383,41 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(tool === "select" && "bg-primary/15 text-primary hover:bg-primary/20")}
-            aria-pressed={tool === "select"}
-            title={t("design.tools.select")}
-            aria-label={t("design.tools.select")}
-            onClick={() => {
-              setTool("select")
-              setPlaying(null)
-            }}
-          >
-            <MousePointer2 className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(tool === "hand" && "bg-primary/15 text-primary hover:bg-primary/20")}
-            aria-pressed={tool === "hand"}
-            title={t("design.tools.hand")}
-            aria-label={t("design.tools.hand")}
-            onClick={() => setTool("hand")}
-          >
-            <Hand className="size-3.5" />
-          </Button>
+          <Hint label={t("design.tools.select")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(tool === "select" && "bg-primary/15 text-primary hover:bg-primary/20")}
+              aria-pressed={tool === "select"}
+
+              aria-label={t("design.tools.select")}
+              onClick={() => {
+                setTool("select")
+                setPlaying(null)
+              }}
+            >
+              <MousePointer2 className="size-3.5" />
+            </Button>
+          </Hint>
+          <Hint label={t("design.tools.hand")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(tool === "hand" && "bg-primary/15 text-primary hover:bg-primary/20")}
+              aria-pressed={tool === "hand"}
+
+              aria-label={t("design.tools.hand")}
+              onClick={() => setTool("hand")}
+            >
+              <Hand className="size-3.5" />
+            </Button>
+          </Hint>
           <div className="mx-1 h-4 w-px bg-border" />
           {/* No painel estreito o −/+ sai: o zoom segue no Ctrl+roda, na pinça
               e nos atalhos, e o título do canvas precisa do espaço. */}
           {wide && <IconAction icon={Minus} label={t("design.zoomOut")} onClick={() => zoomCenter((z) => z / 1.25)} />}
           <button
             type="button"
-            title={t("design.fit")}
             onClick={fit}
             className="w-10 shrink-0 rounded text-center text-[11px] tabular-nums text-muted-foreground hover:bg-accent/50 hover:text-foreground"
           >
@@ -1418,16 +1425,18 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           </button>
           {wide && <IconAction icon={Plus} label={t("design.zoomIn")} onClick={() => zoomCenter((z) => z * 1.25)} />}
           <div className="mx-1 h-4 w-px bg-border" />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={!canUndo}
-            title={t("design.undo")}
-            aria-label={t("design.undo")}
-            onClick={undo}
-          >
-            <Undo2 className="size-3.5" />
-          </Button>
+          <Hint label={t("design.undo")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!canUndo}
+
+              aria-label={t("design.undo")}
+              onClick={undo}
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+          </Hint>
           <IconAction
             icon={RotateCw}
             label={t("design.reload")}
@@ -1530,36 +1539,39 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
                     className="absolute left-0 flex items-center justify-between"
                     style={{ bottom: "100%", marginBottom: 4 / zoom, width: board.w, gap: 8 / zoom, fontSize: 11 / zoom, lineHeight: 1.3 }}
                   >
-                    <div
-                      className={cn(
-                        "min-w-0 cursor-default truncate font-medium whitespace-nowrap",
-                        isBoardSelected || isPlaying ? "text-primary" : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onPointerDown={(e) => {
-                        if (panning || e.button !== 0) return startPan(e, false)
-                        e.preventDefault()
-                        e.stopPropagation()
-                        blurInspector()
-                        select({ file: board.file, path: null })
-                        beginDrag({ kind: "move", file: board.file, startX: e.clientX, startY: e.clientY, origin: board, moved: false })
-                      }}
-                    >
-                      {board.title ?? board.file}
-                    </div>
+                    <Truncate text={board.title ?? board.file}>
+                      <div
+                        className={cn(
+                          "min-w-0 cursor-default truncate font-medium whitespace-nowrap",
+                          isBoardSelected || isPlaying ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onPointerDown={(e) => {
+                          if (panning || e.button !== 0) return startPan(e, false)
+                          e.preventDefault()
+                          e.stopPropagation()
+                          blurInspector()
+                          select({ file: board.file, path: null })
+                          beginDrag({ kind: "move", file: board.file, startX: e.clientX, startY: e.clientY, origin: board, moved: false })
+                        }}
+                      >
+                        {board.title ?? board.file}
+                      </div>
+                    </Truncate>
                     {canPlay(board.file) && (
                       <div className="flex shrink-0 items-center" style={{ gap: 4 / zoom }}>
                         {isPlaying ? (
-                          <button
-                            type="button"
-                            title={t("design.present.stop")}
-                            aria-label={t("design.present.stop")}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={() => setPlaying(null)}
-                            className="flex items-center justify-center rounded-sm bg-primary text-primary-foreground"
-                            style={{ width: 18 / zoom, height: 18 / zoom }}
-                          >
-                            <Square style={{ width: 9 / zoom, height: 9 / zoom }} fill="currentColor" />
-                          </button>
+                          <Hint label={t("design.present.stop")}>
+                            <button
+                              type="button"
+                              aria-label={t("design.present.stop")}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={() => setPlaying(null)}
+                              className="flex items-center justify-center rounded-sm bg-primary text-primary-foreground cursor-pointer"
+                              style={{ width: 18 / zoom, height: 18 / zoom }}
+                            >
+                              <Square style={{ width: 9 / zoom, height: 9 / zoom }} fill="currentColor" />
+                            </button>
+                          </Hint>
                         ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger

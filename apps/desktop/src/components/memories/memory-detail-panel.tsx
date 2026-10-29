@@ -9,6 +9,7 @@ import type { Memory } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
+import { Hint } from "@/components/ui/hint"
 
 /**
  * Painel lateral da memória selecionada — compartilhado pelas abas Lista e
@@ -57,15 +58,17 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, c
           deixava o card mais estreito que a caixa do documento abaixo. */}
       {onClose && (
         <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            title={t("common.close")}
-            onClick={onClose}
-          >
-            <X className="size-3.5" />
-          </Button>
+          <Hint label={t("common.close")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+
+              onClick={onClose}
+            >
+              <X className="size-3.5" />
+            </Button>
+          </Hint>
         </div>
       )}
       <MemoryCard memory={memory} related={related} onSelectRelated={onSelectRelated} />

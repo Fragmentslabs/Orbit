@@ -29,8 +29,13 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './s
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
-import { createAssetToken, validateAssetToken } from './companion-token'
+import { createAssetToken, validateAssetToken, type AssetScope } from './companion-token'
 import { serveAsset } from './companion-assets'
+import { getMotion } from './video/motion-store'
+import { getDesign } from './design/design-store'
+import { readDesignCanvas } from './design/design-canvas'
+import { getSlides } from './slides/slides-store'
+import { mediaKind, type MediaEntry } from '@shared/media'
 
 import { transcribePcm, voiceStatus } from './voice'
 
@@ -411,20 +416,102 @@ async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: str
 }
 
 // ─── Media Registry Handlers ──────────────────────────────────────────────────
-// A galeria do app mobile lê o registry de mídia do desktop por aqui. As URLs
-// dos thumbs já saem assinadas (token na query) para o <Image> do React Native
-// carregar sem header Authorization.
+// A galeria do app mobile lê o registry de mídia do desktop por aqui. Toda
+// entrada sai com a URL assinada do SEU tipo (token no caminho, em todos os
+// escopos menos imagem, que mantém a query histórica) — antes tudo apontava
+// para /api/media/<id>, que só lê a pasta de imagens, e por isso artefato,
+// documento, vídeo e peça chegavam ao celular como tile quebrado.
 
 function mediaUrlFor(req: IncomingMessage, id: string): string {
   const base = `http://${req.headers.host ?? 'localhost'}`
   return `${base}/api/media/${id}?t=${createAssetToken('media', id)}`
 }
 
+/**
+ * URL de um arquivo do escopo, com o token no caminho — o formato que o WebView,
+ * o `<video>` e o `<Image>` aceitam (nenhum deles manda header Authorization) e
+ * que faz o relativo de uma peça herdar o token do diretório.
+ */
+function fileUrlFor(
+  req: IncomingMessage,
+  scope: AssetScope,
+  id: string,
+  relative?: string,
+): string {
+  const base = `http://${req.headers.host ?? 'localhost'}`
+  const rel = relative ? `/${relative.split('/').map(encodeURIComponent).join('/')}` : ''
+  return `${base}/api/file/${scope}/${encodeURIComponent(id)}/${createAssetToken(scope, id)}${rel}`
+}
+
+/** Base de um id de documento: fonte `.md`, prévia `.html` e renderizações
+ *  moram lado a lado com o mesmo id-base (mesma regra do documentBase de
+ *  media.ts, que é interno de lá). */
+function documentBase(id: string): string {
+  return id.replace(/\.(md|html|pdf|docx|png)$/, '')
+}
+
+/** Caminho relativo da entrada de uma peça, com `/`. */
+function relativeEntry(folder: string, entry: string): string {
+  return path.relative(folder, entry).split(path.sep).join('/')
+}
+
+/**
+ * A URL que o celular deve abrir para esta entrada — uma por TIPO, porque cada
+ * um mora num escopo diferente do servidor de assets:
+ *
+ * - imagem: `/api/media/<id>` (o alias histórico, na query);
+ * - artefato: a própria página `.html`;
+ * - documento: a PRÉVIA `.html` (o `.md` do registro é texto, não página);
+ * - áudio/vídeo: o arquivo, que o player lê por Range;
+ * - peça (motion/slides): a entrada da pasta; design: o primeiro artboard.
+ *
+ * `undefined` quando a peça não está mais registrada no desktop (a pasta sumiu,
+ * o registro foi limpo): o tile continua na galeria, só não abre.
+ */
+async function mediaEntryUrl(req: IncomingMessage, entry: MediaEntry): Promise<string | undefined> {
+  switch (mediaKind(entry)) {
+    case 'image':
+      return mediaUrlFor(req, entry.id)
+    case 'artifact':
+      return fileUrlFor(req, 'artifact', entry.id)
+    case 'document':
+      return fileUrlFor(req, 'artifact', `${documentBase(entry.id)}.html`)
+    case 'audio':
+      return fileUrlFor(req, 'audio', entry.id)
+    case 'video':
+      return fileUrlFor(req, 'video', entry.id)
+    case 'motion': {
+      if (!entry.motionId) return undefined
+      const motion = await getMotion(entry.motionId)
+      if (!motion) return undefined
+      return fileUrlFor(req, 'motion', entry.motionId, relativeEntry(motion.folder, motion.entry))
+    }
+    case 'design': {
+      if (!entry.designId) return undefined
+      const design = await getDesign(entry.designId)
+      if (!design) return undefined
+      // O canvas.json é o índice (dados) — a página é o primeiro artboard.
+      const first = await readDesignCanvas(design.folder)
+        .then((canvas) => canvas.order[0] ?? null)
+        .catch(() => null)
+      return fileUrlFor(req, 'design', entry.designId, first ?? 'canvas.json')
+    }
+    case 'slides': {
+      if (!entry.slidesId) return undefined
+      const slides = await getSlides(entry.slidesId)
+      if (!slides) return undefined
+      return fileUrlFor(req, 'slides', entry.slidesId, relativeEntry(slides.folder, slides.entry))
+    }
+  }
+}
+
 async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
-  // Áudio fica de fora: o app do celular ainda não toca áudio, e o tile dele
-  // é uma imagem — viraria um quadrado quebrado na galeria.
-  const entries = (await listMedia()).filter((entry) => entry.kind !== 'audio')
-  jsonResponse(res, 200, entries.map((entry) => ({ ...entry, url: mediaUrlFor(req, entry.id) })))
+  const entries = await listMedia()
+  jsonResponse(
+    res,
+    200,
+    await Promise.all(entries.map(async (entry) => ({ ...entry, url: await mediaEntryUrl(req, entry) }))),
+  )
 }
 
 async function handleMediaUsage(_req: IncomingMessage, res: ServerResponse) {

@@ -577,6 +577,7 @@
       "deleteTitle": "Remove folder?",
       "deleteDescription": "Chats in \"{{name}}\" won't be deleted — they'll go back to the main list.",
       "remove": "Remove",
+      "reorder": "Reorder",
       "unmark": "Unmark",
       "mark": "Mark",
       "add": "Add",
@@ -788,7 +789,8 @@
         "description": "A memory cited in the conversation"
       }
     },
-    "unreadMessages": "Unread messages"
+    "unreadMessages": "Unread messages",
+    "closeTab": "Close tab"
   },
   "chat": {
     "retry": "Retry",
@@ -2144,7 +2146,11 @@
     "close": "Close",
     "previous": "Previous",
     "next": "Next",
-    "back": "Back"
+    "back": "Back",
+    "remove": "Remove",
+    "edit": "Edit",
+    "dismiss": "Dismiss",
+    "addFolder": "Add folder"
   },
   "appearance": {
     "title": "Appearance",
@@ -2304,6 +2310,7 @@
     "delete": "Delete",
     "openInChat": "Open in chat",
     "selectedCount": "{{count}} selected",
+    "clearSelection": "Clear selection",
     "usage": "{{count}} images · {{size}}",
     "cleanupScripts": "Clear script images",
     "cleanupScriptsHint": "Deletes images captured by scripts/batches that were never shown in a chat",

@@ -5,6 +5,8 @@ import { processApi, type ProcessInfo } from "@/src/lib/ipc"
 import { useProcessStore } from "@/src/stores/process-store"
 import { usePanelStore, ORPHAN_KEY } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Aba de um processo em background (bash_background / foreground promovido):
@@ -72,29 +74,35 @@ export function ProcessTab({ pid, sessionId }: { pid: number; sessionId?: string
         ) : (
           <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
         )}
-        <span className="min-w-0 truncate text-xs font-medium text-foreground">
-          {current?.label ?? t("panel.tabs.process.label")}
-        </span>
+        <Truncate text={current?.label ?? t("panel.tabs.process.label")}>
+          <span className="min-w-0 truncate text-xs font-medium text-foreground">
+            {current?.label ?? t("panel.tabs.process.label")}
+          </span>
+        </Truncate>
         <span className="shrink-0 text-[10px] text-muted-foreground">PID {pid}</span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {url && (
-            <button
-              onClick={() => usePanelStore.getState().openTerminalLink(sessionId ?? ORPHAN_KEY, url)}
-              title={`${t("panel.processes.openInBrowser")} — ${url}`}
-              className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-            >
-              <Globe className="size-3" />
+            <Hint label={`${t("panel.processes.openInBrowser")} — ${url}`}>
+              <button
+                onClick={() => usePanelStore.getState().openTerminalLink(sessionId ?? ORPHAN_KEY, url)}
+                className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              >
+       
+                   <Globe className="size-3" />
               {t("panel.processes.openInBrowser")}
             </button>
+            </Hint>
           )}
           {running && (
-            <button
-              onClick={() => void useProcessStore.getState().kill(pid, sessionId)}
-              title={t("panel.processes.kill")}
-              className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive"
-            >
-              <Trash2 className="size-3" />
-            </button>
+            <Hint label={t("panel.processes.kill")}>
+              <button
+                onClick={() => void useProcessStore.getState().kill(pid, sessionId)}
+
+                className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </Hint>
           )}
         </div>
       </div>

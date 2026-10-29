@@ -141,6 +141,19 @@ export function fontUrl(file: string): string {
   return `${FONT_SCHEME}://f/${file}`
 }
 
+/**
+ * Caminho de um arquivo da biblioteca a partir do NOME (`<hash>.<ext>`), com o
+ * nome validado pelo mesmo `SAFE_FILE` do handler do scheme — `null` para
+ * qualquer coisa que não tenha o formato que nós mesmos geramos (o `..` incluso).
+ *
+ * Existe para quem serve o arquivo SEM passar pelo protocolo: no celular o
+ * `orbit-font://` não resolve, então o servidor HTTP do companion busca o
+ * caminho por aqui (ver companion-assets.ts) e transmite os bytes.
+ */
+export function resolveFontFile(name: string): string | null {
+  return SAFE_FILE.test(name) ? path.join(fontFilesDir(), name) : null
+}
+
 /** O `@font-face` de cada arquivo da biblioteca — uma declaração só, usada em todo alvo. */
 export function fontFaceCss(fonts: OrbitFont[]): string {
   const blocks: string[] = []

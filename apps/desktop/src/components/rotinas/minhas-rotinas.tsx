@@ -36,6 +36,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { useRotinasStore } from "@/src/stores/rotinas-store"
 import { descreverAgenda } from "./agenda"
 import { AgendaEditor, AtivaSwitch, ModosBadges, ModosEditor } from "./agenda-editor"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Listagem das rotinas e a sub-página de detalhe com o histórico de sessões.
@@ -112,15 +113,24 @@ function CartaoDaRotina({ rotina, onAbrir }: { rotina: Rotina; onAbrir: () => vo
       </div>
 
       <button type="button" onClick={onAbrir} className="min-w-0 space-y-1.5 text-left">
-        <p className="truncate text-[11px] text-muted-foreground">{descreverAgenda(rotina.agenda, t)}</p>
+        
+          <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">{descreverAgenda(rotina.agenda, t)}</p>
+          </Truncate>
         <p className="line-clamp-2 text-[11px] text-muted-foreground/80">{rotina.prompt}</p>
         <ModosBadges modos={rotina.modos} permissao disponiveis={rotina.mode === "chat" ? ROTINA_MODOS_CHAT : undefined} />
-        <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
-          {proxima
-            ? t("rotinas.lista.proxima", { quando: formatDateTimeShort(proxima, i18n.language) })
-            : t("rotinas.lista.pausada")}
-        </p>
+        
+          <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
+          </Truncate>
+        
+          <Truncate>
+              <p className="truncate text-[11px] text-muted-foreground">
+              {proxima
+                ? t("rotinas.lista.proxima", { quando: formatDateTimeShort(proxima, i18n.language) })
+                : t("rotinas.lista.pausada")}
+            </p>
+          </Truncate>
       </button>
     </div>
   )
@@ -258,17 +268,21 @@ export function DetalheDaRotina({ rotina, onVoltar }: { rotina: Rotina; onVoltar
           <ArrowLeftIcon className="size-3.5" />
         </Button>
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 truncate text-base font-semibold text-foreground">
-            {rotina.titulo}
-            {rodando && <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />}
-          </h2>
-          <p className="truncate text-xs text-muted-foreground">
-            {descreverAgenda(rotina.agenda, t)}
-            {" · "}
-            {proxima
-              ? t("rotinas.lista.proxima", { quando: formatDateTimeShort(proxima, i18n.language) })
-              : t("rotinas.lista.pausada")}
-          </p>
+          <Truncate>
+              <h2 className="flex items-center gap-2 truncate text-base font-semibold text-foreground">
+              {rotina.titulo}
+              {rodando && <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />}
+            </h2>
+          </Truncate>
+          <Truncate>
+              <p className="truncate text-xs text-muted-foreground">
+                {descreverAgenda(rotina.agenda, t)}
+                {" · "}
+                {proxima
+                  ? t("rotinas.lista.proxima", { quando: formatDateTimeShort(proxima, i18n.language) })
+                  : t("rotinas.lista.pausada")}
+              </p>
+          </Truncate>
         </div>
         <AtivaSwitch ativa={rotina.ativa} onChange={(v) => void atualizar(rotina.id, { ativa: v })} />
         <Button size="sm" variant="outline" disabled={rodando} onClick={() => void executarAgora(rotina.id)}>
@@ -302,12 +316,18 @@ export function DetalheDaRotina({ rotina, onVoltar }: { rotina: Rotina; onVoltar
             </span>
           )}
         </span>
-        <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
+        <Truncate text={nomeModelo}>
+          <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
+        </Truncate>
         {rotina.pastas.length > 0 && (
-          <p className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-            <FolderIcon className="size-3 shrink-0" />
-            <span className="truncate">{rotina.pastas.join(", ")}</span>
-          </p>
+          <Truncate>
+              <p className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+              <FolderIcon className="size-3 shrink-0" />
+              <Truncate text={rotina.pastas.join(", ")}>
+                <span className="truncate">{rotina.pastas.join(", ")}</span>
+              </Truncate>
+            </p>
+          </Truncate>
         )}
       </div>
 
@@ -374,20 +394,26 @@ function LinhaDoRun({ session, run }: { session: SessionInfo; run?: RotinaRun })
         <CheckCircle2Icon className="size-3.5 shrink-0 text-muted-foreground" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs">{formatDateTimeShort(run?.iniciadoEm ?? session.createdAt, i18n.language)}</p>
-        <p className={cn("truncate text-[11px]", status === "erro" ? "text-destructive" : "text-muted-foreground")}>
-          {status === "rodando"
-            ? t("rotinas.runs.rodando")
-            : status === "erro"
-              ? run?.erro || t("rotinas.runs.erro")
-              : [
-                  duracao,
-                  run && run.tokens > 0 ? t("rotinas.runs.tokens", { valor: formatTokens(run.tokens) }) : null,
-                  run && run.custo > 0 ? formatCost(run.custo) : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || t("rotinas.runs.ok")}
-        </p>
+        
+          <Truncate>
+              <p className="truncate text-xs">{formatDateTimeShort(run?.iniciadoEm ?? session.createdAt, i18n.language)}</p>
+          </Truncate>
+        
+          <Truncate>
+              <p className={cn("truncate text-[11px]", status === "erro" ? "text-destructive" : "text-muted-foreground")}>
+              {status === "rodando"
+                ? t("rotinas.runs.rodando")
+                : status === "erro"
+                  ? run?.erro || t("rotinas.runs.erro")
+                  : [
+                      duracao,
+                      run && run.tokens > 0 ? t("rotinas.runs.tokens", { valor: formatTokens(run.tokens) }) : null,
+                      run && run.custo > 0 ? formatCost(run.custo) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || t("rotinas.runs.ok")}
+            </p>
+          </Truncate>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
         {t("rotinas.runs.abrirChat")}

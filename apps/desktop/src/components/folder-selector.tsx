@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Folder, Plus, X } from "lucide-react"
 import { useWorktreeStore } from "@/src/stores/worktree-store"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -125,7 +127,10 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       className="group flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
     >
       <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
-      <span className="truncate">{getFolderName(folder)}</span>
+      
+        <Truncate>
+            <span className="truncate">{getFolderName(folder)}</span>
+        </Truncate>
       {active && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
       {removable && (
         <span
@@ -202,7 +207,10 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
           )}
           <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
             <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-            <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+            
+              <Truncate>
+                  <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+              </Truncate>
           </button>
         </span>
       )}
@@ -222,7 +230,9 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
               }
             >
               <Folder className="size-2.5 shrink-0 text-sidebar-foreground/60" />
-              <span className="truncate">{getFolderName(folder)}</span>
+              <Truncate text={getFolderName(folder)}>
+                <span className="truncate">{getFolderName(folder)}</span>
+              </Truncate>
               <button onClick={(e) => removeFolder(folder, e)} className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded opacity-60 hover:bg-foreground/10 hover:opacity-100">
                 <X className="size-2" />
                 <span className="sr-only">{t("folderSelector.remove")}</span>
@@ -230,15 +240,17 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             </div>
           ))}
           {folders.length > 0 && (
-            <button
-              onClick={() => addAdditionalFolder()}
-              className={compact
-                ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/50 text-xs hover:bg-accent"
-                : "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-sm hover:bg-accent"
-              }
-            >
-              <Plus className="size-2.5" />
-            </button>
+            <Hint label={t("common.addFolder")}>
+              <button
+                onClick={() => addAdditionalFolder()}
+                className={compact
+                  ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/50 text-xs hover:bg-accent"
+                  : "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-sm hover:bg-accent"
+                }
+              >
+                <Plus className="size-2.5" />
+              </button>
+            </Hint>
           )}
         </div>
       )}

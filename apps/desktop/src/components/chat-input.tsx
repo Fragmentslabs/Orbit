@@ -62,6 +62,7 @@ import { toFileParts } from "@/src/lib/message-utils"
 import { useInputHistory } from "@/src/hooks/use-input-history"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
+import { Hint } from "@/components/ui/hint"
 
 export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onProviderBlocked }: {
   onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -267,13 +268,15 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                 <Quote className="size-3" />
               )}
               {quoteChipLabel(q)}
-              <button
-                type="button"
-                onClick={() => removeQuote(q.id)}
-                className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
-              >
-                <X className="size-3" />
-              </button>
+              <Hint label={t("common.remove")}>
+                <button
+                  type="button"
+                  onClick={() => removeQuote(q.id)}
+                  className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
+                >
+                  <X className="size-3" />
+                </button>
+              </Hint>
             </span>
           ))}
         </div>

@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { Hint } from "@/components/ui/hint"
 import { Input } from "@/components/ui/input"
 import { artifactApi, designApi, mediaApi, motionApi, slidesApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -32,6 +33,7 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 import { expandToGroups, groupMediaByRoot } from "@/src/lib/media-groups"
 import { scrollToMessage } from "@/src/lib/message-jump"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Galeria de mídia: página dedicada (aba do painel direito) com o que o agente
@@ -195,7 +197,6 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
         draggable
         onClick={() => (selecting ? onToggle() : isAudio ? togglePlay() : onOpen())}
         className="block size-full cursor-pointer"
-        title={entry.name || entry.id}
         onDragStart={(event) => {
           // TODO tile — imagem, vídeo, motion, artefato, documento, áudio — é
           // arrastável para o composer COMO ANEXO: o payload leva só a
@@ -261,7 +262,9 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
         {selected && <CheckIcon className="size-3" />}
       </button>
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
-        <p className="min-w-0 truncate text-[10px] font-medium text-white">{entry.name || entry.id}</p>
+        <Truncate text={entry.name || entry.id}>
+          <p className="min-w-0 truncate text-[10px] font-medium text-white">{entry.name || entry.id}</p>
+        </Truncate>
         {kind === "video" && entry.durationMs ? (
           <span className="shrink-0 text-[10px] font-medium tabular-nums text-white/90">{formatDuration(entry.durationMs)}</span>
         ) : null}
@@ -283,20 +286,22 @@ function ScopeChip({
   Icon?: LucideIcon
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      className={cn(
-        "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
-        active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-muted-foreground hover:bg-sidebar-accent/50",
-      )}
-    >
-      {Icon && <Icon className="size-3 shrink-0" />}
+    <Hint label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/50",
+        )}
+      >
+        {
+    Icon && <Icon className="size-3 shrink-0" />}
       <span className="truncate">{label}</span>
     </button>
+    </Hint>
   )
 }
 
@@ -340,7 +345,9 @@ function ScopeFilterMenu({
         )}
       >
         <ActiveIcon className="size-3 shrink-0" />
-        <span className="truncate">{label}</span>
+        <Truncate text={label}>
+          <span className="truncate">{label}</span>
+        </Truncate>
         <ChevronDown className="size-3 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
@@ -360,7 +367,9 @@ function ScopeFilterMenu({
               {folderOptions.map((folder) => (
                 <DropdownMenuItem key={folder.id} onClick={() => onSelect(`${FOLDER_PREFIX}${folder.id}`)}>
                   <Folder className="size-3.5" />
-                  <span className="truncate">{folder.name}</span>
+                  <Truncate text={folder.name}>
+                    <span className="truncate">{folder.name}</span>
+                  </Truncate>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -376,7 +385,9 @@ function ScopeFilterMenu({
               {projectOptions.map((project) => (
                 <DropdownMenuItem key={project.key} onClick={() => onSelect(`${PROJECT_PREFIX}${project.key}`)}>
                   <FolderGit2 className="size-3.5" />
-                  <span className="truncate">{project.label}</span>
+                  <Truncate text={project.label}>
+                    <span className="truncate">{project.label}</span>
+                  </Truncate>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -419,13 +430,17 @@ function KindFilterMenu({
         )}
       >
         <ActiveIcon className="size-3 shrink-0" />
-        <span className="truncate">{t(`media.kind.${kind}`)}</span>
+        <Truncate text={t(`media.kind.${kind}`)}>
+          <span className="truncate">{t(`media.kind.${kind}`)}</span>
+        </Truncate>
         <ChevronDown className="size-3 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48">
         <DropdownMenuItem onClick={() => onSelect("all")}>
           <LayoutGrid className="size-3.5" />
-          <span className="truncate">{t("media.kind.all")}</span>
+          <Truncate text={t("media.kind.all")}>
+            <span className="truncate">{t("media.kind.all")}</span>
+          </Truncate>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {kinds.map((value) => {
@@ -433,7 +448,9 @@ function KindFilterMenu({
           return (
             <DropdownMenuItem key={value} onClick={() => onSelect(value)}>
               <Icon className="size-3.5" />
-              <span className="truncate">{t(`media.kind.${value}`)}</span>
+              <Truncate text={t(`media.kind.${value}`)}>
+                <span className="truncate">{t(`media.kind.${value}`)}</span>
+              </Truncate>
             </DropdownMenuItem>
           )
         })}
@@ -852,14 +869,15 @@ export function MediaGallery() {
               className="h-7 pl-7 text-xs"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            title={t("media.refresh")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          >
-            <RefreshCw className="size-3.5" />
-          </button>
+          <Hint label={t("media.refresh")}>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <RefreshCw className="size-3.5" />
+            </button>
+          </Hint>
         </div>
         {/* Escopo: "Tudo" e "Neste chat" são os dois mais usados e ficam
             sempre visíveis; pasta/repositório/soltos — que podem ser muitos —
@@ -936,13 +954,15 @@ export function MediaGallery() {
             <Trash2 className="size-3" />
             {t("media.delete")}
           </button>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="ml-auto flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-sidebar-accent"
-          >
-            <X className="size-3" />
-          </button>
+          <Hint label={t("media.clearSelection")}>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-sidebar-accent"
+            >
+              <X className="size-3" />
+            </button>
+          </Hint>
         </div>
       )}
 
@@ -971,14 +991,16 @@ export function MediaGallery() {
       <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-1.5 text-[11px] text-muted-foreground">
         <HardDriveIcon className="size-3" />
         <span>{t("media.usage", { count: usage.count, size: formatBytes(usage.bytes) })}</span>
-        <button
-          type="button"
-          onClick={() => void cleanupScripts()}
-          title={t("media.cleanupScriptsHint")}
-          className="ml-auto rounded-md px-2 py-0.5 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          {t("media.cleanupScripts")}
+        <Hint label={t("media.cleanupScriptsHint")}>
+          <button
+            type="button"
+            onClick={() => void cleanupScripts()}
+            className="ml-auto rounded-md px-2 py-0.5 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+       
+           {t("media.cleanupScripts")}
         </button>
+        </Hint>
       </div>
 
       <Dialog
@@ -1012,24 +1034,26 @@ export function MediaGallery() {
                 {/* Setas só quando há para onde ir: numa foto sem histórico
                     elas seriam dois botões mortos em cima da imagem. */}
                 {previewChain && previewIndex > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => stepVersion(-1)}
-                    title={t("media.previousVersion")}
-                    className="absolute left-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
-                  >
-                    <ChevronLeft className="size-4" />
-                  </button>
+                  <Hint label={t("media.previousVersion")}>
+                    <button
+                      type="button"
+                      onClick={() => stepVersion(-1)}
+                      className="absolute left-2 top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                  </Hint>
                 )}
                 {previewChain && previewIndex >= 0 && previewIndex < previewChain.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => stepVersion(1)}
-                    title={t("media.nextVersion")}
-                    className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
-                  >
-                    <ChevronRight className="size-4" />
-                  </button>
+                  <Hint label={t("media.nextVersion")}>
+                    <button
+                      type="button"
+                      onClick={() => stepVersion(1)}
+                      className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </Hint>
                 )}
                 {previewChain && previewIndex >= 0 && (
                   <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-foreground shadow-md">
@@ -1047,7 +1071,6 @@ export function MediaGallery() {
                       key={version.id}
                       type="button"
                       onClick={() => setPreview(version)}
-                      title={`v${index + 1} de ${previewChain.length}`}
                       className={cn(
                         "relative size-10 shrink-0 overflow-hidden rounded border transition-colors",
                         version.id === preview.id
@@ -1087,10 +1110,13 @@ export function MediaGallery() {
                 <span>·</span>
                 <span>{formatBytes(preview.size)}</span>
                 {preview.credit && (
-                  <span title={preview.credit.attribution} className="truncate">
-                    {preview.credit.license}
-                    {preview.credit.creator ? ` · ${preview.credit.creator}` : ""}
-                  </span>
+                  
+                    <Truncate>
+                      <span title={preview.credit.attribution} className="truncate">
+                      {preview.credit.license}
+                      {preview.credit.creator ? ` · ${preview.credit.creator}` : ""}
+                    </span>
+                    </Truncate>
                 )}
                 <div className="ml-auto flex items-center gap-1">
                   {preview.sessionId && (

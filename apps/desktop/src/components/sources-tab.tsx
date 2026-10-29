@@ -21,6 +21,7 @@ import {
   Upload,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Hint } from "@/components/ui/hint"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,7 @@ import { docsApi, documentApi, materialsApi, mediaApi, type SourceDocument } fro
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Aba Fontes: os documentos com que se CONVERSA.
@@ -223,38 +225,45 @@ function DocumentRow({
         }}
         className="min-w-0 flex-1 cursor-pointer text-left"
       >
-        <p className="truncate text-xs font-medium text-foreground">{doc.filename}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
-          {doc.id} · {unit}
-          {doc.sourceUrl ? ` · ${hostOf(doc.sourceUrl)}` : ""}
-          {doc.sizeBytes ? ` · ${formatBytes(doc.sizeBytes)}` : ""}
-          {" · "}
-          {new Date(doc.createdAt).toLocaleDateString(i18n.language, {
-            day: "2-digit",
-            month: "2-digit",
-          })}
-          {originLabel ? ` · ${originLabel}` : ""}
-          {doc.truncated ? ` · ${t("sources.truncated")}` : ""}
-        </p>
+        <Truncate text={doc.filename}>
+          <p className="truncate text-xs font-medium text-foreground">{doc.filename}</p>
+        </Truncate>
+        
+          <Truncate>
+            <p className="truncate text-[11px] text-muted-foreground">
+            {doc.id} · {unit}
+            {doc.sourceUrl ? ` · ${hostOf(doc.sourceUrl)}` : ""}
+            {doc.sizeBytes ? ` · ${formatBytes(doc.sizeBytes)}` : ""}
+            {" · "}
+            {new Date(doc.createdAt).toLocaleDateString(i18n.language, {
+              day: "2-digit",
+              month: "2-digit",
+            })}
+            {originLabel ? ` · ${originLabel}` : ""}
+            {doc.truncated ? ` · ${t("sources.truncated")}` : ""}
+          </p>
+          </Truncate>
       </div>
       {onMove && MoveIcon && (
+        <Hint label={moveLabel ?? ""}>
+          <button
+            type="button"
+            onClick={onMove}
+            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
+          >
+            <MoveIcon className="size-3.5" />
+          </button>
+        </Hint>
+      )}
+      <Hint label={t("sources.remove")}>
         <button
           type="button"
-          onClick={onMove}
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
-          title={moveLabel}
+          onClick={onRemove}
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
         >
-          <MoveIcon className="size-3.5" />
+          <Trash2 className="size-3.5" />
         </button>
-      )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-        title={t("sources.remove")}
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      </Hint>
     </li>
   )
 }
@@ -311,8 +320,11 @@ function MaterialRow({
         }}
         className="min-w-0 flex-1 cursor-pointer text-left"
       >
-        <p className="truncate text-xs font-medium text-foreground">{material.name}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
+        <Truncate text={material.name}>
+          <p className="truncate text-xs font-medium text-foreground">{material.name}</p>
+        </Truncate>
+        <Truncate>
+          <p className="truncate text-[11px] text-muted-foreground">
           {material.id} · {t(`sources.materialKind.${material.animated ? "gif" : material.kind}`)}
           {material.durationMs ? ` · ${formatDuration(material.durationMs)}` : ""}
           {material.width && material.height ? ` · ${material.width}×${material.height}` : ""}
@@ -320,25 +332,28 @@ function MaterialRow({
           {" · "}
           {new Date(material.createdAt).toLocaleDateString(i18n.language, { day: "2-digit", month: "2-digit" })}
         </p>
+        </Truncate>
       </div>
       {onMove && MoveIcon && (
+        <Hint label={moveLabel ?? ""}>
+          <button
+            type="button"
+            onClick={onMove}
+            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
+          >
+            <MoveIcon className="size-3.5" />
+          </button>
+        </Hint>
+      )}
+      <Hint label={t("sources.removeMaterial")}>
         <button
           type="button"
-          onClick={onMove}
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
-          title={moveLabel}
+          onClick={onRemove}
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
         >
-          <MoveIcon className="size-3.5" />
+          <Trash2 className="size-3.5" />
         </button>
-      )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-        title={t("sources.removeMaterial")}
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      </Hint>
     </li>
   )
 }
@@ -354,7 +369,9 @@ function MaterialViewer({ material, onClose }: { material: MaterialView | null; 
           <video key={material.id} src={material.playUrl} controls autoPlay className="max-h-[76vh] w-full rounded-md bg-black object-contain" />
         ) : material.kind === "audio" ? (
           <div className="flex flex-col gap-2 p-4">
-            <p className="truncate text-sm font-medium">{material.name}</p>
+            <Truncate text={material.name}>
+              <p className="truncate text-sm font-medium">{material.name}</p>
+            </Truncate>
             <audio key={material.id} src={material.playUrl} controls autoPlay className="w-full" />
           </div>
         ) : (
@@ -701,14 +718,15 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
         <p className="flex-1 text-sm font-medium text-foreground">{t("sources.title")}</p>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          title={t("sources.refresh")}
-        >
-          <RefreshCw className="size-3.5" />
-        </button>
+        <Hint label={t("sources.refresh")}>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <RefreshCw className="size-3.5" />
+          </button>
+        </Hint>
       </div>
 
       {errors.length > 0 && (

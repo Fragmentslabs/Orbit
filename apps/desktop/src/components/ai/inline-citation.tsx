@@ -13,6 +13,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "~/components/ui/h
 import { cn } from "~/lib/utils"
 import { hostnameOf } from "@/src/lib/message-utils"
 import { useTranslation } from "react-i18next"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export type InlineCitationProps = ComponentProps<"span">
 
@@ -220,7 +221,9 @@ export const InlineCitationSource = ({
 }: InlineCitationSourceProps) => (
   <div className={cn("space-y-1", className)} {...props}>
     {title && <h4 className="truncate font-medium text-sm leading-tight">{title}</h4>}
-    {url && <p className="truncate break-all text-muted-foreground text-xs">{url}</p>}
+    {url && <Truncate text={url}>
+      <p className="truncate break-all text-muted-foreground text-xs">{url}</p>
+    </Truncate>}
     {description && (
       <p className="line-clamp-3 text-muted-foreground text-sm leading-relaxed">{description}</p>
     )}

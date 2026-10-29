@@ -4,6 +4,7 @@ import { Button } from "~/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
 import { ScrollArea } from "~/components/ui/scroll-area"
 import { cn } from "~/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 export interface QueueMessagePart {
   type: string
@@ -143,7 +144,10 @@ export const QueueItemFile = ({ children, className, ...props }: QueueItemFilePr
     {...props}
   >
     <PaperclipIcon size={12} />
-    <span className="max-w-[100px] truncate">{children}</span>
+    
+      <Truncate>
+          <span className="max-w-[100px] truncate">{children}</span>
+      </Truncate>
   </span>
 )
 
@@ -175,7 +179,7 @@ export const QueueSectionTrigger = ({
   <CollapsibleTrigger render={<button className={cn(
             "group flex w-full items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-left font-medium text-muted-foreground text-sm transition-colors hover:bg-muted",
             className,
-          )} type="button" {...props} />}>{children}</CollapsibleTrigger>
+          )} type="button" aria-label="Alternar seção" {...props} />}>{children}</CollapsibleTrigger>
 )
 
 // QueueSectionLabel - label content with icon and count

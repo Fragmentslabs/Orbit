@@ -12,6 +12,7 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { cn } from "@/lib/utils"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Preferências → Overlay: o atalho global (⇧⌘espaço), o modelo do painel com o
@@ -246,7 +247,9 @@ function Capability({
         className={cn("size-1.5 shrink-0 rounded-full", ok ? "bg-emerald-500" : "bg-muted-foreground/40")}
       />
       <span className="text-xs">{label}</span>
-      <span className="truncate text-[11px] text-muted-foreground">{detail}</span>
+      <Truncate text={detail}>
+        <span className="truncate text-[11px] text-muted-foreground">{detail}</span>
+      </Truncate>
       {onConfigure && (
         <button
           type="button"

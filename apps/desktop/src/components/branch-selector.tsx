@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useBranchStore } from "@/src/stores/branch-store"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Checkout de um branch aberto em outro worktree: o git recusa ("already used
@@ -160,23 +162,25 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
       {data.branches.map((branch) => {
         const active = branch === data.current
         return (
-          <button
-            key={branch}
-            type="button"
-            onClick={() => handleSelect(branch)}
-            // O dropdown tem largura fixa (w-44) e nome de branch é longo por
-            // convenção — `feature/`, `fix/`, número do ticket. Sem o title, a
-            // elipse esconde justamente a parte que distingue uma da outra.
-            title={branch}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-              active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
-            )}
-          >
-            <GitBranch className="size-3 shrink-0" />
+          <Hint label={branch}>
+            <button
+              key={branch}
+              type="button"
+              onClick={() => handleSelect(branch)}
+              // O dropdown tem largura fixa (w-44) e nome de branch é longo por
+              // convenção — `feature/`, `fix/`, número do ticket. Sem o title, a
+              // elipse esconde justamente a parte que distingue uma da outra.
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
+              )}
+            >
+       
+               <GitBranch className="size-3 shrink-0" />
             <span className="flex-1 truncate">{branch}</span>
             {active && <Check className="size-3 shrink-0" />}
           </button>
+          </Hint>
         )
       })}
       <div className="mt-1 border-t border-foreground/10 pt-1">
@@ -206,15 +210,17 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
         <DropdownMenu open={open} onOpenChange={setOpen}>
           <DropdownMenuTrigger
             render={
-              <button
-                type="button"
-                disabled={loading || checkoutLoading}
-                title={data.current || t("branch.detached")}
-                className={cn(
-                  "flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
-                  compact && "h-6 min-w-0 flex-1 border-0 px-1",
-                )}
-              />
+              <Hint label={data.current || t("branch.detached")}>
+                <button
+                  type="button"
+                  disabled={loading || checkoutLoading}
+
+                  className={cn(
+                    "flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                    compact && "h-6 min-w-0 flex-1 border-0 px-1",
+                  )}
+                />
+              </Hint>
             }
           >
             {loading || checkoutLoading ? (
@@ -222,11 +228,13 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             ) : (
               <GitBranch className="size-3 text-muted-foreground" />
             )}
-            <span
-              className={cn("truncate", compact ? "min-w-0 flex-1 text-left" : "max-w-20")}
-            >
-              {data.current || t("branch.detached")}
-            </span>
+            <Truncate>
+                <span
+                className={cn("truncate", compact ? "min-w-0 flex-1 text-left" : "max-w-20")}
+              >
+                {data.current || t("branch.detached")}
+              </span>
+            </Truncate>
           </DropdownMenuTrigger>
           <DropdownMenuContent align={compact ? "start" : "end"} className="w-44 p-1" side={side}>
             {branchItems}

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import type { OrbitModel } from "@shared/models"
 import { hasActiveFilters, useModelsStore, type ContextFilter } from "@/src/stores/models-store"
 import { availabilityLabel, CAPABILITY_LABELS, MODALITY_LABELS, PRICE_LABELS, SPEED_LABELS } from "./meta"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** Linha de filtros da aba Models — dropdowns multi-seleção por dimensão. */
 
@@ -64,7 +65,10 @@ function MultiFilter({ label, options, values, onToggle }: {
           onCheckedChange={() => onToggle(opt.value)}
           closeOnClick={false}
         >
-          <span className="flex-1 truncate">{opt.label}</span>
+          
+            <Truncate>
+                <span className="flex-1 truncate">{opt.label}</span>
+            </Truncate>
           {opt.hint && <span className="text-[10px] text-muted-foreground">{opt.hint}</span>}
         </DropdownMenuCheckboxItem>
       ))}

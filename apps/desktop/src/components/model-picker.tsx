@@ -23,6 +23,8 @@ import { useModelRotationStore, ROTATION_DRAFT_KEY } from "@/src/stores/model-ro
 import { useRotationUi } from "@/src/stores/rotation-ui"
 import { cn } from "@/lib/utils"
 import { isKnownModel } from "@/src/lib/model-migration"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 const MAX_MODELS_PER_PROVIDER = 40
 
@@ -239,9 +241,12 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                       <span className="flex min-w-0 flex-1 flex-col">
                         <ModelSelectorName className="w-full">{rotation.name}</ModelSelectorName>
                         <span className="flex w-full items-center gap-1 text-[10px] leading-tight text-muted-foreground">
-                          <span className="truncate">
-                            {t("rotation.slotsLabel", { count: rotation.models.length })}
-                          </span>
+                          
+                            <Truncate>
+                                <span className="truncate">
+                                {t("rotation.slotsLabel", { count: rotation.models.length })}
+                              </span>
+                            </Truncate>
                         </span>
                       </span>
                     </ModelSelectorItem>
@@ -265,9 +270,12 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                     <ModelSelectorLogo provider={recent.providerId} />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <ModelSelectorName className="w-full">{model.name}</ModelSelectorName>
-                      <span className="w-full truncate text-[10px] leading-tight text-muted-foreground">
-                        {provider.name}
-                      </span>
+                      
+                        <Truncate>
+                            <span className="w-full truncate text-[10px] leading-tight text-muted-foreground">
+                            {provider.name}
+                          </span>
+                        </Truncate>
                     </span>
                     <ModalityIcons
                       modalities={model.modalities?.input}
@@ -276,21 +284,23 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                     {model.reasoning && (
                       <BrainIcon className="size-3 shrink-0 text-muted-foreground" />
                     )}
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      title={t("modelPicker.removeRecent")}
-                      aria-label={t("modelPicker.removeRecent")}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        removeRecent(recent.providerId, recent.modelId)
-                      }}
-                      className="hidden shrink-0 cursor-pointer items-center rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted group-hover/command-item:flex hover:text-foreground"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
+                    <Hint label={t("modelPicker.removeRecent")}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+
+                        aria-label={t("modelPicker.removeRecent")}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          removeRecent(recent.providerId, recent.modelId)
+                        }}
+                        className="hidden shrink-0 cursor-pointer items-center rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted group-hover/command-item:flex hover:text-foreground"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </Hint>
                   </ModelSelectorItem>
                 ))}
               </ModelSelectorGroup>

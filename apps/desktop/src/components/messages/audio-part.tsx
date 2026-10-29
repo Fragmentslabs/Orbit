@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next"
 import { AudioLines, Download, Pause, Play } from "lucide-react"
 import { mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /** m:ss (h:mm:ss passando de uma hora). */
 export function formatClock(seconds: number): string {
@@ -165,7 +167,6 @@ export function AudioPlayerCard({
         type="button"
         onClick={toggle}
         aria-label={playing ? t("audio.pause") : t("audio.play")}
-        title={playing ? t("audio.pause") : t("audio.play")}
         className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/85"
       >
         {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
@@ -174,9 +175,11 @@ export function AudioPlayerCard({
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs">
           <AudioLines className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-foreground" title={title}>
-            {title}
-          </span>
+          <Truncate text={title}>
+            <span className="min-w-0 flex-1 truncate text-foreground" >
+              {title}
+            </span>
+          </Truncate>
           <span className="shrink-0 tabular-nums text-muted-foreground">
             {formatClock(current)} / {formatClock(duration)}
           </span>
@@ -215,20 +218,20 @@ export function AudioPlayerCard({
         type="button"
         onClick={cycleRate}
         aria-label={t("audio.speed", { rate })}
-        title={t("audio.speed", { rate })}
         className="flex h-7 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         {rate}×
       </button>
-      <button
-        type="button"
-        onClick={() => void mediaApi.exportAudio(src, title)}
-        aria-label={t("audio.download")}
-        title={t("audio.download")}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        <Download className="size-3.5" />
-      </button>
+      <Hint label={t("audio.download")}>
+        <button
+          type="button"
+          onClick={() => void mediaApi.exportAudio(src, title)}
+          aria-label={t("audio.download")}
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Download className="size-3.5" />
+        </button>
+      </Hint>
     </div>
   )
 }

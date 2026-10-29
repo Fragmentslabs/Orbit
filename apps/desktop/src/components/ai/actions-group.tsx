@@ -6,6 +6,7 @@ import type { ToolPart } from "@shared/chat"
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { computerActionSummary, describeAction, isComputerTool } from "@/src/lib/computer-actions"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * As ferramentas de um turno, recolhidas numa linha só.
@@ -84,9 +85,12 @@ export function ToolActionItem({ part }: { part: ToolPart }) {
         {chip && (
           <TaskItemFile>
             {/* title = comando/caminho completo no hover (o truncate corta em ~256px) */}
-            <span className="max-w-64 truncate font-mono" title={chip}>
-              {chip}
-            </span>
+            
+              <Truncate>
+                  <span className="max-w-64 truncate font-mono" title={chip}>
+                  {chip}
+                </span>
+              </Truncate>
           </TaskItemFile>
         )}
         {detail && (

@@ -10,6 +10,7 @@ import type { SelectedModel } from "@/src/stores/provider-store"
 import type { RotationModel } from "@shared/chat"
 import { MAX_ROTATION_SLOTS } from "@/src/stores/model-rotation-store"
 import { dropId, dragId } from "./use-rotation-drag-sort"
+import { Hint } from "@/components/ui/hint"
 
 // O card da linha JÁ é a borda visível — o trigger do picker vive dentro
 // dele sem borda/fundo próprios, senão vira caixa-dentro-de-caixa (era o
@@ -60,17 +61,18 @@ export function RotationSlotRow({
         isOver && "border-primary",
       )}
     >
-      <button
-        ref={setDragRef}
-        {...attributes}
-        {...listeners}
-        type="button"
-        title={t("rotation.dragSlot")}
-        aria-label={t("rotation.dragSlot")}
-        className="cursor-grab rounded-sm p-0.5 text-muted-foreground hover:text-foreground active:cursor-grabbing"
-      >
-        <GripVerticalIcon className="size-3.5" />
-      </button>
+      <Hint label={t("rotation.dragSlot")}>
+        <button
+          ref={setDragRef}
+          {...attributes}
+          {...listeners}
+          type="button"
+          aria-label={t("rotation.dragSlot")}
+          className="cursor-grab rounded-sm p-0.5 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVerticalIcon className="size-3.5" />
+        </button>
+      </Hint>
       <span className="w-4 shrink-0 text-center text-[10px] font-medium tabular-nums text-muted-foreground">
         {index + 1}
       </span>
@@ -83,17 +85,19 @@ export function RotationSlotRow({
           hideRotationOptions
         />
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        title={t("rotation.removeSlot")}
-        aria-label={t("rotation.removeSlot")}
-        onClick={onRemove}
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-      >
-        <XIcon />
-      </Button>
+      <Hint label={t("rotation.removeSlot")}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+
+          aria-label={t("rotation.removeSlot")}
+          onClick={onRemove}
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+        >
+          <XIcon />
+        </Button>
+      </Hint>
     </div>
   )
 }

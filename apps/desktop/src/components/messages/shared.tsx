@@ -57,7 +57,9 @@ import { MessageUsage } from "@/src/components/messages/message-usage"
 import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { Truncate } from "@/components/ui/truncated-text"
 
+import { Hint } from "@/components/ui/hint"
 /** Peças de mensagem compartilhadas entre os modos chat e código. */
 
 /** Teto por provedor no menu de troca de modelo do card de erro. */
@@ -83,18 +85,20 @@ function SourceCitation({ source, label, sessionId }: {
     ? `p. ${source.page}, linha ${source.fromLine}${source.toLine && source.toLine > source.fromLine ? `-${source.toLine}` : ""}`
     : `p. ${source.page}`
   return (
-    <button
-      type="button"
-      title={`${source.docId} — ${where}`}
-      onClick={() => {
-        if (!sessionId) return
-        openSourceTab(sessionId, { ...source, title: source.docId })
-      }}
-      className="mx-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded bg-primary/10 px-1.5 align-baseline text-[0.7rem] font-medium text-primary hover:bg-primary/20"
-    >
-      <FileTextIcon className="size-2.5" />
+    <Hint label={`${source.docId} — ${where}`}>
+      <button
+        type="button"
+        onClick={() => {
+          if (!sessionId) return
+          openSourceTab(sessionId, { ...source, title: source.docId })
+        }}
+        className="mx-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded bg-primary/10 px-1.5 align-baseline text-[0.7rem] font-medium text-primary hover:bg-primary/20"
+      >
+        <
+    FileTextIcon className="size-2.5" />
       {label.replace(/[[\]]/g, "")}
     </button>
+    </Hint>
   )
 }
 
@@ -295,7 +299,9 @@ export function GenericToolView({ part, label, subtitle, sessionId }: {
           <span className="font-medium">{label}</span>
         )}
         {subtitle && (
-          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{subtitle}</span>
+          <Truncate text={subtitle}>
+            <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{subtitle}</span>
+          </Truncate>
         )}
         <ChevronDownIcon
           className={cn("ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
@@ -361,6 +367,7 @@ function SwitchModelMenu({
         render={
           <button
             type="button"
+            aria-label={t("chat.switchModel")}
             className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
           />
         }
@@ -384,7 +391,10 @@ function SwitchModelMenu({
                 }}
                 className="gap-2"
               >
-                <span className="flex-1 truncate">{model.name}</span>
+                
+                  <Truncate>
+                      <span className="flex-1 truncate">{model.name}</span>
+                  </Truncate>
                 <ModalityIcons
                   modalities={model.modalities?.input}
                   className="size-3 shrink-0 text-muted-foreground"

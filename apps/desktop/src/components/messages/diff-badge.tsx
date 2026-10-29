@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { MessagePart } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
 
+import { Hint } from "@/components/ui/hint"
 /**
  * Selo "+N -N" do turno: as linhas que as ferramentas somaram e tiraram do
  * working tree, com o diff aberto no painel ao clicar.
@@ -46,14 +47,16 @@ export function DiffBadge({ patch, parts, sessionId, messageId }: {
   if (!counts || !sessionId || !messageId || !wroteFiles(parts)) return null
 
   return (
-    <button
-      type="button"
-      title={t("diff.open")}
-      onClick={() => usePanelStore.getState().openDiff(sessionId, messageId, "Diff")}
-      className="flex shrink-0 items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      {counts.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{counts.added}</span>}
+    <Hint label={t("diff.open")}>
+      <button
+        type="button"
+        onClick={() => usePanelStore.getState().openDiff(sessionId, messageId, "Diff")}
+        className="flex shrink-0 items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {
+    counts.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{counts.added}</span>}
       {counts.removed > 0 && <span className="text-red-600 dark:text-red-400">-{counts.removed}</span>}
     </button>
+    </Hint>
   )
 }

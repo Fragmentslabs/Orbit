@@ -9,6 +9,8 @@ import { ComputerShotImage, useComputerShot, useComputerThumbPin } from "@/src/c
 import { computerStopShortcut } from "@shared/computer"
 import { computerApi, windowApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Chip "Controlando <app>" no header enquanto o agente desta conversa controla
@@ -192,7 +194,6 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
         </PopoverTrigger>
         <button
           type="button"
-          title={t("computer.chip.stopTitle", { shortcut: computerStopShortcut(windowApi.platform) })}
           aria-label={t("computer.chip.stopTitle", { shortcut: computerStopShortcut(windowApi.platform) })}
           onClick={() => void computerApi.stop(sessionId)}
           className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-foreground transition-colors hover:bg-primary/85"
@@ -244,20 +245,24 @@ function ComputerThumbBody({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <span className="truncate">{app}</span>
+        <Truncate text={app}>
+          <span className="truncate">{app}</span>
+        </Truncate>
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
           {t("computer.thumb.live")}
           {onUnpin && (
-            <button
-              type="button"
-              onClick={onUnpin}
-              aria-label={t("computer.thumb.unpin")}
-              title={t("computer.thumb.unpin")}
-              className="ml-1 inline-flex size-6 items-center justify-center rounded-md hover:bg-muted"
-            >
-              <XIcon className="size-3.5" />
-            </button>
+            <Hint label={t("computer.thumb.unpin")}>
+              <button
+                type="button"
+                onClick={onUnpin}
+                aria-label={t("computer.thumb.unpin")}
+
+                className="ml-1 inline-flex size-6 items-center justify-center rounded-md hover:bg-muted"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </Hint>
           )}
         </span>
       </div>
@@ -271,7 +276,9 @@ function ComputerThumbBody({
       ) : (
         <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{t("computer.thumb.noShot")}</p>
       )}
-      {entry.lastAction && <p className="truncate text-[11px] text-muted-foreground">{t("computer.thumb.last", { action: entry.lastAction })}</p>}
+      {entry.lastAction && <Truncate text={t("computer.thumb.last", { action: entry.lastAction })}>
+        <p className="truncate text-[11px] text-muted-foreground">{t("computer.thumb.last", { action: entry.lastAction })}</p>
+      </Truncate>}
       {!compact && (
         <div className="flex gap-2">
           {onPin && (

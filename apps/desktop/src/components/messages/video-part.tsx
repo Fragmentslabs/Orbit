@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Clapperboard, FolderOpen } from "lucide-react"
+import { Hint } from "@/components/ui/hint"
+import { Truncate } from "@/components/ui/truncated-text"
 
 function formatDuration(ms?: number): string | null {
   if (!ms || !Number.isFinite(ms)) return null
@@ -20,19 +22,22 @@ export function VideoPartView({ part }: { part: { src: string; title?: string; d
     <div className="my-2 flex w-full max-w-2xl flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
       <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
         <Clapperboard className="size-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate" title={part.path ?? title}>
-          {title}
-        </span>
+        <Truncate text={title}>
+          <span className="min-w-0 flex-1 truncate" >
+            {title}
+          </span>
+        </Truncate>
         {duration && <span className="shrink-0 tabular-nums">{duration}</span>}
         {part.path && (
-          <button
-            type="button"
-            onClick={() => void window.ipcRenderer.invoke("shell:showItemInFolder", part.path)}
-            className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
-            title={t("video.showInFolder")}
-          >
-            <FolderOpen className="size-3.5" />
-          </button>
+          <Hint label={t("video.showInFolder")}>
+            <button
+              type="button"
+              onClick={() => void window.ipcRenderer.invoke("shell:showItemInFolder", part.path)}
+              className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <FolderOpen className="size-3.5" />
+            </button>
+          </Hint>
         )}
       </div>
       <video controls preload="metadata" src={part.src} className="max-h-[480px] w-full rounded-lg bg-black" />
