@@ -77,6 +77,7 @@ import {
   isLargeMediaType,
   rememberAttachmentPath,
 } from "@/src/lib/message-utils"
+import { pastedTextHint } from "@/src/lib/pasted-text"
 
 // ============================================================================
 // Provider Context & Types
@@ -129,7 +130,9 @@ function pastedSize(text: string): string {
  *  `.txt` de propósito: `.md` cai no caminho de skill do engine (frontmatter),
  *  e um texto colado não é uma skill. */
 function pastedTextFile(text: string): File {
-  return new File([text], i18n.t("attachments.pastedTextName", { size: pastedSize(text) }), {
+  const name = i18n.t("attachments.pastedTextName", { size: pastedSize(text) })
+  const hint = pastedTextHint(text)
+  return new File([text], hint ? `${hint} — ${name}` : name, {
     type: "text/plain",
   })
 }
