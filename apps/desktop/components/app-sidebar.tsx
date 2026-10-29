@@ -1164,6 +1164,17 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
   )
 }
 
+/**
+ * Ícone de ação no cabeçalho de um grupo da sidebar (organizar, nova pasta).
+ *
+ * `size-5` em volta de um ícone de 14px: 16px de alvo é difícil de acertar com
+ * o mouse. O hover era inexistente — o botão não mudava nada ao passar por
+ * cima, então não parecia clicável — e o `cursor-pointer` precisa ser dito
+ * (o Tailwind v4 deixa `button` com o cursor padrão).
+ */
+const GROUP_ACTION_CLASS =
+  "flex size-5 cursor-pointer items-center justify-center rounded text-sidebar-foreground/60 outline-hidden transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+
 function ChatHistory() {
   const { t } = useTranslation()
   const { mode } = useWorkspace()
@@ -1293,28 +1304,46 @@ function ChatHistory() {
         label={t("sidebar.groups.folders")}
         action={
           !selectionMode && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  organizeSidebar()
-                }}
-                className="flex size-4 items-center justify-center rounded"
-                title={t("sidebar.folder.organize")}
-              >
-                <Wand2 className="size-3" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setCreatingFolder(true)
-                }}
-                className="flex size-4 items-center justify-center rounded"
-                title={t("sidebar.folder.newFolderTitle")}
-              >
-                <FolderPlus className="size-3" />
-              </button>
-            </div>
+            <TooltipProvider delay={300}>
+              <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={t("sidebar.folder.organize")}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          organizeSidebar()
+                        }}
+                        className={GROUP_ACTION_CLASS}
+                      />
+                    }
+                  >
+                    <Wand2 className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t("sidebar.folder.organize")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={t("sidebar.folder.newFolderTitle")}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setCreatingFolder(true)
+                        }}
+                        className={GROUP_ACTION_CLASS}
+                      />
+                    }
+                  >
+                    <FolderPlus className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t("sidebar.folder.newFolderTitle")}</TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
           )
         }
       >
