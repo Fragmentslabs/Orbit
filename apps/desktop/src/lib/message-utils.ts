@@ -1,7 +1,7 @@
 import type { ChatViewMode } from "@shared/app-settings"
 import { parseMessageReply } from "@shared/chat"
 import { isEngineText, lastTextRunStart } from "@shared/chat-text"
-import type { ChatMessage, FilePart, MessagePart, ReasoningPart, TextPart, ToolPart } from "@shared/chat"
+import type { ChatMessage, FilePart, MessagePart, ReasoningPart, ToolPart } from "@shared/chat"
 
 /**
  * Caminho real, no disco, de cada anexo cujo conteúdo NÃO deve atravessar a
@@ -109,37 +109,15 @@ export function messageBody(message: ChatMessage): string {
 }
 
 /**
- * Texto que a LEITURA EM VOZ ALTA fala: a resposta final da mensagem, e só ela.
+ * Texto que a LEITURA EM VOZ ALTA fala: a resposta final da mensagem, e só ela
+ * (só assistente, só prosa do modelo, só o último bloco de texto — sem o JSON
+ * do orbit-ui nem o código do diagrama).
  *
- * O recorte é o que a UI mostra como resposta final:
- * - só mensagem do assistente (o prompt do usuário nunca é lido — retorna "");
- * - só prosa do modelo (text part sem `source`), o que deixa de fora o texto
- *   extraído de anexo (`attachment`), a legenda da visão (`vision`) e o texto
- *   do engine (`nudge`/`todo`/`internal`);
- * - só o ÚLTIMO bloco de texto contíguo: a prosa anterior a uma ferramenta é
- *   narração ("pensando alto"), que o modo resumo também esconde da leitura;
- * - nada de histórico: o recorte é sempre desta mensagem.
- *
- * Diferente de `messageText` (conteúdo real, para retry) e de
- * `visibleMessageText` (o que a pessoa digitou, sem anexo).
+ * A regra passou a morar no shared (`@shared/chat-text`): o celular lê a mesma
+ * resposta pelo `/api/voice/speak`, e duas cópias divergiriam. Reexportado
+ * daqui porque a UI do desktop inteira já importa deste módulo.
  */
-export function speakableText(message: ChatMessage): string {
-  if (message.role !== "assistant") return ""
-  const parts = message.parts
-  const isProse = (part: MessagePart) => part.type === "text" && part.source === undefined
-  const start = lastTextRunStart(
-    parts.map((part) => ({ kind: "part", part })),
-    true,
-  )
-  const answer = start === -1 ? parts : parts.slice(start)
-  return answer
-    .filter((part): part is TextPart => isProse(part))
-    .map((part) => part.text)
-    .join("\n")
-    // Visual inline não se lê em voz alta: o JSON do orbit-ui e o código do diagrama.
-    .replace(/```(?:orbit-ui|mermaid)[\s\S]*?(?:```|$)/g, "")
-    .trim()
-}
+export { speakableText } from "@shared/chat-text"
 
 /** Anexo do composer como o conversor precisa vê-lo — o mínimo comum entre o
  *  PromptInputFile, o QueueAttachment e o que volta de um revert. */

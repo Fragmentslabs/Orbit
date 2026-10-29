@@ -51,7 +51,12 @@ const MIME_EXT: Record<string, string> = {
 
 const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/i
 
-function audioDir(): string {
+/**
+ * Pasta dos áudios. Exportada porque a fala sob demanda (`voice/speech-file`)
+ * grava ali um WAV de CACHE que de propósito não entra no índice de mídia — e
+ * `resolveAudioFile` serve qualquer id com formato válido, registrado ou não.
+ */
+export function audioDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'audio')
 }
 

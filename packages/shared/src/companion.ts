@@ -915,6 +915,66 @@ export interface VoiceTranscribeResponse {
 }
 
 /**
+ * Corpo do POST /api/voice/speak — leitura em voz alta a partir do celular.
+ *
+ * O aparelho não roda motor de voz: manda o TEXTO e recebe a URL de um WAV
+ * sintetizado no desktop, servido pelo escopo `audio` com token no caminho (a
+ * mesma rota que o player já usa para os áudios do agente).
+ */
+export interface VoiceSpeakRequest {
+  /** Texto a falar. Vazio é 400. */
+  text: string
+  /** Voz M1–M5 / F1–F5; ausente = a voz das preferências do desktop. */
+  voice?: string
+  /** Idioma (`pt`, `en`, …) ou `auto`; ausente = o das preferências. */
+  lang?: string
+  /** Fator de velocidade 0,5–2; ausente = o das preferências. */
+  speed?: number
+}
+
+/** Resposta do POST /api/voice/speak. */
+export interface VoiceSpeakResponse {
+  /** Id do WAV no acervo de áudio (`aud_….wav`). */
+  id: string
+  /** URL absoluta e assinada — o player abre direto, com Range. */
+  url: string
+  /** Duração do áudio, em milissegundos. */
+  durationMs: number
+  /**
+   * Já estava sintetizado (mesmo texto, mesma voz): a resposta veio do cache do
+   * desktop e não houve síntese nova. Útil para diagnóstico, não para a UI.
+   */
+  cached: boolean
+}
+
+/**
+ * Por que o POST /api/voice/speak recusou.
+ *
+ * O desktop manda o CÓDIGO, não a frase: a mensagem que a pessoa lê é escrita
+ * por quem sabe em que idioma ela está lendo — o app. Uma frase pronta aqui
+ * chegaria em português na tela de quem usa o celular em inglês.
+ */
+export type VoiceSpeakErrorCode =
+  | 'tts_disabled'
+  | 'voice_unavailable'
+  | 'invalid_text'
+  | 'text_too_long'
+  | 'invalid_voice'
+  | 'invalid_lang'
+  | 'invalid_speed'
+
+/** Corpo de erro do POST /api/voice/speak. */
+export interface VoiceSpeakErrorResponse {
+  /** Código estável, traduzido pelo app. Nunca é uma frase. */
+  error: VoiceSpeakErrorCode
+  /**
+   * Detalhe técnico do motor (do fundo da pilha), para log. Pode vir no idioma
+   * do desktop e NÃO deve ir para a tela.
+   */
+  detail?: string
+}
+
+/**
  * Resposta do GET /api/voice/status.
  *
  * `engines` é o mesmo retrato que a tela de voz do desktop usa

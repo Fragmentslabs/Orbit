@@ -13,6 +13,7 @@ import type {
   RotationConfig,
   SessionPrefsSnapshot,
   VoiceEngineId,
+  VoiceSpeakResponse,
   VoiceStatusResponse,
   VoiceTranscribeResponse,
   WorkerConfigSnapshot,
@@ -197,6 +198,20 @@ export class CompanionHttp {
     opts?: { engine?: VoiceEngineId; modelId?: string | null; language?: string },
   ): Promise<HttpResult<VoiceTranscribeResponse>> {
     return this.request('POST', '/api/voice/transcribe', { pcm, sampleRate, ...opts })
+  }
+
+  /**
+   * Lê o texto em voz alta: o desktop sintetiza e devolve a URL assinada do
+   * WAV. O caminho inverso do ditado — lá o áudio vai e o texto volta.
+   *
+   * `voice`/`lang`/`speed` omitidos usam as preferências de voz do desktop,
+   * que é o que se quer no toque simples do botão.
+   */
+  async speak(
+    text: string,
+    opts?: { voice?: string; lang?: string; speed?: number },
+  ): Promise<HttpResult<VoiceSpeakResponse>> {
+    return this.request('POST', '/api/voice/speak', { text, ...opts })
   }
 
   /** Estado dos motores de voz do desktop (ready + installed por motor). */

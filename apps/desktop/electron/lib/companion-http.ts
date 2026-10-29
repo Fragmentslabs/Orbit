@@ -38,8 +38,16 @@ import { getSlides } from './slides/slides-store'
 import { mediaKind, type MediaEntry } from '@shared/media'
 
 import { transcribePcm, voiceStatus } from './voice'
+import { speakToFile } from './voice/speech-file'
+import { getAppSettings } from './app-settings'
 
-import type { SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot, ReasoningPrefsMap } from '@shared/companion'
+import type {
+  SessionModeOverrides,
+  SessionPrefsSnapshot,
+  WorkerConfigSnapshot,
+  ReasoningPrefsMap,
+  VoiceSpeakErrorResponse,
+} from '@shared/companion'
 import type { VoiceEngineId } from '@shared/voice'
 import type { RotationConfig } from '@shared/chat'
 
@@ -744,6 +752,87 @@ async function handleGetVoiceStatus(_req: IncomingMessage, res: ServerResponse) 
   }
 }
 
+/** Teto do texto de uma fala: o celular lê UMA resposta por toque, e a síntese
+ *  já vai em partes de 3500 caracteres. Acima disto é texto colado por engano. */
+const MAX_SPEAK_CHARS = 20_000
+
+/**
+ * Leitura em voz alta pedida pelo celular: texto entra, WAV sai.
+ *
+ * O aparelho não sintetiza — manda o texto e recebe a URL assinada de um WAV
+ * sintetizado no desktop (ver `voice/speech-file`). É o espelho do
+ * `/api/voice/transcribe`: lá o áudio atravessa e o texto volta; aqui o texto
+ * atravessa e o áudio volta.
+ *
+ * Falha sai como 503 com { error: CÓDIGO, detail } — nunca com frase. Quem
+ * escreve para a pessoa é o app, que é o único que sabe em que idioma ela está
+ * lendo; a frase pronta daqui chegaria em português na tela de quem usa o
+ * celular em inglês. O `detail` é o texto do motor, para log.
+ */
+async function handlePostVoiceSpeak(req: IncomingMessage, res: ServerResponse) {
+  try {
+    // O interruptor das preferências vale para o app também: desligado, o
+    // celular não sintetiza pelas costas do dono.
+    if (!getAppSettings().voice.tts.enabled) {
+      jsonResponse(res, 503, { error: 'tts_disabled' } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+
+    const body = await readBody(req)
+
+    const text = typeof body.text === 'string' ? body.text.trim() : ''
+    if (!text) {
+      jsonResponse(res, 400, { error: 'invalid_text' } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+    if (text.length > MAX_SPEAK_CHARS) {
+      jsonResponse(res, 400, { error: 'text_too_long' } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+    if (body.voice !== undefined && !/^[FM][1-5]$/.test(String(body.voice))) {
+      jsonResponse(res, 400, { error: 'invalid_voice' } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+    if (body.lang !== undefined && !/^(auto|[a-z]{2})$/.test(String(body.lang))) {
+      jsonResponse(res, 400, { error: 'invalid_lang' } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+    if (
+      body.speed !== undefined &&
+      (typeof body.speed !== 'number' || !Number.isFinite(body.speed) || body.speed < 0.5 || body.speed > 2)
+    ) {
+      jsonResponse(res, 400, {
+        error: 'invalid_speed',
+        detail: `recebido: ${String(body.speed)}`,
+      } satisfies VoiceSpeakErrorResponse)
+      return
+    }
+
+    const falado = await speakToFile(text, {
+      voice: typeof body.voice === 'string' ? body.voice : undefined,
+      lang: typeof body.lang === 'string' ? body.lang : undefined,
+      speed: typeof body.speed === 'number' ? body.speed : undefined,
+    })
+
+    jsonResponse(res, 200, {
+      id: falado.id,
+      // Escopo `audio`, token no caminho: o player abre direto, e o Range (que
+      // o `serveAsset` já implementa) dá a duração sem baixar tudo.
+      url: fileUrlFor(req, 'audio', falado.id),
+      durationMs: falado.durationMs,
+      cached: falado.cached,
+    })
+  } catch (err) {
+    // Motor ausente, modelo não baixado, síntese que estourou: para o app é o
+    // mesmo caso — não há voz. O texto do erro (do fundo da pilha, em
+    // português) vai em `detail`: serve ao log e não vai para a tela.
+    jsonResponse(res, 503, {
+      error: 'voice_unavailable',
+      detail: (err as Error)?.message || String(err),
+    } satisfies VoiceSpeakErrorResponse)
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -811,6 +900,7 @@ function createRouter(
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/authorize$/, paramNames: ['name'], handler: handleAuthorizeMcp },
     { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
     { pattern: /^POST \/api\/voice\/transcribe$/, paramNames: [], handler: handlePostVoiceTranscribe },
+    { pattern: /^POST \/api\/voice\/speak$/, paramNames: [], handler: handlePostVoiceSpeak },
     { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
     { pattern: /^POST \/api\/git\/checkout$/, paramNames: [], handler: handlePostCheckout },
   ]

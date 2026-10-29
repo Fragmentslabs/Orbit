@@ -96,3 +96,23 @@ export function lastProseText(mensagem: ChatMessage): string {
     .join('\n')
     .trim()
 }
+
+/**
+ * Texto que a LEITURA EM VOZ ALTA fala: a resposta final da mensagem, e só ela.
+ *
+ * É o `lastProseText` sem o que não se lê: o JSON do orbit-ui e o código do
+ * diagrama mermaid são imagens inline, e falar os dois seria ler configuração
+ * de gráfico em voz alta. Prosa do usuário nunca é lida (retorna "").
+ *
+ * Vive no shared porque as DUAS pontas falam: o desktop pelo `ChunkPlayer` do
+ * renderer (IPC em streaming) e o celular pedindo o WAV em `/api/voice/speak`.
+ * Se cada lado tivesse a sua regra, o mesmo turno sairia diferente no
+ * computador e no telefone.
+ */
+export function speakableText(message: ChatMessage): string {
+  if (message.role !== 'assistant') return ''
+  return lastProseText(message)
+    .replace(/```(?:orbit-ui|mermaid)[\s\S]*?(?:```|$)/g, '')
+    .trim()
+}
+
