@@ -44,6 +44,7 @@ import {
   MessageTimestamp,
   ReplyAction,
   RevertAction,
+  UserMessageQuote,
   UserMessageText,
 } from "@/src/components/messages/shared"
 import { MessageReplySelection } from "@/src/components/message-reply-selection"
@@ -237,6 +238,10 @@ const MessageItem = memo(
               )}
             </MessageAttachments>
           )}
+          {/* Quote of the replied message: a pill ABOVE the bubble, on the chat
+              surface — outside `MessageContent`, so it does not inherit the bubble's
+              background and padding. */}
+          <UserMessageQuote text={visibleMessageText(msg)} />
           {/* `data-msg-surface`: target of the ring of the jump to the message (search,
               gallery, artifact) — the ring goes on the bubble, which is rounded, and
               not on the wrapper of the row, which is rectangular (see message-jump). */}

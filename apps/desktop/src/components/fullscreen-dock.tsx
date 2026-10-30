@@ -8,7 +8,7 @@ import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { CodeInput } from "@/src/components/code-input"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { UserMessageText } from "@/src/components/messages/shared"
+import { UserMessageQuote, UserMessageText } from "@/src/components/messages/shared"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 import { Hint } from "@/components/ui/hint"
@@ -467,10 +467,11 @@ export function FullscreenChatFeed({
                     if (msg.role === "user") {
                       return (
                         <Message from="user" key={msg.id} data-msg-id={msg.id}>
+                          {/* Same as the main chat: the quote of the replied message
+                              comes out as a pill above the bubble (never as raw
+                              text, `> [assistant] …`). */}
+                          <UserMessageQuote text={visibleMessageText(msg)} />
                           <MessageContent>
-                            {/* Same body as the main chat: the quote of the
-                                replied message cannot come out as raw
-                                text (`> [assistant] …`) in fullscreen. */}
                             <div className="text-sm">
                               <UserMessageText text={visibleMessageText(msg)} />
                             </div>

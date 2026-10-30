@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from 'react-native'
-import { Reply, X } from 'lucide-react-native'
+import { MessageSquareQuote, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { replySnippet, type MessageReplyQuote } from '@orbit/shared'
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
@@ -40,7 +40,7 @@ export function ReplyBar({ sessionId }: { sessionId?: string }) {
         paddingVertical: 4,
       }}
     >
-      <Reply size={13} color={tokens.primary} style={{ marginTop: 2 }} />
+      <MessageSquareQuote size={13} color={tokens.primary} style={{ marginTop: 2 }} />
       <View className="flex-1 min-w-0">
         <Text style={{ fontSize: 11, fontWeight: '600', color: tokens.primary }}>
           {label(reply.role)}

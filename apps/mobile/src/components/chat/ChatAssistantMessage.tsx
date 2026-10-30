@@ -8,6 +8,7 @@ import {
   Globe,
   Search,
   Link,
+  MessageSquareQuote,
   Bot,
   Sparkles,
   Terminal,
@@ -48,7 +49,7 @@ import {
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
-import { parseMessageReply, splitMemoryIds } from '@orbit/shared'
+import { parseMessageReply, replySnippet, splitMemoryIds } from '@orbit/shared'
 import { useReplyLabel } from '~/components/chat/ReplyBar'
 
 interface ChatAssistantMessageProps {
@@ -69,8 +70,8 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const replyLabel = useReplyLabel()
   // The quote of the replied message lives in the STORED text (see
-  // formatMessageReply); here it is only separated so it can be highlighted,
-  // inside the bubble itself — as in WhatsApp.
+  // formatMessageReply); here it is only separated so it can be drawn on its own,
+  // as a pill above the bubble instead of a block inside it.
   const { reply, body } = useMemo(() => parseMessageReply(text), [text])
 
   const handleCopy = useCallback(async () => {
@@ -87,32 +88,40 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
         </View>
       )}
 
-      {text.trim().length > 0 && (
+      {/* Quote of the replied message, ABOVE the bubble — a pill on the chat
+          surface, drawn like the badge of the composer (same icon, same gold
+          name), with no X: in the sent message it is a record of what was
+          answered, not something to undo. The veil is the foreground at 10%,
+          translucent on purpose, so it lifts by the same amount over any
+          surface instead of matching one of them. */}
+      {reply && (
+        <View
+          className="mb-1 flex-row items-center gap-1.5 rounded-full px-3"
+          style={{
+            height: 28,
+            maxWidth: '100%',
+            backgroundColor: withAlpha(tokens.foreground, 0.1),
+          }}
+        >
+          <MessageSquareQuote size={12} color={tokens.primary} />
+          <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primary }}>
+            {replyLabel(reply.role)}
+          </Text>
+          <Text style={{ fontSize: 12, color: tokens.mutedForeground }}>·</Text>
+          <Text
+            numberOfLines={1}
+            style={{ flexShrink: 1, fontSize: 12, color: tokens.mutedForeground }}
+          >
+            {replySnippet(reply.text)}
+          </Text>
+        </View>
+      )}
+
+      {body.trim().length > 0 && (
         <View className="px-4 py-2.5 rounded-2xl rounded-tr-sm" style={{ backgroundColor: tokens.muted }}>
-          {reply && (
-            <View
-              className="mb-1.5 rounded-r-md"
-              style={{
-                borderLeftWidth: 2,
-                borderLeftColor: tokens.primary,
-                backgroundColor: withAlpha(tokens.background, 0.5),
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '600', color: tokens.primary }}>
-                {replyLabel(reply.role)}
-              </Text>
-              <Text numberOfLines={3} style={{ fontSize: 12, color: tokens.mutedForeground }}>
-                {reply.text}
-              </Text>
-            </View>
-          )}
-          {body.trim().length > 0 && (
-            <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
-              {body}
-            </Text>
-          )}
+          <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
+            {body}
+          </Text>
         </View>
       )}
 

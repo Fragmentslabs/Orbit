@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { parseMessageReply, replyExcerpt } from "@shared/chat"
+import { parseMessageReply, replyExcerpt, replySnippet } from "@shared/chat"
 import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, ToolPart } from "@shared/chat"
 import { useMessageReply } from "@/src/stores/message-reply"
 import { useReplyLabel } from "@/src/components/reply-bar"
@@ -640,25 +640,46 @@ function UserMessageMarkdown({ text }: { text: string }) {
 }
 
 /**
- * Text of the user message, with the quote of the replied message
- * highlighted (as in WhatsApp). The recorded text keeps the quote together with the
- * body — it is what makes the model and the copy of the message receive both
- * —, and here it is separated only for the reading.
+ * Quote of the replied message, ABOVE the bubble — a pill on the chat surface,
+ * not a block inside the bubble.
+ *
+ * The recorded text keeps the quote together with the body — it is what makes the
+ * model and the copy of the message receive both —, and here the quote is taken
+ * out only for the reading: it becomes this pill, and `UserMessageText` shows the rest.
+ *
+ * The drawing is the badge of the composer's row (same icon, same gold name), with
+ * two differences: no X — in the sent message it is a record of what was answered,
+ * not something to undo — and no chip behind the icon.
+ *
+ * `bg-foreground/10` is translucent on purpose: the same message is drawn over the
+ * chat background and over the sidebar of the panel, which are two different
+ * colors, and a fixed one would sink into one of them. Being a veil, it lifts by
+ * the same amount over both.
  */
-export function UserMessageText({ text }: { text: string }) {
+export function UserMessageQuote({ text }: { text: string }) {
   const label = useReplyLabel()
-  const { reply, body } = parseMessageReply(text)
-  if (!reply) return <UserMessageMarkdown text={text} />
+  const { reply } = parseMessageReply(text)
+  if (!reply) return null
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="rounded-r-md border-l-2 border-primary/60 bg-muted/50 px-2 py-1">
-        <p className="text-[11px] font-medium text-primary">{label(reply.role)}</p>
-        <p className="line-clamp-3 text-xs whitespace-pre-wrap text-muted-foreground">{reply.text}</p>
-      </div>
-      {body.trim() && <UserMessageMarkdown text={body} />}
+    <div className="mb-1 ml-auto flex h-7 w-fit max-w-[85%] select-none items-center gap-1.5 rounded-full bg-foreground/10 px-3 text-xs">
+      <MessageSquareQuoteIcon className="size-3 shrink-0 text-primary" />
+      <span className="shrink-0 font-medium text-primary">{label(reply.role)}</span>
+      <span className="text-muted-foreground">·</span>
+      <span className="min-w-0 truncate text-muted-foreground">{replySnippet(reply.text)}</span>
     </div>
   )
+}
+
+/**
+ * Text of the user message. The quote of the replied message is NOT drawn here:
+ * it is the pill above the bubble (`UserMessageQuote`), which is what keeps the
+ * bubble the size of what was actually written.
+ */
+export function UserMessageText({ text }: { text: string }) {
+  const { reply, body } = parseMessageReply(text)
+  if (!reply) return <UserMessageMarkdown text={text} />
+  return body.trim() ? <UserMessageMarkdown text={body} /> : null
 }
 
 /**
@@ -692,6 +713,7 @@ export function RevertAction({ messageId, sessionId }: {
 export function UserMessageBody({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
     <div className="group/user-msg flex flex-col gap-0.5">
+      <UserMessageQuote text={visibleMessageText(message)} />
       <UserMessageText text={visibleMessageText(message)} />
       <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
         <MessageTimestamp timestamp={message.createdAt} />
