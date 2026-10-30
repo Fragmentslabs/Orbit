@@ -3,11 +3,12 @@ import { resolveApiKey } from './auth'
 import { applyDiscoveredModels, ensureSeedProvider, getCustomProvider } from './custom-providers'
 import { discoverModels } from './discover-models'
 import type { DiscoverOptions } from './discover-models'
+import { tNow } from './i18n'
 
 /**
- * Servidores locais conhecidos. A detecção não só responde "está rodando" como
- * ADOTA os modelos encontrados no provedor correspondente — antes o resultado
- * ficava só na tela e o provedor continuava sem modelos, invisível no seletor.
+ * Known local servers. The detection does not only answer "it is running" — it
+ * ADOPTS the models found into the corresponding provider: before, the result
+ * stayed only on the screen and the provider kept having no models, invisible in the selector.
  */
 
 export interface DetectResult {
@@ -59,14 +60,14 @@ export async function detectLocal(): Promise<DetectResult[]> {
 }
 
 /**
- * Atualiza os modelos de um provedor personalizado a partir do próprio
- * endpoint (botão "buscar modelos" do card). Usado tanto para servidores
- * locais quanto para gateways que ganharam modelos novos.
+ * Updates a custom provider's models from its own
+ * endpoint (the card's "fetch models" button). Used both for local servers
+ * and for gateways that got new models.
  */
 export async function refreshProviderModels(id: string): Promise<CatalogProvider> {
   const provider = await getCustomProvider(id)
-  if (!provider) throw new Error('Provedor não encontrado.')
-  if (!provider.api) throw new Error('O provedor não tem URL base configurada.')
+  if (!provider) throw new Error(tNow('provider.notFound'))
+  if (!provider.api) throw new Error(tNow('provider.noBaseUrl'))
 
   const apiKey = await resolveApiKey(provider.id, provider.env)
   const models = await discoverModels({
@@ -75,14 +76,14 @@ export async function refreshProviderModels(id: string): Promise<CatalogProvider
     protocol: provider.protocol,
   })
   const updated = await applyDiscoveredModels(id, models)
-  if (!updated) throw new Error('Provedor não encontrado.')
+  if (!updated) throw new Error(tNow('provider.notFound'))
   return updated
 }
 
 /**
- * Descoberta a partir do diálogo de edição: a URL e o protocolo vêm do que está
- * na tela, mas a CHAVE pode já estar salva — sem isso, editar um provedor e
- * pedir "buscar modelos" responderia 401 mesmo com a credencial gravada.
+ * Discovery from the edit dialog: the URL and the protocol come from what is
+ * on screen, but the KEY may already be saved — without this, editing a provider and
+ * asking to "fetch models" would answer 401 even with the credential written.
  */
 export async function discoverProviderModels(
   providerId: string,

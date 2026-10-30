@@ -1,14 +1,14 @@
 /**
- * Servidor WebSocket para o Orbit Companion.
- * 
- * Roda dentro do processo principal do Electron, expondo uma API segura
- * via WebSocket para que o app mobile possa controlar o desktop pela rede local.
- * 
- * Segurança:
- * - PIN de pareamento (6 dígitos) gerado randomicamente na inicialização
- * - Autenticação obrigatória antes de qualquer operação
- * - Rate limiting no PIN (5 tentativas por minuto)
- * - A credenciais de API (auth.json) NUNCA são transmitidas ao companion
+ * WebSocket server for Orbit Companion.
+ *
+ * It runs inside the Electron main process, exposing a secure API
+ * over WebSocket so the mobile app can control the desktop over the local network.
+ *
+ * Security:
+ * - Pairing PIN (6 digits) generated randomly at startup
+ * - Authentication required before any operation
+ * - Rate limiting on the PIN (5 attempts per minute)
+ * - The API credentials (auth.json) are NEVER transmitted to the companion
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
@@ -47,11 +47,11 @@ import type {
   MessageQueueChangeEvent,
 } from '@shared/companion'
 import { SESSION_BUSY_ERROR } from '@shared/companion'
-import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan, RotationConfig } from '@shared/chat'
-import type { RotinaEvent } from '@shared/rotinas'
+import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, RotationConfig } from '@shared/chat'
+import type { RoutineEvent } from '@shared/routines'
 import { setArchivedState } from '@shared/archive'
-import type { EsteiraEvent } from '@shared/esteira'
-import { StorageKeys } from '@shared/chat'
+import type { PipelineEvent } from '@shared/pipeline'
+import { StorageKeys, normalizeOrchestrationPlan } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
 import { listCredentialProviders } from './auth'
@@ -77,9 +77,9 @@ import {
   promote as promoteMemory,
   getFull as getMemoryFull,
 } from './memory/service'
-import * as rotinas from './rotinas'
-import * as esteira from './esteira'
-import { definirModoGlobal } from './permission/modo-global'
+import * as routines from './routines'
+import * as pipelineApi from './pipeline'
+import { setGlobalMode } from './permission/global-mode'
 import { deleteMediaJournals } from './session/media-journal'
 import {
   rewriteMediaPart as rewriteMediaPartOne,
@@ -94,37 +94,38 @@ import {
   getWorkerConfigCache,
 } from './companion-http'
 import { createAssetToken } from './companion-token'
+import { tNow } from './i18n'
 
 const execFileAsync = promisify(execFile)
 
 const PORT = 3847
 const PIN_LENGTH = 6
 const MAX_PIN_ATTEMPTS = 5
-const PIN_WINDOW_MS = 60_000 // 1 minuto
-const PIN_TTL_MS = 300_000 // PIN válido por 5 minutos
+const PIN_WINDOW_MS = 60_000 // 1 minute
+const PIN_TTL_MS = 300_000 // PIN valid for 5 minutes
 
 interface ConnectedClient {
   ws: WebSocket
   authenticated: boolean
   deviceName: string
   connectedAt: number
-  /** Hostname/IP que o client usou para conectar — base das URLs de mídia
-   *  reescritas (o celular só alcança o desktop pelo IP que ele mesmo usou). */
+  /** Hostname/IP the client used to connect — base of the rewritten media
+   *  URLs (the phone only reaches the desktop through the IP it used itself). */
   mediaHost: string
 }
 
 let server: Server | null = null
 let wss: WebSocketServer | null = null
-let wsBindError: string | null = null // erro de bind (ex.: porta ocupada por outra instância do Orbit)
+let wsBindError: string | null = null // bind error (e.g. port taken by another Orbit instance)
 let currentPin: string = ''
 let pinCreatedAt: number = 0
 const pinAttempts = new Map<string, number[]>() // ip → timestamps
 
-// ─── Dispositivos pareados (tokens persistentes) ─────────────────────────────
-// O PIN expira em 5 min, então ele serve só para o PRIMEIRO pareamento.
-// Ao autenticar com PIN, o desktop emite um token persistente que o app
-// guarda e usa nas próximas conexões — é isso que faz a conexão sobreviver
-// a restarts do app sem pedir PIN de novo.
+// ─── Paired devices (persistent tokens) ─────────────────────────────
+// The PIN expires in 5 min, so it only serves the FIRST pairing.
+// On authenticating with the PIN, the desktop issues a persistent token that the app
+// stores and uses on the next connections — that is what makes the connection survive
+// app restarts without asking for the PIN again.
 
 const DEVICES_KEY = 'companion/devices'
 
@@ -152,7 +153,7 @@ async function registerDevice(deviceName: string): Promise<string> {
   return token
 }
 
-/** Condutor da orquestra configurado no desktop, no formato do SendMessageInput. */
+/** Orchestra conductor configured on the desktop, in the SendMessageInput shape. */
 function conductorFromConfig(): SendMessageInput['orchestratorModel'] {
   const { orchestratorModel, orchestratorReasoning } = getWorkerConfigCache()
   return orchestratorModel ? { ...orchestratorModel, reasoning: orchestratorReasoning ?? undefined } : undefined
@@ -162,7 +163,7 @@ export async function validateDeviceToken(token: string): Promise<boolean> {
   if (!token) return false
   const devices = await loadDevices()
   const device = devices.find((d) => {
-    // Comparação em tempo constante (tokens têm tamanho fixo de 64 hex chars)
+    // Constant-time comparison (tokens have a fixed size of 64 hex chars)
     if (d.token.length !== token.length) return false
     return crypto.timingSafeEqual(Buffer.from(d.token), Buffer.from(token))
   })
@@ -171,10 +172,10 @@ export async function validateDeviceToken(token: string): Promise<boolean> {
   void writeJson(DEVICES_KEY, devices)
   return true
 }
-// Modo de pareamento: ativo enquanto o modal "Conectar App" está aberto no
-// desktop. Enquanto ativo, o PIN atual é exposto pelo endpoint público de
-// descoberta (/api/ping), permitindo que o app conecte com um toque ao achar
-// o desktop na rede — mesma exposição que já existe visualmente no modal.
+// Pairing mode: active while the "Connect App" modal is open on the
+// desktop. While active, the current PIN is exposed by the public discovery
+// endpoint (/api/ping), letting the app connect with a tap when it finds
+// the desktop on the network — the same exposure that already exists visually in the modal.
 let pairingModeActive = false
 const clients = new Set<ConnectedClient>()
 
@@ -209,20 +210,20 @@ function validatePin(pin: string, clientIp: string): boolean {
 }
 
 /**
- * PIN atual — regenerado automaticamente ao expirar, para que a UI
- * (modal "Conectar App") nunca exiba um PIN que o validatePin rejeitaria.
+ * Current PIN — regenerated automatically on expiry, so the UI
+ * ("Connect App" modal) never shows a PIN that validatePin would reject.
  */
 export function getCurrentPin(): string {
   if (!currentPin || Date.now() - pinCreatedAt >= PIN_TTL_MS) regeneratePin()
   return currentPin
 }
 
-/** Liga/desliga o modo de pareamento (ver comentário acima de `pairingModeActive`). */
+/** Turns pairing mode on/off (see the comment above `pairingModeActive`). */
 export function setPairingMode(active: boolean): void {
   pairingModeActive = active
 }
 
-/** PIN atual, apenas se o modo de pareamento estiver ativo — usado no /api/ping. */
+/** Current PIN, only if pairing mode is active — used in /api/ping. */
 export function getPairingPin(): string | null {
   if (!pairingModeActive) return null
   return getCurrentPin()
@@ -230,9 +231,9 @@ export function getPairingPin(): string | null {
 
 // ─── Network Discovery ───────────────────────────────────────────────────────
 
-// Nomes de adaptadores virtuais/túnel comuns (VPN, WSL, máquinas virtuais) que
-// não são a rede local real — não adianta anunciar esse IP pro app achar,
-// o celular não consegue alcançá-lo.
+// Names of common virtual/tunnel adapters (VPN, WSL, virtual machines) that
+// are not the real local network — advertising that IP does not help the app find
+// the desktop, the phone cannot reach it.
 const VIRTUAL_IFACE_NAME = /virtualbox|vmware|hyper-v|vethernet|docker|wsl|tailscale|zerotier|utun|tun\d|tap\d/i
 
 function isPrivateIPv4(address: string): boolean {
@@ -253,16 +254,16 @@ export function getLocalIp(): string {
     }
   }
 
-  // Preferência: interface com nome "normal" (Wi-Fi/Ethernet) e IP de rede
-  // privada — é essa que o celular na mesma rede consegue alcançar.
+  // Preference: an interface with a "normal" name (Wi-Fi/Ethernet) and a private
+  // network IP — that is the one the phone on the same network can reach.
   const real = candidates.find((c) => !VIRTUAL_IFACE_NAME.test(c.name) && isPrivateIPv4(c.address))
   if (real) return real.address
 
-  // Sem essa combinação: qualquer IP de rede privada serve de fallback.
+  // Without that combination: any private network IP serves as a fallback.
   const anyPrivate = candidates.find((c) => isPrivateIPv4(c.address))
   if (anyPrivate) return anyPrivate.address
 
-  // Último recurso: comportamento antigo (primeira interface não-interna).
+  // Last resort: the old behavior (first non-internal interface).
   return candidates[0]?.address ?? '127.0.0.1'
 }
 
@@ -282,13 +283,13 @@ function sendResponse(ws: WebSocket, requestId: string, ok: boolean, data?: unkn
   send(ws, { type: 'api:response', requestId, ok, data, error } satisfies ApiResponse)
 }
 
-/** Notifica tanto os companions autenticados quanto as janelas do desktop
- *  (mesmo canal 'chat:event' que o renderer já escuta) — mantém os dois
- *  lados em sincronia quando uma sessão/pasta muda por qualquer um deles. */
+/** Notifies both the authenticated companions and the desktop windows
+ *  (the same 'chat:event' channel the renderer already listens to) — it keeps both
+ *  sides in sync when a session/folder changes by either of them. */
 /**
- * Propaga mudança de sessão/pasta para todas as janelas e para os companions.
- * Exportado porque as ferramentas de manutenção (tools/sessions.ts) mutam
- * sessões pelo main e precisam que o renderer acompanhe.
+ * Propagates a session/folder change to every window and to the companions.
+ * Exported because the maintenance tools (tools/sessions.ts) mutate
+ * sessions through the main and need the renderer to follow.
  */
 export function broadcastSessionEvent(event: ChatEvent) {
   forwardChatEvent(event)
@@ -304,19 +305,19 @@ function forkId(): string {
 }
 
 // ─── Media URL Rewriting ─────────────────────────────────────────────────────
-// O app mobile não tem acesso ao protocolo orbit-media:// (registrado só no
-// processo principal do Electron), então as URLs de imagem são reescritas para
-// http://<host-do-client>:3848/api/media/<id>?t=<token assinado> na entrega —
-// tanto no histórico (messages:get) quanto no streaming (chat:event). A URL é
-// montada com o host que o próprio client usou para conectar, que é o único
-// endereço que o celular consegue alcançar.
+// The mobile app has no access to the orbit-media:// protocol (registered only in the
+// Electron main process), so the image URLs are rewritten to
+// http://<client-host>:3848/api/media/<id>?t=<signed token> on delivery —
+// both in the history (messages:get) and in the streaming (chat:event). The URL is
+// built with the host the client itself used to connect, which is the only
+// address the phone can reach.
 
 function mediaBaseUrl(client: ConnectedClient): string {
   return `http://${client.mediaHost}:${COMPANION_HTTP_PORT}`
 }
 
-/** A reescrita mora no companion-media.ts (puro e testado); aqui só entra a
- *  fabrica de token, que depende do segredo persistido. */
+/** The rewriting lives in companion-media.ts (pure and tested); here only the
+ *  token factory enters, which depends on the persisted secret. */
 const rewriteMessage = (msg: ChatMessage, base: string) =>
   rewriteMessageMedia(msg, base, createAssetToken)
 const rewriteMessages = (msgs: ChatMessage[], base: string) =>
@@ -324,8 +325,8 @@ const rewriteMessages = (msgs: ChatMessage[], base: string) =>
 const rewriteMediaPart = (part: MessagePart, base: string) =>
   rewriteMediaPartOne(part, base, createAssetToken)
 
-/** Sessões com algo em execução no main: chat, loop (entre iterações também)
- *  e orquestra. */
+/** Sessions with something running in the main process: chat, loop (between
+ *  iterations too) and orchestra. */
 function runningSessionIds(): Set<string> {
   return new Set([
     ...getRunningSessionIds(),
@@ -339,15 +340,15 @@ function runningSessionIds(): Set<string> {
 async function handleRequest(client: ConnectedClient, requestId: string, req: CompanionRequest) {
   const { ws } = client
 
-  // Heartbeat — responde pong para o client medir latência
+  // Heartbeat — answers pong so the client can measure latency
   if ((req as { type: string }).type === 'ping') {
     send(ws, { type: 'pong' } as unknown as CompanionEvent)
     return
   }
 
-  // Auth é o único request permitido sem autenticação
+  // Auth is the only request allowed without authentication
   if (req.type === 'auth') {
-    // 1º: token persistente de um pareamento anterior
+    // 1st: persistent token from a previous pairing
     if (req.token && (await validateDeviceToken(req.token))) {
       client.authenticated = true
       client.deviceName = req.deviceName ?? 'Companion'
@@ -362,7 +363,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       return
     }
 
-    // 2º: PIN (primeiro pareamento) — emite token persistente no sucesso
+    // 2nd: PIN (first pairing) — issues a persistent token on success
     if (req.pin && validatePin(req.pin, getIp(ws))) {
       client.authenticated = true
       client.deviceName = req.deviceName ?? 'Companion'
@@ -382,9 +383,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
     return
   }
 
-  // Todos os outros requests exigem autenticação
+  // Every other request requires authentication
   if (!client.authenticated) {
-    sendResponse(ws, requestId, false, undefined, 'Não autenticado')
+    sendResponse(ws, requestId, false, undefined, tNow('companion.server.notAuthenticated'))
     return
   }
 
@@ -397,10 +398,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         ).filter((s): s is SessionInfo => s !== null)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt)
 
-        // Sanitizar: fora daqui ficam só os campos pesados (revert carrega
-        // diff e mensagens descartadas). As pastas do modo código entram: sem
-        // elas o mobile abre todo chat existente como se não tivesse pasta
-        // associada — e o seletor de branch, que depende do diretório, some.
+        // Sanitize: what stays out is only the heavy fields (revert carries
+        // a diff and discarded messages). The code-mode folders go in: without
+        // them the mobile opens every existing chat as if it had no folder
+        // associated — and the branch selector, which depends on the directory, disappears.
         const safe = sessions.map(s => ({
           id: s.id,
           title: s.title,
@@ -427,7 +428,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'git:branches': {
-        // Mesmos comandos do ipcMain 'git:branches' do desktop.
+        // Same commands as the desktop's ipcMain 'git:branches'.
         try {
           const [list, current] = await Promise.all([
             execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: req.directory }),
@@ -448,28 +449,29 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           await execFileAsync('git', ['checkout', req.branch], { cwd: req.directory })
           sendResponse(ws, requestId, true)
         } catch (err) {
-          // Arvore suja: o git recusa e a mensagem dele e o que o app mostra,
-          // igual ao desktop — nao forcamos checkout por cima de alteracoes.
+          // Dirty tree: git refuses and its message is what the app shows,
+          // the same as on the desktop — we do not force a checkout over the changes.
           sendResponse(ws, requestId, false, undefined, (err as Error).message)
         }
         break
       }
 
       case 'session:state': {
-        // Plano, review e pedidos pendentes vivem fora das mensagens; sem isto
-        // o mobile so os conhecia pelos eventos ao vivo e perdia os cards ao
-        // reabrir o chat — ou nunca os via, quando o pedido foi emitido antes
-        // de o celular parear. E a mesma leitura que o desktop faz no
-        // ensureMessages, entao os dois apps mostram exatamente os mesmos cards.
+        // Plans, reviews and pending requests live outside the messages; without this
+        // the mobile only knew them from the live events and lost the cards when
+        // reopening the chat — or never saw them, when the request was issued before
+        // the phone paired. And it is the same read the desktop does in
+        // ensureMessages, so both apps show exactly the same cards.
         const [planReview, plan, pendingAsks] = await Promise.all([
           readJson<PlanReview>(StorageKeys.planReview(req.sessionId)),
-          readJson<OrchestrationPlan>(StorageKeys.orchestration(req.sessionId)),
+          // Legacy plans (Portuguese keys/phase values) are translated at the read edge.
+          readJson<unknown>(StorageKeys.orchestration(req.sessionId)).then(normalizeOrchestrationPlan),
           readJson<PendingAskState[]>(StorageKeys.pendingAsks(req.sessionId)),
         ])
         sendResponse(ws, requestId, true, {
           planReview: planReview ?? undefined,
-          // Plano dispensado no chat não volta como card — a leitura é a mesma do
-          // desktop, então a marca vale para os dois apps.
+          // A plan dismissed in the chat does not come back as a card — the read is the same as on
+          // the desktop, so the mark counts for both apps.
           plan: plan?.dismissed ? undefined : plan ?? undefined,
           pendingAsks: pendingAsks ?? [],
         } satisfies SessionStateResponse)
@@ -477,24 +479,24 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'sessions:running': {
-        // Mesma fonte do IPC 'chat:running' do renderer: o engine vive no main,
-        // entao so ele sabe o que ainda esta rodando. Sem isto o celular que
-        // conecta no meio da execucao mostra a conversa parada.
+        // same source as the renderer's IPC 'chat:running': the engine lives in the main,
+        // so only it knows what is still running. Without this the phone that
+        // connects in the middle of the execution shows the conversation stalled.
         sendResponse(ws, requestId, true, [...runningSessionIds()])
         break
       }
 
       case 'messages:get': {
         const messages = await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId)) ?? []
-        // Enviar apenas as últimas N mensagens para não sobrecarregar
+        // Send only the last N messages so as not to overload
         const limit = Math.min(req.limit ?? 50, 100)
         const offset = Math.max(req.offset ?? 0, 0)
         const end = Math.max(messages.length - offset, 0)
         const start = Math.max(end - limit, 0)
         const page = messages.slice(start, end)
-        // O mobile não conhece orbit-media:// (esquema do Electron — só o
-        // streaming e o sessions:unrevert reescreviam). Sem isto, todo
-        // histórico chega cru ao app e as imagens nunca carregam.
+        // The mobile does not know orbit-media:// (an Electron scheme — only the
+        // streaming and sessions:unrevert rewrote it). Without this, the whole
+        // history reaches the app raw and the images never load.
         const rewritten = rewriteMessages(page, mediaBaseUrl(client)) ?? page
         sendResponse(ws, requestId, true, rewritten)
         break
@@ -503,27 +505,27 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'messages:send': {
         const win = BrowserWindow.getAllWindows()[0]
         if (!win) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           return
         }
 
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           return
         }
 
-        // Sessão ainda rodando (inclusive entre as iterações do loop e durante
-        // a orquestra): um envio agora abortaria o turno no meio. Quem decide
-        // se a sessão está livre é o main — o status que o celular viu pode
-        // estar velho (reconexão, idle entre iterações do loop).
+        // Session still running (including between loop iterations and during
+        // the orchestra): sending now would abort the turn halfway. Deciding
+        // whether the session is free is the main process' job — the status the
+        // phone saw may be stale (reconnect, idle between loop iterations).
         if (runningSessionIds().has(req.sessionId)) {
           sendResponse(ws, requestId, false, undefined, SESSION_BUSY_ERROR)
           return
         }
 
-        // Pastas do modo código enviadas pelo app: persistem na sessão
-        // (mesmo comportamento do desktop, onde o send grava directory).
+        // Code-mode folders sent by the app: they persist in the session
+        // (same behavior as the desktop, where the send writes the directory).
         if (req.directory && (session.directory !== req.directory ||
             JSON.stringify(session.extraDirectories ?? []) !== JSON.stringify(req.extraDirectories ?? []))) {
           session.directory = req.directory
@@ -533,8 +535,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           broadcastSessionEvent({ type: 'session', sessionId: session.id, session })
         }
 
-        // Listar provedores conectados para resolver o modelo
-        const [connected, idioma] = await Promise.all([
+        // List connected providers to resolve the model
+        const [connected, language] = await Promise.all([
           listCredentialProviders(),
           readAppLanguage(),
         ])
@@ -546,26 +548,26 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           providerId: req.providerId ?? connected[0] ?? 'openai',
           modelId: req.modelId ?? 'gpt-4o',
           mode: session.mode,
-          // O celular manda o modo do seletor global (sincronizado com o
-          // desktop): o turno segue a troca dele no meio da resposta.
+          // The phone sends the mode of the global selector (synchronized with the
+          // desktop): the turn follows a switch made mid-answer.
           options: req.options?.permissionMode ? { ...req.options, followGlobalPermission: true } : (req.options ?? {}),
           directory: req.directory ?? session.directory,
           extraDirectories: req.extraDirectories ?? session.extraDirectories,
           workerModel: req.workerModel,
           visionModel: req.visionModel,
-          // O condutor da orquestra é config do desktop (Preferências / "+"):
-          // o celular não o manda, então vem da cópia que o renderer empurra.
+          // The orchestra conductor is desktop config (Preferences / "+"):
+          // the phone does not send it, so it comes from the copy the renderer pushes.
           ...(req.options?.orchestrate ? { orchestratorModel: conductorFromConfig() } : {}),
           loopConfig: req.loopConfig,
-          // Idioma do app (publicado pelo renderer). Sem ele o agente cai no
-          // idioma do PROMPT — o desktop manda em todo envio, e o caminho do
-          // companion não mandava.
-          ...(idioma ? { language: idioma } : {}),
+          // App language (published by the renderer). Without it the agent falls back to
+          // the PROMPT's language — the desktop sends it on every send, and the
+          // companion path did not.
+          ...(language ? { language } : {}),
         }
 
-        // Mesmo roteamento do chat:send do desktop: orquestra, loop ou chat, com
-        // as guardas de modo. Antes daqui saía sempre um runChat, então do
-        // celular a orquestra virava chat comum e o loop rodava um turno só.
+        // Same routing as the desktop's chat:send: orchestra, loop or chat, with
+        // the mode guards. It used to always leave here as a runChat, so from the
+        // phone the orchestra became a plain chat and the loop ran a single turn.
         await dispatchSend(win, input)
         sendResponse(ws, requestId, true)
         break
@@ -575,7 +577,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const now = Date.now()
         const session: SessionInfo = {
           id: crypto.randomUUID().replace(/-/g, '').slice(0, 21),
-          title: req.title ?? (req.mode === 'chat' ? 'Nova conversa' : 'Nova sessão de código'),
+          title:
+            req.title ??
+            tNow(req.mode === 'chat' ? 'chat.defaultTitle.chat' : 'chat.defaultTitle.code'),
           mode: req.mode,
           pinned: false,
           archived: false,
@@ -584,7 +588,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           updatedAt: now,
         }
         await writeJson(StorageKeys.session(session.id), session)
-        // Notifica o renderer do desktop e demais companions
+        // Notifies the desktop renderer and the other companions
         forwardChatEvent({ type: 'session', sessionId: session.id, session })
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
@@ -596,16 +600,16 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'chat:abort': {
-        // Mesmo encerramento do desktop: engines + pedidos pendentes + confiança
-        // da sessão. Parar pela metade deixava o loop girando.
+        // Same shutdown as the desktop: engines + pending requests + session
+        // trust. Stopping halfway left the loop spinning.
         abortSession(req.sessionId)
         sendResponse(ws, requestId, true)
         break
       }
 
       case 'ask:reply': {
-        // Mesmo caminho do desktop: pedido vivo resolve na hora, card de uma
-        // execução já encerrada volta para a conversa como mensagem.
+        // Same path as the desktop: a live request resolves right away, a card from an
+        // execution already finished goes back to the conversation as a message.
         const ok = await replyOrResume(BrowserWindow.getAllWindows()[0] ?? null, req.requestId, req.value)
         sendResponse(ws, requestId, ok)
         break
@@ -618,10 +622,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'models:select': {
-        // A seleção de modelo é feita no renderer (localStorage) — para o
-        // companion, broadcastamos um evento para o renderer atualizar. O
-        // sessionId faz a escolha valer por chat (override da sessão); sem
-        // sessionId vale o draft/chat novo + default global.
+        // The model selection is made in the renderer (localStorage) — for the
+        // companion, we broadcast an event so the renderer updates. The
+        // sessionId makes the choice count per chat (session override); without
+        // it, it counts for the draft/new chat + the global default.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:model-select', {
@@ -636,9 +640,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'rotation:select': {
-        // Espelho do models:select: as rotações vivem no renderer
-        // (localStorage), então a escolha feita no celular é aplicada lá — e
-        // de lá volta para todos os companions pelo broadcast.
+        // Mirror of models:select: the rotations live in the renderer
+        // (localStorage), so the choice made on the phone is applied there — and
+        // from there it goes back to every companion through the broadcast.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:rotation-select', {
@@ -652,8 +656,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'rotation:set': {
-        // CRUD de rotação feito no celular: manda a lista inteira para o
-        // renderer persistir (fonte da verdade), como o prefs:set.
+        // Rotation CRUD done on the phone: it sends the whole list for the
+        // renderer to persist (source of truth), like prefs:set.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:rotation-set', { rotations: req.rotations ?? [] })
@@ -669,12 +673,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'queue:op': {
-        // A fila mora no renderer (é ele quem envia o próximo item): a
-        // operação vai para lá, e a fila resultante volta a todos pelo
+        // The queue lives in the renderer (it is the one that sends the next item): the
+        // operation goes there, and the resulting queue comes back to everyone through
         // 'queue:change'.
         const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
         if (wins.length === 0) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           return
         }
         for (const win of wins) win.webContents.send('companion:queue-op', req.op)
@@ -683,9 +687,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'modes:select': {
-        // Espelho do models:select: os modos por chat vivem no renderer
-        // (localStorage), então a escolha feita no celular é aplicada lá — e
-        // de lá volta para todos os companions pelo broadcast.
+        // Mirror of models:select: the per-chat modes live in the renderer
+        // (localStorage), so the choice made on the phone is applied there — and
+        // from there it goes back to every companion through the broadcast.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:mode-select', {
@@ -700,9 +704,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'reasoning:select': {
-        // Mesma via do models:select: o thinking por modelo vive no renderer
-        // (localStorage), então o toggle feito no celular é aplicado lá — e de
-        // lá volta para todos os companions pelo broadcast 'reasoning:change'.
+        // Same route as models:select: the thinking per model lives in the renderer
+        // (localStorage), so the toggle made on the phone is applied there — and from
+        // there it goes back to every companion through the 'reasoning:change' broadcast.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:reasoning-select', {
@@ -717,9 +721,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'session:prefs-select': {
-        // Thinking/autonomia de UM chat escolhidos no celular: o renderer é a
-        // fonte da verdade, então a escolha é aplicada lá — e de lá volta a
-        // todos os companions pelo 'session:prefs-change'.
+        // Thinking/autonomy of ONE chat chosen on the phone: the renderer is the
+        // source of truth, so the choice is applied there — and from there it goes back to
+        // every companion through 'session:prefs-change'.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:session-prefs-select', {
@@ -734,15 +738,15 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'prefs:get': {
-        // Espelho do worker-config: as preferencias vivem no renderer, que
-        // empurra o snapshot para ca a cada mudanca.
+        // Mirror of worker-config: the preferences live in the renderer, which
+        // pushes the snapshot here on every change.
         sendResponse(ws, requestId, true, getAppPreferences())
         break
       }
 
       case 'prefs:set': {
-        // Mudanca feita no celular: aplica no renderer (fonte da verdade) e de
-        // la o snapshot volta para todos os companions.
+        // Change made on the phone: it applies in the renderer (source of truth) and from
+        // there the snapshot comes back to every companion.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:preferences-set', req.prefs)
@@ -753,8 +757,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'worker-config:set': {
-        // Mesma via do modes:select: a config vive no renderer, então a
-        // escolha feita no celular é aplicada lá e volta pelo broadcast.
+        // Same route as modes:select: the config lives in the renderer, so the
+        // choice made on the phone is applied there and comes back through the broadcast.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:worker-config-set', req.config)
@@ -780,7 +784,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:rename': {
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
         const updated: SessionInfo = { ...session, title: req.title, updatedAt: Date.now() }
@@ -793,7 +797,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:pin': {
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
         const updated: SessionInfo = { ...session, pinned: req.pinned, updatedAt: Date.now() }
@@ -806,7 +810,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:archive': {
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
         const updated: SessionInfo = { ...setArchivedState(session, req.archived), updatedAt: Date.now() }
@@ -819,7 +823,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:move-folder': {
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
         const updated: SessionInfo = { ...session, folderId: req.folderId, updatedAt: Date.now() }
@@ -834,7 +838,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const all = (await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))).filter(
           (s): s is SessionInfo => s !== null,
         )
-        // Cascata: deletar um orquestrador aborta e remove seus workers filhos.
+        // Cascade: deleting an orchestrator aborts and removes its child workers.
         const ids = [req.sessionId, ...all.filter((s) => s.parentId === req.sessionId).map((s) => s.id)]
         for (const id of ids) {
           abortSession(id)
@@ -851,7 +855,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:fork': {
         const source = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!source) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
         const allMsgs = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
@@ -861,7 +865,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           if (idx >= 0) msgs = msgs.slice(0, idx + 1)
         }
 
-        // Título "Original (fork #n)": n = maior contador existente do mesmo original + 1
+        // Title "Original (fork #n)": n = highest existing counter of the same original + 1
         const baseTitle = source.title.replace(/ \(fork #\d+\)$/, '')
         const escaped = baseTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const counterRe = new RegExp(`^${escaped} \\(fork #(\\d+)\\)$`)
@@ -904,24 +908,24 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const revertState = await revertSession(req.sessionId, req.messageId)
         if (revertState !== null) {
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
-          // Mesma reescrita do sessions:unrevert: a mensagem revertida não
-          // pode voltar com orbit-media:// cru para o app.
+          // Same rewriting as sessions:unrevert: the reverted message cannot
+          // come back with a raw orbit-media:// to the app.
           sendResponse(ws, requestId, true, {
             revert: revertState,
             messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
           })
         } else {
-          sendResponse(ws, requestId, false, undefined, 'Não foi possível reverter')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.revertFailed'))
         }
         break
       }
 
       case 'sessions:revertUncertain': {
-        // A sessão atualizada (revert sem os incertos) também chega pelo
-        // evento 'session'; a resposta leva o estado para o app aplicar já.
+        // The updated session (revert without the uncertain ones) also arrives through the
+        // 'session' event; the response carries the state for the app to apply right away.
         const revertState = await revertUncertainSession(req.sessionId)
         if (revertState) sendResponse(ws, requestId, true, { revert: revertState })
-        else sendResponse(ws, requestId, false, undefined, 'Nada para reverter')
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.nothingToRevert'))
         break
       }
 
@@ -929,14 +933,14 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const result = await unrevertSession(req.sessionId)
         if (result.done) {
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
-          // `result` descreve o que voltou e o que ficou intacto por conflito —
-          // o mobile mostra o aviso quando há conflito.
+          // `result` describes what came back and what stayed intact due to a conflict —
+          // the mobile shows the warning when there is a conflict.
           sendResponse(ws, requestId, true, {
             messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
             result,
           })
         } else {
-          sendResponse(ws, requestId, false, undefined, 'Nada para desfazer')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.nothingToUndo'))
         }
         break
       }
@@ -950,7 +954,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'memory:update': {
         const updated = await updateMemory(req.id, req.patch)
         if (updated) sendResponse(ws, requestId, true, updated)
-        else sendResponse(ws, requestId, false, undefined, 'Memória não encontrada')
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.memoryNotFound'))
         break
       }
 
@@ -963,20 +967,20 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'memory:promote': {
         const promoted = await promoteMemory(req.id)
         if (promoted) sendResponse(ws, requestId, true, promoted)
-        else sendResponse(ws, requestId, false, undefined, 'Memória não pode ser promovida')
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.memoryCannotPromote'))
         break
       }
 
       case 'memory:doc': {
         const full = await getMemoryFull(req.id)
         if (full) sendResponse(ws, requestId, true, full.document)
-        else sendResponse(ws, requestId, false, undefined, 'Memória não encontrada')
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.memoryNotFound'))
         break
       }
 
       case 'fs:list-dirs': {
-        // Navegação de pastas do desktop para o seletor do app (modo código).
-        // Só lista DIRETÓRIOS (nunca conteúdo de arquivos) e exige auth.
+        // Desktop folder navigation for the app's selector (code mode).
+        // It only lists DIRECTORIES (never file contents) and requires auth.
         const target = nodePath.resolve(req.path ?? os.homedir())
         try {
           const entries = await readdir(target, { withFileTypes: true })
@@ -991,150 +995,150 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
             dirs,
           })
         } catch (err) {
-          sendResponse(ws, requestId, false, undefined, `Não foi possível listar: ${(err as Error).message}`)
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.listFailed', { error: (err as Error).message }))
         }
         break
       }
 
-      case 'rotinas:list': {
-        const dados = await rotinas.carregarTudo()
-        sendResponse(ws, requestId, true, dados)
+      case 'routines:list': {
+        const data = await routines.loadAll()
+        sendResponse(ws, requestId, true, data)
         break
       }
 
-      case 'rotinas:create': {
-        const rotina = await rotinas.criarRotina(req.input)
-        sendResponse(ws, requestId, true, rotina)
+      case 'routines:create': {
+        const routine = await routines.createRoutine(req.input)
+        sendResponse(ws, requestId, true, routine)
         break
       }
 
-      case 'rotinas:update': {
-        const rotina = await rotinas.atualizarRotinaCampos(req.id, req.patch)
-        if (rotina) sendResponse(ws, requestId, true, rotina)
-        else sendResponse(ws, requestId, false, undefined, 'Rotina não encontrada')
+      case 'routines:update': {
+        const routine = await routines.updateRoutineFields(req.id, req.patch)
+        if (routine) sendResponse(ws, requestId, true, routine)
+        else sendResponse(ws, requestId, false, undefined, 'Routine not found')
         break
       }
 
-      case 'rotinas:delete': {
-        await rotinas.removerRotinaCompleta(req.id)
+      case 'routines:delete': {
+        await routines.removeRoutineCompletely(req.id)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'rotinas:run': {
-        const sessionId = await rotinas.executarAgora(req.id)
+      case 'routines:run': {
+        const sessionId = await routines.runNow(req.id)
         sendResponse(ws, requestId, true, sessionId)
         break
       }
 
-      case 'rotinas:prune-runs': {
-        await rotinas.podarRunsOrfaos(req.sessionIds)
+      case 'routines:prune-runs': {
+        await routines.pruneOrphanRuns(req.sessionIds)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'rotinas:generate': {
-        const resultado = await rotinas.gerarRotina(
-          req.descricao,
-          req.modelo,
-          req.pastas,
-          req.idioma,
-          req.modo,
-          req.visionDisponivel,
+      case 'routines:generate': {
+        const result = await routines.generateRoutine(
+          req.description,
+          req.model,
+          req.folders,
+          req.language,
+          req.mode,
+          req.visionAvailable,
         )
-        sendResponse(ws, requestId, true, resultado)
+        sendResponse(ws, requestId, true, result)
         break
       }
 
-      case 'esteira:list': {
-        const [dados, templates] = await Promise.all([esteira.carregarTudo(), esteira.listarTemplates()])
-        sendResponse(ws, requestId, true, { ...dados, templates })
+      case 'pipeline:list': {
+        const [data, templates] = await Promise.all([pipelineApi.loadAll(), pipelineApi.listTemplates()])
+        sendResponse(ws, requestId, true, { ...data, templates })
         break
       }
 
-      case 'esteira:create': {
-        const criada = await esteira.criarEsteira(req.input)
-        sendResponse(ws, requestId, true, criada)
+      case 'pipeline:create': {
+        const created = await pipelineApi.createPipeline(req.input)
+        sendResponse(ws, requestId, true, created)
         break
       }
 
-      case 'esteira:update': {
-        const atualizada = await esteira.atualizarEsteira(req.id, req.patch)
-        if (atualizada) sendResponse(ws, requestId, true, atualizada)
-        else sendResponse(ws, requestId, false, undefined, 'Esteira não encontrada')
+      case 'pipeline:update': {
+        const updated = await pipelineApi.updatePipeline(req.id, req.patch)
+        if (updated) sendResponse(ws, requestId, true, updated)
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.pipelineNotFound'))
         break
       }
 
-      case 'esteira:delete': {
-        await esteira.removerEsteira(req.id)
+      case 'pipeline:delete': {
+        await pipelineApi.removePipeline(req.id)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'esteira:create-projeto': {
-        const projeto = await esteira.criarProjeto(req.nome, req.pastas)
-        sendResponse(ws, requestId, true, projeto)
+      case 'pipeline:create-project': {
+        const project = await pipelineApi.createProject(req.name, req.folders)
+        sendResponse(ws, requestId, true, project)
         break
       }
 
-      case 'esteira:update-projeto': {
-        const projeto = await esteira.atualizarProjeto(req.id, req.patch)
-        if (projeto) sendResponse(ws, requestId, true, projeto)
-        else sendResponse(ws, requestId, false, undefined, 'Projeto não encontrado')
+      case 'pipeline:update-project': {
+        const project = await pipelineApi.updateProject(req.id, req.patch)
+        if (project) sendResponse(ws, requestId, true, project)
+        else sendResponse(ws, requestId, false, undefined, tNow('companion.server.projectNotFound'))
         break
       }
 
-      case 'esteira:create-task': {
-        const task = await esteira.criarTask(req.input)
+      case 'pipeline:create-task': {
+        const task = await pipelineApi.createTask(req.input)
         sendResponse(ws, requestId, true, task)
         break
       }
 
-      case 'esteira:update-task': {
-        // Ciclo de dependência é rejeitado no main — a mensagem volta ao app.
+      case 'pipeline:update-task': {
+        // A dependency cycle is rejected in the main process — the message goes back to the app.
         try {
-          const task = await esteira.atualizarTaskCampos(req.esteiraId, req.taskId, req.patch)
+          const task = await pipelineApi.updateTaskFields(req.pipelineId, req.taskId, req.patch)
           if (task) sendResponse(ws, requestId, true, task)
-          else sendResponse(ws, requestId, false, undefined, 'Task não encontrada')
+          else sendResponse(ws, requestId, false, undefined, tNow('companion.server.taskNotFound'))
         } catch (err) {
           sendResponse(ws, requestId, false, undefined, (err as Error).message)
         }
         break
       }
 
-      case 'esteira:delete-task': {
-        await esteira.removerTask(req.esteiraId, req.taskId)
+      case 'pipeline:delete-task': {
+        await pipelineApi.removeTask(req.pipelineId, req.taskId)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'esteira:start-task': {
-        await esteira.iniciarTask(req.esteiraId, req.taskId, req.fase ?? 0)
+      case 'pipeline:start-task': {
+        await pipelineApi.startTask(req.pipelineId, req.taskId, req.phase ?? 0)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'esteira:pause-task': {
-        await esteira.pausarTask(req.esteiraId, req.taskId)
+      case 'pipeline:pause-task': {
+        await pipelineApi.pauseTask(req.pipelineId, req.taskId)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'esteira:resume-task': {
-        await esteira.retomarTask(req.esteiraId, req.taskId)
+      case 'pipeline:resume-task': {
+        await pipelineApi.resumeTask(req.pipelineId, req.taskId)
         sendResponse(ws, requestId, true)
         break
       }
 
-      case 'esteira:toggle-fila': {
-        if (req.ligar) esteira.ligarFila(req.esteiraId)
-        else esteira.desligarFila(req.esteiraId)
-        sendResponse(ws, requestId, true, req.ligar)
+      case 'pipeline:toggle-queue': {
+        if (req.enabled) pipelineApi.enableQueue(req.pipelineId)
+        else pipelineApi.disableQueue(req.pipelineId)
+        sendResponse(ws, requestId, true, req.enabled)
         break
       }
 
-      case 'esteira:save-template': {
-        const templates = await esteira.salvarTemplate(req.template)
+      case 'pipeline:save-template': {
+        const templates = await pipelineApi.saveTemplate(req.template)
         sendResponse(ws, requestId, true, templates)
         break
       }
@@ -1185,10 +1189,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const next = folders.map((f) => (f.id === req.folderId ? { ...f, archived: req.archived } : f))
         await writeJson(StorageKeys.folders, next)
 
-        // Os chats da pasta acompanham o estado dela — mesma cascata do
-        // toggleFolderArchive do desktop: quem já está no estado destino não é
-        // tocado (nem re-emitido), e updatedAt não é mexido para o chat não
-        // pular de lugar na ordenação por atividade.
+        // The chats of the folder follow its state — the same cascade as the
+        // desktop's toggleFolderArchive: whoever is already in the target state is not
+        // touched (nor re-emitted), and updatedAt is not changed so the chat does not
+        // jump around in the ordering by activity.
         const keys = await listKeys('session/')
         const sessions = (await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))).filter(
           (s): s is SessionInfo => s !== null,
@@ -1210,7 +1214,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const next = folders.filter((f) => f.id !== req.folderId)
         await writeJson(StorageKeys.folders, next)
 
-        // Sessões da pasta removida voltam pra raiz
+        // Sessions of the removed folder go back to the root
         const keys = await listKeys('session/')
         const sessions = (await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))).filter(
           (s): s is SessionInfo => s !== null,
@@ -1229,13 +1233,13 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'sidebar:organize': {
-        // Reorganizar mexe no mapa de pastas automáticas, que mora no
-        // localStorage do renderer — então quem executa é ele, pelo mesmo
-        // caminho de 'models:select'. Assim desktop e mobile rodam
-        // literalmente a mesma função.
+        // Reorganizing touches the map of automatic folders, which lives in the
+        // renderer's localStorage — so the renderer is what runs it, through the same
+        // path as 'models:select'. That way desktop and mobile run
+        // literally the same function.
         const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
         if (windows.length === 0) {
-          sendResponse(ws, requestId, false, undefined, 'Nenhuma janela do desktop aberta')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noDesktopWindow'))
           break
         }
         for (const win of windows) win.webContents.send('companion:organize-sidebar')
@@ -1246,7 +1250,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'plan:read-file': {
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session?.directory) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão sem diretório')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionWithoutFolder'))
           break
         }
         const content = await readPlanFile(session.directory)
@@ -1257,18 +1261,18 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'plan:review-accept': {
         const win = BrowserWindow.getAllWindows()[0]
         if (!win) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           break
         }
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
-        // O review vive no disco, fora das mensagens: sem gravar o
-        // "implementing" aqui, reabrir a conversa (em qualquer app) ressuscitava
-        // o card de aceite com o plano ja em execucao. É o mesmo que o
-        // acceptPlanReview do renderer faz quando o aceite parte do desktop.
+        // The review lives on disk, outside the messages: without writing the
+        // "implementing" here, reopening the conversation (in any app) resurrected
+        // the acceptance card with the plan already running. It is the same as
+        // the renderer's acceptPlanReview does when the acceptance comes from the desktop.
         const aceito: PlanReview = {
           status: 'implementing',
           messageId: req.messageId,
@@ -1277,7 +1281,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         await writeJson(StorageKeys.planReview(req.sessionId), aceito)
         broadcastSessionEvent({ type: 'plan:review', sessionId: req.sessionId, review: aceito })
 
-        // Envia uma nova mensagem de implementação (mesma lógica do desktop)
+        // Sends a new implementation message (same logic as the desktop)
         const canOrchestrate = req.orchestrate && session.mode === 'code'
         const input: SendMessageInput = {
           sessionId: req.sessionId,
@@ -1293,8 +1297,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           directory: session.directory,
           extraDirectories: session.extraDirectories,
         }
-        // Pelo roteador: no desktop o aceite passa pelo sendMessage → chat:send,
-        // então as mesmas guardas (e o modo loop) precisam valer aqui.
+        // Through the router: on the desktop the acceptance goes through sendMessage → chat:send,
+        // so the same guards (and loop mode) have to count here.
         await dispatchSend(win, input)
         sendResponse(ws, requestId, true)
         break
@@ -1306,8 +1310,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           await deletePlanFile(session.directory)
         }
         await removeJson(StorageKeys.planReview(req.sessionId))
-        // Notifica o renderer E os demais companions — recusar num celular
-        // precisa tirar o card do desktop e de qualquer outro aparelho pareado.
+        // Notifies the renderer AND the other companions — refusing on one phone
+        // has to take the card off the desktop and off any other paired device.
         broadcastSessionEvent({
           type: 'plan:review',
           sessionId: req.sessionId,
@@ -1320,21 +1324,21 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'plan:review-revise': {
         const win = BrowserWindow.getAllWindows()[0]
         if (!win) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           break
         }
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
-          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
           break
         }
-        const revisando: PlanReview = {
+        const review: PlanReview = {
           status: 'revising',
           messageId: req.messageId,
           permissionMode: req.permissionMode,
         }
-        await writeJson(StorageKeys.planReview(req.sessionId), revisando)
-        broadcastSessionEvent({ type: 'plan:review', sessionId: req.sessionId, review: revisando })
+        await writeJson(StorageKeys.planReview(req.sessionId), review)
+        broadcastSessionEvent({ type: 'plan:review', sessionId: req.sessionId, review: review })
         const input: SendMessageInput = {
           sessionId: req.sessionId,
           text: req.feedback,
@@ -1342,7 +1346,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           modelId: req.modelId ?? 'gpt-4o',
           mode: session.mode,
           options: {
-            planReview: revisando,
+            planReview: review,
             permissionMode: req.permissionMode,
           },
           directory: session.directory,
@@ -1356,7 +1360,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'orchestration:approve': {
         const win = BrowserWindow.getAllWindows()[0]
         if (!win) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           break
         }
         await approvePlan(win, req.sessionId, req.planId, req.taskIds)
@@ -1367,7 +1371,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'orchestration:reject': {
         const win = BrowserWindow.getAllWindows()[0]
         if (!win) {
-          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
           break
         }
         await rejectPlan(win, req.sessionId)
@@ -1398,16 +1402,16 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 }
 
 function countPendingAsks(): number {
-  // Conta roughly via BrowserWindow events
-  return 0 // placeholder — o evento real vem do ask-broker
+  // Rough count via BrowserWindow events
+  return 0 // placeholder — the real event comes from the ask-broker
 }
 
 function getIp(ws: WebSocket): string {
   return (ws as unknown as { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown'
 }
 
-/** Hostname/IP que o client usou para conectar (header Host do handshake WS).
- *  Fallback: IP local — cobre clientes que omitem o header. */
+/** Hostname/IP the client used to connect (Host header of the WS handshake).
+ *  Fallback: local IP — covers clients that omit the header. */
 function clientHostFromReq(req: IncomingMessage): string {
   const host = req.headers.host
   if (host) {
@@ -1415,7 +1419,7 @@ function clientHostFromReq(req: IncomingMessage): string {
       const hostname = new URL(`http://${host}`).hostname
       if (hostname) return hostname
     } catch {
-      /* host malformado — usa fallback */
+      /* malformed host — uses the fallback */
     }
   }
   return getLocalIp()
@@ -1424,8 +1428,8 @@ function clientHostFromReq(req: IncomingMessage): string {
 // ─── Event Forwarding (Desktop → Companion) ──────────────────────────────────
 
 /**
- * Hook no broadcastChatEvent: retransmite todos os ChatEvent para
- * todos os companions autenticados.
+ * Hook on broadcastChatEvent: it relays every ChatEvent to
+ * every authenticated companion.
  */
 export function forwardChatEvent(event: ChatEvent): void {
   for (const client of clients) {
@@ -1446,24 +1450,24 @@ export function forwardChatEvent(event: ChatEvent): void {
   }
 }
 
-/** Retransmite um RotinaEvent para todos os companions autenticados. */
-export function forwardRotinaEvent(event: RotinaEvent): void {
+/** Relays a RoutineEvent to every authenticated companion. */
+export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
-    client.ws.send(wrap({ type: 'rotinas:event', event } as CompanionEvent))
+    client.ws.send(wrap({ type: 'routines:event', event } as CompanionEvent))
   }
 }
 
-/** Retransmite um EsteiraEvent para todos os companions autenticados. */
-export function forwardEsteiraEvent(event: EsteiraEvent): void {
+/** Relays a PipelineEvent to every authenticated companion. */
+export function forwardPipelineEvent(event: PipelineEvent): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
-    client.ws.send(wrap({ type: 'esteira:event', event } as CompanionEvent))
+    client.ws.send(wrap({ type: 'pipeline:event', event } as CompanionEvent))
   }
 }
 
-/** Empurra o mapa de modelos por sessão (renderer → main) para todos os
- *  companions — mantém o mobile com o MESMO modelo por chat do desktop. */
+/** Pushes the per-session model map (renderer → main) to every
+ *  companion — it keeps the mobile on the SAME model per chat as the desktop. */
 export function broadcastSessionModels(
   overrides: Record<string, { providerId: string; modelId: string }>,
 ): void {
@@ -1473,8 +1477,8 @@ export function broadcastSessionModels(
   }
 }
 
-/** Estado da rotação (lista + escolha por chat) empurrado aos companions —
- *  sem isto o celular abriria sem as rotações criadas no desktop. */
+/** Rotation state (list + choice per chat) pushed to the companions —
+ *  without it the phone would open without the rotations created on the desktop. */
 export function broadcastRotationConfig(config: RotationConfig): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1482,9 +1486,9 @@ export function broadcastRotationConfig(config: RotationConfig): void {
   }
 }
 
-/** Mesma ideia do broadcastSessionModels, para os modos ativos por chat
- *  (pesquisa, navegador, plano, subagentes, orquestração, visão, simples e
- *  brain) — sem isto o mobile abre todo chat nos defaults dele. */
+/** Same idea as broadcastSessionModels, for the modes active per chat
+ *  (research, browser, plan, subagents, orchestration, vision, simple and
+ *  brain) — without this the phone opens every chat on its own defaults. */
 export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1492,8 +1496,8 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   }
 }
 
-/** Thinking e autonomia por chat (sessionId → preferência) empurrados aos
- *  companions — sem isto o celular abriria todo chat no default do aparelho. */
+/** Per-chat thinking and autonomy (sessionId → preference) pushed to the
+ *  companions — without it the phone would open every chat on the device defaults. */
 export function broadcastSessionPrefs(prefs: SessionPrefsSnapshot): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1501,12 +1505,12 @@ export function broadcastSessionPrefs(prefs: SessionPrefsSnapshot): void {
   }
 }
 
-/** Última fila empurrada pelo renderer — o 'queue:get' do celular ao conectar. */
+/** Last queue pushed by the renderer — the phone's 'queue:get' on connecting. */
 let messageQueueCache: MessageQueueSnapshot = {}
 
-/** Fila de mensagens do renderer, empurrada aos companions a cada mudança. Os
- *  anexos vão sem o conteúdo: o celular só mostra que existem, e uma foto em
- *  data URL atravessaria a rede a cada edição da fila. */
+/** Renderer message queue, pushed to the companions on every change. The
+ *  attachments go without the content: the phone only shows that they exist, and a photo as
+ *  a data URL would cross the network on every queue edit. */
 export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
   const leve: MessageQueueSnapshot = {}
   for (const [sessionId, items] of Object.entries(queues)) {
@@ -1521,8 +1525,8 @@ export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
   }
 }
 
-/** Thinking por modelo (toggle + variante) empurrado aos companions — sem isto
- *  o mobile abre todo chat com o thinking dos defaults dele. */
+/** Thinking per model (toggle + variant) pushed to the companions — without it
+ *  the mobile opens every chat with its own default thinking. */
 export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1530,8 +1534,8 @@ export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
   }
 }
 
-/** Config dos modos delegados (workers de subagentes/orquestração e visão) —
- *  global, não por chat. */
+/** Configuration of the delegated modes (subagent/orchestration workers and
+ *  vision) — global, not per chat. */
 export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1539,19 +1543,19 @@ export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
   }
 }
 
-/** Snapshot das preferencias do app, empurrado pelo renderer. O cache aqui
- *  serve o 'prefs:get' de quem conecta depois da ultima mudanca. */
+/** Snapshot of the app preferences, pushed by the renderer. The cache here
+ *  serves the 'prefs:get' of whoever connects after the last change. */
 let appPreferences: AppPreferences | null = null
 
 export function getAppPreferences(): AppPreferences | null {
   return appPreferences
 }
 
-/** Preferencias mudaram no desktop → espelha em todos os companions. */
+/** Preferences changed on the desktop → mirrors them on every companion. */
 export function broadcastAppPreferences(prefs: AppPreferences): void {
   appPreferences = prefs
-  // Turnos em andamento que seguem o seletor leem daqui a cada ferramenta.
-  definirModoGlobal(prefs.permissionMode)
+  // Turns in progress that follow the selector read from here on every tool.
+  setGlobalMode(prefs.permissionMode)
   const payload = wrap({ type: 'prefs:change', prefs } satisfies AppPreferencesChangeEvent)
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
@@ -1560,7 +1564,7 @@ export function broadcastAppPreferences(prefs: AppPreferences): void {
 }
 
 /**
- * Notifica companion sobre permissão/question pendente.
+ * Notifies the companion about a pending permission/question.
  */
 export function notifyCompanionAsk(
   sessionId: string,
@@ -1586,7 +1590,7 @@ export function notifyCompanionAsk(
 }
 
 /**
- * Notifica companion sobre nova mensagem do assistente.
+ * Notifies the companion about a new assistant message.
  */
 export function notifyCompanionMessage(
   sessionId: string,
@@ -1617,9 +1621,9 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
 
   wsBindError = null
 
-  // Se o bind falhar (ex.: porta 3847 já ocupada por outra instância do Orbit),
-  // marca o erro e derruba o wss — senão a UI mostraria um servidor "ativo"
-  // fantasma (wss !== null) que ninguém consegue alcançar.
+  // If the bind fails (e.g. port 3847 already taken by another Orbit instance),
+  // it marks the error and takes the wss down — otherwise the UI would show a phantom
+  // "active" server (wss !== null) that nobody can reach.
   server.on('error', (err: Error) => {
     console.error('[Companion] WS server error:', err)
     wsBindError = err.message
@@ -1631,7 +1635,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
 
   regeneratePin()
 
-  // Iniciar servidor HTTP REST junto com o WS
+  // Starts the REST HTTP server along with the WS
   startCompanionHttpServer(validatePin, getPairingPin, validateDeviceToken)
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
@@ -1678,10 +1682,10 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
 }
 
 export function stopCompanionServer(): void {
-  // Parar servidor HTTP
+  // Stop the HTTP server
   stopCompanionHttpServer()
 
-  // Parar servidor WS
+  // Stop the WS server
   for (const client of clients) {
     client.ws.close()
   }

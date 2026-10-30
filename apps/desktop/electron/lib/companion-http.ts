@@ -1,14 +1,14 @@
 /**
- * Servidor HTTP REST para o Orbit Companion.
+ * REST HTTP server for Orbit Companion.
  *
- * Roda na porta 3848 (0.0.0.0) e fornece endpoints simples request/response
- * para operações de preferências, modelos e catálogo — complementando o
- * WebSocket (porta 3847) que é usado para streaming e notificações.
+ * It runs on port 3848 (0.0.0.0) and provides simple request/response endpoints
+ * for preference, model and catalog operations — complementing the
+ * WebSocket (port 3847) that is used for streaming and notifications.
  *
- * Segurança:
- * - Autenticação via header `Authorization: Bearer {pin}`
- * - Reutiliza a mesma validação de PIN do companion-server
- * - CORS habilitado para desenvolvimento local
+ * Security:
+ * - Authentication via the `Authorization: Bearer {pin}` header
+ * - Reuses the same PIN validation as companion-server
+ * - CORS enabled for local development
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
@@ -50,6 +50,7 @@ import type {
 } from '@shared/companion'
 import type { VoiceEngineId } from '@shared/voice'
 import type { RotationConfig } from '@shared/chat'
+import { tNow } from './i18n'
 
 const execFileAsync = promisify(execFile)
 
@@ -60,8 +61,8 @@ let httpServer: Server | null = null
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 /**
- * Valida o header Authorization: Bearer {token/pin}.
- * Tenta token persistente primeiro, depois PIN (5 min TTL).
+ * Validates the Authorization: Bearer {token/pin} header.
+ * Tries the persistent token first, then the PIN (5 min TTL).
  */
 function validateAuth(
   req: IncomingMessage,
@@ -76,7 +77,7 @@ function validateAuth(
 
   const ip = req.socket.remoteAddress ?? 'unknown'
 
-  // Tenta como token persistente primeiro (64 hex chars)
+  // Tries as a persistent token first (64 hex chars)
   if (credential.length === 64 && /^[a-f0-9]+$/i.test(credential)) {
     return validateToken(credential)
   }
@@ -86,11 +87,11 @@ function validateAuth(
 }
 
 // ─── Media Tokens ─────────────────────────────────────────────────────────────
-// O <Image> do React Native não envia header Authorization de forma confiável
-// (Android ignora headers no componente Image), então as URLs de mídia saem
-// assinadas com um token HMAC. O segredo e a assinatura moram em
-// companion-token.ts; aqui só se usa o escopo `media`, cujo formato de token é
-// o histórico (`?t=<exp>.<sig>`) para não invalidar URL já entregue ao celular.
+// React Native's <Image> does not send the Authorization header reliably
+// (Android ignores headers in the Image component), so the media URLs come out
+// signed with an HMAC token. The secret and the signature live in
+// companion-token.ts; here only the `media` scope is used, whose token format is
+// the historical one (`?t=<exp>.<sig>`) so as not to invalidate a URL already delivered to the phone.
 
 // ─── Response Helpers ─────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
         const raw = Buffer.concat(chunks).toString('utf8')
         resolve(raw ? JSON.parse(raw) : {})
       } catch (err) {
-        reject(new Error('JSON inválido'))
+        reject(new Error(tNow('companion.http.invalidJson')))
       }
     })
     req.on('error', reject)
@@ -123,8 +124,8 @@ function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 // ─── Storage Keys for Companion Preferences ──────────────────────────────────
 
 const PREFS_KEY = 'companion/preferences'
-// Chave compartilhada: o sampling de um app conectado (lib/mcp/sampling.ts)
-// precisa do mesmo "modelo atual" quando não há conversa nenhuma no laço.
+// Shared key: the sampling of a connected app (lib/mcp/sampling.ts)
+// needs the same "current model" when there is no conversation in the loop at all.
 const SELECTED_MODEL_KEY = StorageKeys.selectedModel
 
 interface CompanionPreferences {
@@ -160,7 +161,7 @@ async function savePreferences(patch: Partial<CompanionPreferences>): Promise<Co
   const updated = { ...current, ...patch }
   await writeJson(PREFS_KEY, updated)
 
-  // Sincronizar com o renderer via IPC
+  // Sync with the renderer via IPC
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('companion:preferences-changed', updated)
@@ -178,8 +179,8 @@ async function getSelectedModel(): Promise<SelectedModel> {
 async function saveSelectedModel(model: SelectedModel): Promise<SelectedModel> {
   await writeJson(SELECTED_MODEL_KEY, model)
 
-  // Broadcast para o renderer atualizar (sessionId null = chat novo/draft +
-  // default global, mesma semântica do selectModel do renderer)
+  // Broadcast so the renderer updates (sessionId null = new chat/draft +
+  // global default, the same semantics as the renderer's selectModel)
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('companion:model-select', {
@@ -205,7 +206,7 @@ async function handlePatchPreferences(req: IncomingMessage, res: ServerResponse)
     const patch = await readBody(req)
     const allowed: Partial<CompanionPreferences> = {}
 
-    // Apenas campos permitidos
+    // Only allowed fields
     if (typeof patch.brain === 'boolean') allowed.brain = patch.brain
     if (typeof patch.brainContext === 'boolean') allowed.brainContext = patch.brainContext
     if (typeof patch.permissionMode === 'string' && ['ask', 'approve', 'full'].includes(patch.permissionMode)) {
@@ -229,10 +230,10 @@ async function handleGetSelectedModel(_req: IncomingMessage, res: ServerResponse
   jsonResponse(res, 200, model)
 }
 
-// Modelos por sessão (renderer → main): cache que o mobile consulta no
-// connect (GET /api/session-models) e recebe em tempo real via WS
-// 'session:model-change'. O renderer empurra o mapa a cada mudança (e no
-// load, repopulando o cache após reload).
+// Models per session (renderer → main): cache that the mobile queries on
+// connect (GET /api/session-models) and receives in real time via WS
+// 'session:model-change'. The renderer pushes the map on every change (and on
+// load, repopulating the cache after a reload).
 let sessionModelsCache: Record<string, SelectedModel> = {}
 
 export function setSessionModelsCache(overrides: Record<string, SelectedModel>): void {
@@ -247,10 +248,10 @@ async function handleGetSessionModels(_req: IncomingMessage, res: ServerResponse
   jsonResponse(res, 200, { overrides: getSessionModelsCache() })
 }
 
-// Rotação de modelos: mesma mecânica. O cache do engine vive em
-// model-rotation.ts (é ele quem resolve a sequência do turno); aqui fica só
-// a cópia que o mobile lê no connect (GET /api/rotations) — em tempo real
-// ela chega pelo WS 'rotation:change'.
+// Model rotation: the same mechanics. The engine's cache lives in
+// model-rotation.ts (it is what resolves the turn's sequence); here stays only
+// the copy that the mobile reads on connect (GET /api/rotations) — in real time
+// it arrives through the WS 'rotation:change'.
 let rotationConfigHttpCache: RotationConfig = { rotations: [], sessionOverrides: {} }
 
 export function setRotationHttpCache(config: RotationConfig | null | undefined): void {
@@ -261,9 +262,9 @@ async function handleGetRotations(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { config: rotationConfigHttpCache })
 }
 
-// Mesma mecânica dos modelos, para os modos ativos por chat: o renderer é a
-// fonte da verdade (os modos vivem no localStorage dele) e empurra o mapa
-// inteiro a cada mudança; aqui fica o cache que o mobile lê ao conectar.
+// Same mechanics as the models, for the modes active per chat: the renderer is the
+// source of truth (the modes live in its localStorage) and pushes the whole map
+// on every change; here stays the cache that the mobile reads when connecting.
 let sessionModesCache: SessionModeOverrides = {}
 
 export function setSessionModesCache(overrides: SessionModeOverrides): void {
@@ -278,9 +279,9 @@ async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse)
   jsonResponse(res, 200, { overrides: getSessionModesCache() })
 }
 
-// Thinking e autonomia por chat: mesma mecânica. O renderer empurra o snapshot
-// (reasoning + permissão por sessão) a cada mudança; aqui fica o cache que o
-// mobile lê no connect (GET /api/session-prefs). Em tempo real chega pelo WS
+// Thinking and autonomy per chat: the same mechanics. The renderer pushes the snapshot
+// (reasoning + permission per session) on every change; here stays the cache that the
+// mobile reads on connect (GET /api/session-prefs). In real time it arrives through the WS
 // 'session:prefs-change'.
 let sessionPrefsCache: SessionPrefsSnapshot = { reasoning: {}, permission: {} }
 
@@ -299,9 +300,9 @@ async function handleGetSessionPrefs(_req: IncomingMessage, res: ServerResponse)
   jsonResponse(res, 200, getSessionPrefsCache())
 }
 
-// Thinking por modelo: mesma mecânica dos modos. O renderer empurra o mapa
-// (localStorage) a cada mudança; aqui fica o cache que o mobile lê no connect
-// (GET /api/reasoning-prefs) — em tempo real chega pelo WS 'reasoning:change'.
+// Thinking per model: the same mechanics as the modes. The renderer pushes the map
+// (localStorage) on every change; here stays the cache that the mobile reads on connect
+// (GET /api/reasoning-prefs) — in real time it arrives through the WS 'reasoning:change'.
 let reasoningPrefsCache: ReasoningPrefsMap = {}
 
 export function setReasoningPrefsCache(prefs: ReasoningPrefsMap): void {
@@ -316,9 +317,9 @@ async function handleGetReasoningPrefs(_req: IncomingMessage, res: ServerRespons
   jsonResponse(res, 200, { prefs: getReasoningPrefsCache() })
 }
 
-// Config dos modos delegados (modelo dos workers + modelo de visão): também
-// vive no renderer, também empurrada de lá. Sem isto o celular rodava
-// subagentes/orquestração/visão com o que estivesse configurado no aparelho.
+// Configuration of the delegated modes (workers' model + vision model): it also
+// lives in the renderer, and is also pushed from there. Without it the phone ran
+// subagents/orchestration/vision with whatever was configured on the device.
 let workerConfigCache: WorkerConfigSnapshot = {
   workerModel: null,
   workerReasoning: null,
@@ -327,7 +328,7 @@ let workerConfigCache: WorkerConfigSnapshot = {
 
 export function setWorkerConfigCache(config: WorkerConfigSnapshot): void {
   const next = config ?? { workerModel: null, workerReasoning: null, visionModel: null }
-  // Campos do condutor ausentes (app que não os conhece) mantêm o valor atual.
+  // Conductor fields that are absent (an app that does not know them) keep the current value.
   workerConfigCache = {
     ...next,
     orchestratorModel: 'orchestratorModel' in next ? next.orchestratorModel : workerConfigCache.orchestratorModel,
@@ -349,7 +350,7 @@ async function handlePutSelectedModel(req: IncomingMessage, res: ServerResponse)
     const body = await readBody(req)
 
     if (typeof body.providerId !== 'string' || typeof body.modelId !== 'string') {
-      jsonResponse(res, 400, { error: 'providerId e modelId são obrigatórios' })
+      jsonResponse(res, 400, { error: tNow('companion.http.providerAndModelRequired') })
       return
     }
 
@@ -399,19 +400,19 @@ async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
 
 // ─── Media Handler ────────────────────────────────────────────────────────────
 
-/** Serve imagens do assistente (orbit-media://) para o app mobile, que não tem
- *  acesso ao protocolo registrado no Electron. Auth via token assinado na query
- *  (?t=) — o <Image> do React Native não envia headers, então o Bearer padrão
- *  não é aceito nesta rota (ela roda antes do bloqueio global de auth). */
+/** Serves the assistant's images (orbit-media://) to the mobile app, which has no
+ *  access to the protocol registered in Electron. Auth via a signed token in the query
+ *  (?t=) — React Native's <Image> does not send headers, so the standard Bearer
+ *  is not accepted on this route (it runs before the global auth block). */
 async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: string) {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
   if (!validateAssetToken('media', id, url.searchParams.get('t'))) {
-    jsonResponse(res, 401, { error: 'Token inválido ou expirado' })
+    jsonResponse(res, 401, { error: tNow('companion.http.invalidToken') })
     return
   }
   const media = await readMedia(id)
   if (!media) {
-    jsonResponse(res, 404, { error: 'Imagem não encontrada' })
+    jsonResponse(res, 404, { error: tNow('companion.http.imageNotFound') })
     return
   }
   res.writeHead(200, {
@@ -424,11 +425,11 @@ async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: str
 }
 
 // ─── Media Registry Handlers ──────────────────────────────────────────────────
-// A galeria do app mobile lê o registry de mídia do desktop por aqui. Toda
-// entrada sai com a URL assinada do SEU tipo (token no caminho, em todos os
-// escopos menos imagem, que mantém a query histórica) — antes tudo apontava
-// para /api/media/<id>, que só lê a pasta de imagens, e por isso artefato,
-// documento, vídeo e peça chegavam ao celular como tile quebrado.
+// The mobile app's gallery reads the desktop's media registry through here. Every
+// entry comes out with the signed URL of ITS type (token in the path, in every
+// scope except image, which keeps the historical query) — before, everything pointed
+// to /api/media/<id>, which only reads the images folder, and that is why artifact,
+// document, video and piece arrived on the phone as a broken tile.
 
 function mediaUrlFor(req: IncomingMessage, id: string): string {
   const base = `http://${req.headers.host ?? 'localhost'}`
@@ -436,9 +437,9 @@ function mediaUrlFor(req: IncomingMessage, id: string): string {
 }
 
 /**
- * URL de um arquivo do escopo, com o token no caminho — o formato que o WebView,
- * o `<video>` e o `<Image>` aceitam (nenhum deles manda header Authorization) e
- * que faz o relativo de uma peça herdar o token do diretório.
+ * URL of a file of the scope, with the token in the path — the format that the WebView,
+ * the `<video>` and the `<Image>` accept (none of them sends an Authorization header) and
+ * that makes a piece's relative path inherit the directory's token.
  */
 function fileUrlFor(
   req: IncomingMessage,
@@ -451,30 +452,30 @@ function fileUrlFor(
   return `${base}/api/file/${scope}/${encodeURIComponent(id)}/${createAssetToken(scope, id)}${rel}`
 }
 
-/** Base de um id de documento: fonte `.md`, prévia `.html` e renderizações
- *  moram lado a lado com o mesmo id-base (mesma regra do documentBase de
- *  media.ts, que é interno de lá). */
+/** Base of a document id: `.md` source, `.html` preview and renderings
+ *  live side by side with the same base id (same rule as documentBase in
+ *  media.ts, which is internal there). */
 function documentBase(id: string): string {
   return id.replace(/\.(md|html|pdf|docx|png)$/, '')
 }
 
-/** Caminho relativo da entrada de uma peça, com `/`. */
+/** Relative path of a piece's entry, with `/`. */
 function relativeEntry(folder: string, entry: string): string {
   return path.relative(folder, entry).split(path.sep).join('/')
 }
 
 /**
- * A URL que o celular deve abrir para esta entrada — uma por TIPO, porque cada
- * um mora num escopo diferente do servidor de assets:
+ * The URL the phone should open for this entry — one per TYPE, because each
+ * one lives in a different scope of the asset server:
  *
- * - imagem: `/api/media/<id>` (o alias histórico, na query);
- * - artefato: a própria página `.html`;
- * - documento: a PRÉVIA `.html` (o `.md` do registro é texto, não página);
- * - áudio/vídeo: o arquivo, que o player lê por Range;
- * - peça (motion/slides): a entrada da pasta; design: o primeiro artboard.
+ * - image: `/api/media/<id>` (the historical alias, in the query);
+ * - artifact: the `.html` page itself;
+ * - document: the `.html` PREVIEW (the record's `.md` is text, not a page);
+ * - audio/video: the file, which the player reads by Range;
+ * - piece (motion/slides): the folder's entry; design: the first artboard.
  *
- * `undefined` quando a peça não está mais registrada no desktop (a pasta sumiu,
- * o registro foi limpo): o tile continua na galeria, só não abre.
+ * `undefined` when the piece is no longer registered on the desktop (the folder is
+ * gone, the record was cleaned): the tile stays in the gallery, it just does not open.
  */
 async function mediaEntryUrl(req: IncomingMessage, entry: MediaEntry): Promise<string | undefined> {
   switch (mediaKind(entry)) {
@@ -498,7 +499,7 @@ async function mediaEntryUrl(req: IncomingMessage, entry: MediaEntry): Promise<s
       if (!entry.designId) return undefined
       const design = await getDesign(entry.designId)
       if (!design) return undefined
-      // O canvas.json é o índice (dados) — a página é o primeiro artboard.
+      // canvas.json is the index (data) — the page is the first artboard.
       const first = await readDesignCanvas(design.folder)
         .then((canvas) => canvas.order[0] ?? null)
         .catch(() => null)
@@ -548,12 +549,12 @@ async function handleCreateSkill(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
     if (typeof body.name !== 'string' || typeof body.content !== 'string') {
-      jsonResponse(res, 400, { error: 'name e content são obrigatórios' })
+      jsonResponse(res, 400, { error: tNow('companion.http.nameAndContentRequired') })
       return
     }
     const safeSlug = slugify(body.slug as string | undefined) ?? sanitizeSlug(body.name)
     if (!safeSlug) {
-      jsonResponse(res, 400, { error: 'Slug inválido — use apenas letras minúsculas, números e underscores' })
+      jsonResponse(res, 400, { error: tNow('companion.http.invalidSlug') })
       return
     }
     const dir = globalSkillsDir()
@@ -578,7 +579,7 @@ async function handleCreateSkill(req: IncomingMessage, res: ServerResponse) {
 async function handleDeleteSkill(_req: IncomingMessage, res: ServerResponse, slug: string) {
   const safe = sanitizeSlug(slug)
   if (!safe) {
-    jsonResponse(res, 400, { error: 'Slug inválido' })
+    jsonResponse(res, 400, { error: tNow('companion.http.invalidSlugShort') })
     return
   }
   const dir = globalSkillsDir()
@@ -593,7 +594,7 @@ async function handleImportSkill(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
     if (typeof body.content !== 'string' || typeof body.filename !== 'string') {
-      jsonResponse(res, 400, { error: 'content (base64) e filename são obrigatórios' })
+      jsonResponse(res, 400, { error: tNow('companion.http.contentAndFilenameRequired') })
       return
     }
     const tmpDir = app.getPath('temp')
@@ -636,8 +637,8 @@ async function handleGetMcpConfig(_req: IncomingMessage, res: ServerResponse) {
 async function handlePutMcpConfig(req: IncomingMessage, res: ServerResponse) {
   try {
     const config = await readBody(req)
-    // Corpo cru da rede: readBody devolve Record<string, unknown> e quem
-    // valida a forma é o saveMcpConfig (escreve o arquivo e reconcilia).
+    // Raw network body: readBody returns Record<string, unknown> and whoever
+    // validates the shape is saveMcpConfig (writes the file and reconciles).
     const status = await saveMcpConfig(config as unknown as McpConfig)
     jsonResponse(res, 200, status)
   } catch (err) {
@@ -651,11 +652,11 @@ async function handleReconnectMcp(_req: IncomingMessage, res: ServerResponse, na
 }
 
 /**
- * Dispara o fluxo OAuth do servidor a pedido do mobile. O navegador abre no
- * computador (o redirect_uri é o loopback do desktop) e o usuário pode levar
- * minutos para concluir — responder na hora evita segurar a requisição do
- * celular até o timeout. O app acompanha o desfecho pelo /api/mcp/status:
- * o servidor fica em "connecting" enquanto o login não termina.
+ * Triggers the server's OAuth flow at the mobile's request. The browser opens on the
+ * computer (the redirect_uri is the desktop's loopback) and the user may take
+ * minutes to finish — answering right away avoids holding the phone's request
+ * until the timeout. The app follows the outcome through /api/mcp/status:
+ * the server stays in "connecting" until the login ends.
  */
 async function handleAuthorizeMcp(_req: IncomingMessage, res: ServerResponse, name: string) {
   void authorizeMcp(name)
@@ -684,7 +685,7 @@ async function handlePostCheckout(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
     const { repoPath, branch } = body as { repoPath?: string; branch?: string }
-    if (!repoPath || !branch) { jsonResponse(res, 400, { error: 'repoPath e branch obrigatórios' }); return }
+    if (!repoPath || !branch) { jsonResponse(res, 400, { error: tNow('companion.http.repoAndBranchRequired') }); return }
     await execFileAsync('git', ['checkout', branch], { cwd: repoPath })
     jsonResponse(res, 200, { ok: true })
   } catch (err) {
@@ -695,23 +696,23 @@ async function handlePostCheckout(req: IncomingMessage, res: ServerResponse) {
 // ─── Voice Handlers ───────────────────────────────────────────────────────────
 
 /**
- * Ditado do app companion: o celular manda o áudio PCM16 cru (base64) e recebe
- * o texto. Quem transcreve é o motor local do desktop (ver docs/voz.md) — o
- * aparelho não roda modelo de voz e nenhum áudio sai para a nuvem.
+ * Dictation from the companion app: the phone sends the raw PCM16 audio (base64) and
+ * receives the text. What transcribes it is the desktop's local engine (see docs/voice.md) —
+ * the device does not run a voice model and no audio leaves for the cloud.
  *
- * Motor indisponível ou modelo não baixado vira 503 com { error, reason }: o app
- * mostra a razão ("baixe o modelo...") em vez de um 500 opaco.
+ * Engine unavailable or model not downloaded becomes 503 with { error, reason }: the app
+ * shows the reason ("download the model...") instead of an opaque 500.
  */
 async function handlePostVoiceTranscribe(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
 
     if (typeof body.pcm !== 'string' || !body.pcm) {
-      jsonResponse(res, 400, { error: 'pcm (base64) é obrigatório' })
+      jsonResponse(res, 400, { error: tNow('companion.http.pcmRequired') })
       return
     }
     if (typeof body.sampleRate !== 'number' || !Number.isFinite(body.sampleRate) || body.sampleRate <= 0) {
-      jsonResponse(res, 400, { error: 'sampleRate deve ser um número positivo (Hz)' })
+      jsonResponse(res, 400, { error: tNow('companion.http.invalidSampleRate') })
       return
     }
     if (body.engine !== undefined && body.engine !== 'parakeet' && body.engine !== 'whisper') {
@@ -721,7 +722,7 @@ async function handlePostVoiceTranscribe(req: IncomingMessage, res: ServerRespon
 
     const pcm = Buffer.from(body.pcm, 'base64')
     if (pcm.length === 0) {
-      jsonResponse(res, 400, { error: 'pcm vazio ou base64 inválido' })
+      jsonResponse(res, 400, { error: tNow('companion.http.invalidPcm') })
       return
     }
 
@@ -734,45 +735,45 @@ async function handlePostVoiceTranscribe(req: IncomingMessage, res: ServerRespon
     jsonResponse(res, 200, result)
   } catch (err) {
     jsonResponse(res, 503, {
-      error: 'Voz indisponível',
+      error: tNow('companion.http.voiceUnavailable'),
       reason: (err as Error)?.message || String(err),
     })
   }
 }
 
-/** Estado dos motores de voz do desktop — o app decide se mostra o microfone. */
+/** State of the desktop's voice engines — the app decides whether to show the microphone. */
 async function handleGetVoiceStatus(_req: IncomingMessage, res: ServerResponse) {
   try {
     jsonResponse(res, 200, await voiceStatus())
   } catch (err) {
     jsonResponse(res, 503, {
-      error: 'Voz indisponível',
+      error: tNow('companion.http.voiceUnavailable'),
       reason: (err as Error)?.message || String(err),
     })
   }
 }
 
-/** Teto do texto de uma fala: o celular lê UMA resposta por toque, e a síntese
- *  já vai em partes de 3500 caracteres. Acima disto é texto colado por engano. */
+/** Ceiling for the text of an utterance: the phone reads ONE answer per tap, and the
+ *  synthesis already goes in chunks of 3500 characters. Above that it is text pasted by mistake. */
 const MAX_SPEAK_CHARS = 20_000
 
 /**
- * Leitura em voz alta pedida pelo celular: texto entra, WAV sai.
+ * Read-aloud requested by the phone: text goes in, WAV comes out.
  *
- * O aparelho não sintetiza — manda o texto e recebe a URL assinada de um WAV
- * sintetizado no desktop (ver `voice/speech-file`). É o espelho do
- * `/api/voice/transcribe`: lá o áudio atravessa e o texto volta; aqui o texto
- * atravessa e o áudio volta.
+ * The device does not synthesize — it sends the text and receives the signed URL of a WAV
+ * synthesized on the desktop (see `voice/speech-file`). It is the mirror of
+ * `/api/voice/transcribe`: there the audio goes through and the text comes back; here the
+ * text goes through and the audio comes back.
  *
- * Falha sai como 503 com { error: CÓDIGO, detail } — nunca com frase. Quem
- * escreve para a pessoa é o app, que é o único que sabe em que idioma ela está
- * lendo; a frase pronta daqui chegaria em português na tela de quem usa o
- * celular em inglês. O `detail` é o texto do motor, para log.
+ * A failure comes out as 503 with { error: CODE, detail } — never with a sentence. Whoever
+ * writes to the person is the app, which is the only one that knows which language
+ * they are reading in; a ready-made sentence from here would arrive in Portuguese on the
+ * screen of someone using the phone in English. The `detail` is the engine's text, for the log.
  */
 async function handlePostVoiceSpeak(req: IncomingMessage, res: ServerResponse) {
   try {
-    // O interruptor das preferências vale para o app também: desligado, o
-    // celular não sintetiza pelas costas do dono.
+    // The preferences switch counts for the app too: turned off, the
+    // phone does not synthesize behind the owner's back.
     if (!getAppSettings().voice.tts.enabled) {
       jsonResponse(res, 503, { error: 'tts_disabled' } satisfies VoiceSpeakErrorResponse)
       return
@@ -808,24 +809,24 @@ async function handlePostVoiceSpeak(req: IncomingMessage, res: ServerResponse) {
       return
     }
 
-    const falado = await speakToFile(text, {
+    const spoken = await speakToFile(text, {
       voice: typeof body.voice === 'string' ? body.voice : undefined,
       lang: typeof body.lang === 'string' ? body.lang : undefined,
       speed: typeof body.speed === 'number' ? body.speed : undefined,
     })
 
     jsonResponse(res, 200, {
-      id: falado.id,
-      // Escopo `audio`, token no caminho: o player abre direto, e o Range (que
-      // o `serveAsset` já implementa) dá a duração sem baixar tudo.
-      url: fileUrlFor(req, 'audio', falado.id),
-      durationMs: falado.durationMs,
-      cached: falado.cached,
+      id: spoken.id,
+      // `audio` scope, token in the path: the player opens it directly, and Range (which
+      // `serveAsset` already implements) gives the duration without downloading everything.
+      url: fileUrlFor(req, 'audio', spoken.id),
+      durationMs: spoken.durationMs,
+      cached: spoken.cached,
     })
   } catch (err) {
-    // Motor ausente, modelo não baixado, síntese que estourou: para o app é o
-    // mesmo caso — não há voz. O texto do erro (do fundo da pilha, em
-    // português) vai em `detail`: serve ao log e não vai para a tela.
+    // Engine missing, model not downloaded, synthesis that blew up: to the app it is the
+    // same case — there is no voice. The error text (from the stack trace, in
+    // Portuguese) goes in `detail`: it serves the log and does not go to the screen.
     jsonResponse(res, 503, {
       error: 'voice_unavailable',
       detail: (err as Error)?.message || String(err),
@@ -853,7 +854,7 @@ interface RouteEntry {
 // ─── Request Router ──────────────────────────────────────────────────────────
 
 function routeKey(method: string, url: string): string {
-  // Normalizar: remover query string e barra final
+  // Normalize: remove the query string and the trailing slash
   const path = url.split('?')[0]?.replace(/\/$/, '') ?? '/'
   return `${method} ${path}`
 }
@@ -918,7 +919,7 @@ function createRouter(
       return
     }
 
-    // Discovery — endpoint público (sem auth) para o app mobile detectar
+    // Discovery — public endpoint (no auth) for the mobile app to detect
     if (req.method === 'GET' && (req.url === '/api/ping' || req.url?.startsWith('/api/ping?'))) {
       const pairingPin = getPairingPin()
       jsonResponse(res, 200, {
@@ -931,26 +932,26 @@ function createRouter(
       return
     }
 
-    // Mídia do assistente — auth via token assinado na query (o <Image> do
-    // React Native não envia header), por isso fica ANTES do bloqueio global
-    // de auth (que exige header Bearer). Rota simples GET /api/media/:id.
+    // Assistant media — auth via a signed token in the query (React Native's <Image>
+    // does not send a header), which is why it stays BEFORE the global
+    // auth block (which requires a Bearer header). Simple route GET /api/media/:id.
     const mediaKey = routeKey(req.method ?? 'GET', req.url ?? '/')
     const mediaMatch = /^GET \/api\/media\/([^/]+)$/.exec(mediaKey)
-    // 'usage' é um endpoint do registry (listado abaixo), não um id de arquivo.
+    // 'usage' is a registry endpoint (listed below), not a file id.
     if (mediaMatch && mediaMatch[1] !== 'usage') {
       await handleGetMedia(req, res, mediaMatch[1])
       return
     }
 
-    // Arquivos do desktop para o celular: áudio, vídeo, artefato, documento e
-    // as peças (motion/design/slides). Auth pelo token no CAMINHO — o
-    // <video> e o WebView também não mandam header, e é o caminho que faz o
-    // `base.css` de uma peça herdar o token do diretório. Roda antes do
-    // bloqueio global de Bearer, como a rota de imagem.
+    // Desktop files for the phone: audio, video, artifact, document and
+    // the pieces (motion/design/slides). Auth through the token in the PATH — the
+    // <video> and the WebView also do not send a header, and it is the path that makes the
+    // `base.css` of a piece inherit the directory's token. It runs before the
+    // global Bearer block, like the image route.
     const assetMatch = /^(GET|HEAD) \/api\/file\/([^/]+)\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(mediaKey)
     if (assetMatch) {
-      // O id vem percent-encoded; um `%` solto estouraria o decode e derrubaria
-      // o handler no meio. Id que não decodifica não existe — 404.
+      // The id comes percent-encoded; a loose `%` would break the decode and bring
+      // the handler down midway. An id that does not decode does not exist — 404.
       let assetId: string | null = null
       try {
         assetId = decodeURIComponent(assetMatch[3])
@@ -958,18 +959,18 @@ function createRouter(
         assetId = null
       }
       if (!assetId) {
-        jsonResponse(res, 404, { error: 'Arquivo não encontrado' })
+        jsonResponse(res, 404, { error: tNow('companion.http.fileNotFound') })
         return
       }
-      // O relativo NÃO é decodificado aqui: quem decodifica é o resolve*File
-      // de cada store, o mesmo contrato dos handlers de scheme.
+      // The relative path is NOT decoded here: what decodes it is the resolve*File
+      // of each store, the same contract as the scheme handlers.
       await serveAsset(req, res, assetMatch[2], assetId, assetMatch[4], assetMatch[5] ?? '')
       return
     }
 
-    // Auth — tenta token persistente primeiro, depois PIN
+    // Auth — tries the persistent token first, then the PIN
     if (!(await validateAuth(req, validatePin, validateToken))) {
-      jsonResponse(res, 401, { error: 'PIN inválido ou ausente' })
+      jsonResponse(res, 401, { error: tNow('companion.http.invalidPin') })
       return
     }
 
@@ -986,13 +987,13 @@ function createRouter(
           await entry.handler(req, res, ...Object.values(params))
         } catch (err) {
           console.error('[CompanionHTTP] Handler error:', err)
-          jsonResponse(res, 500, { error: 'Erro interno' })
+          jsonResponse(res, 500, { error: tNow('companion.http.internalError') })
         }
         return
       }
     }
 
-    jsonResponse(res, 404, { error: 'Endpoint não encontrado' })
+    jsonResponse(res, 404, { error: tNow('companion.http.endpointNotFound') })
   }
 }
 
@@ -1010,8 +1011,8 @@ export function startCompanionHttpServer(
 
   httpServer.on('error', (err: Error) => {
     console.error('[CompanionHTTP] Server error:', err)
-    // Não deixa um servidor fantasma: se o bind falhou (porta em uso por outra
-    // instância), reporta not running em vez de httpServer !== null para sempre.
+    // It does not leave a phantom server: if the bind failed (port in use by another
+    // instance), it reports not running instead of httpServer !== null forever.
     httpServer = null
   })
 

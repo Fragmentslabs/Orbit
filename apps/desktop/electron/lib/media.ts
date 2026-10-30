@@ -25,48 +25,49 @@ import { renderDiagrams } from './mermaid-render'
 import { withAssetLock, writeFileAtomic } from './asset-lock'
 import { fontFacesForFamily, handleFontRequest } from './fonts/store'
 import { journalMediaIndex, journalPath, mediaJournalActive } from './session/media-journal'
+import { tNow } from './i18n'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
 /**
- * Registry dos ativos que o agente produz.
+ * Registry of the assets the agent produces.
  *
- * Imagens (tool show_image, screenshots, scripts de browser) são PNGs/JPGs/
- * WebPs em orbit-data/media, servidos pelo protocolo orbit-media://.
- * Artefatos (tool create_artifact) são páginas HTML em orbit-data/artifacts,
- * servidas pelo protocolo orbit-artifact://. Em ambos os casos as mensagens
- * persistem só a URL, nunca o conteúdo.
+ * Images (show_image tool, screenshots, browser scripts) are PNGs/JPGs/
+ * WebPs in orbit-data/media, served by the orbit-media:// protocol.
+ * Artifacts (create_artifact tool) are HTML pages in orbit-data/artifacts,
+ * served by the orbit-artifact:// protocol. In both cases the messages
+ * persist only the URL, never the content.
  *
- * O ÍNDICE é um só (media/index.json) e o arquivo nunca é duplicado: o
- * registro é um ponteiro — `path` absoluto + `kind` — e é isso que deixa a
- * galeria, o uso de disco e o "abrir no chat" valerem para os dois tipos sem
- * duas implementações. Por isso toda leitura/exclusão resolve pelo `path` da
- * ENTRADA, nunca remontando `mediaDir() + id`.
+ * The INDEX is a single one (media/index.json) and the file is never duplicated: the
+ * record is a pointer — absolute `path` + `kind` — and that is what makes the
+ * gallery, the disk usage and "open in chat" work for the two types without
+ * two implementations. That is why every read/delete resolves through the
+ * ENTRY's `path`, never by rebuilding `mediaDir() + id`.
  *
- * O diretório continua sendo a fonte da verdade das imagens: se o índice
- * sumir ou corromper, `backfillMedia` o reconstrói a partir do disco.
+ * The directory remains the source of truth for the images: if the index
+ * disappears or gets corrupted, `backfillMedia` rebuilds it from the disk.
  */
 
 const SCHEME = MEDIA_SCHEME
 /**
- * O `svg` entra junto com os rasters porque ele é entregue como IMAGEM: servido
- * com `image/svg+xml` e desenhado em `<img>`, onde script embutido não executa.
- * Só não pode ser tratado como os outros na hora de copiar para a área de
- * transferência — o nativeImage não lê SVG, e lá ele vai rasterizado.
+ * The `svg` comes along with the rasters because it is delivered as an IMAGE: served
+ * with `image/svg+xml` and drawn in `<img>`, where embedded script does not run.
+ * It just cannot be treated like the others when copying to the clipboard —
+ * nativeImage does not read SVG, and there it goes rasterized.
  */
 const SAFE_ID = /^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif|svg)$/
 /**
- * Arquivos servidos pelo orbit-artifact://: a página do artefato (.html), a
- * miniatura capturada (.png) e, nos documentos, o fonte (.md) e as
- * renderizações (.pdf/.docx).
+ * Files served by orbit-artifact://: the artifact page (.html), the
+ * captured thumbnail (.png) and, for documents, the source (.md) and the
+ * renderings (.pdf/.docx).
  */
 const SAFE_ARTIFACT_ID = /^[a-zA-Z0-9_-]+\.(html|png|md|pdf|docx)$/
 const INDEX_FILE = 'index.json'
 
 /**
- * Diretório de um arquivo servido pelo scheme, decidido pelo PREFIXO do id
- * (`art_` / `doc_`) — os ids são gerados aqui, então o prefixo é confiável e
- * evita ter que consultar o índice a cada requisição do protocolo.
+ * Directory of a file served by the scheme, decided by the id PREFIX
+ * (`art_` / `doc_`) — the ids are generated here, so the prefix is reliable and
+ * avoids having to query the index on every protocol request.
  */
 function assetFileDir(id: string): string {
   return id.startsWith('doc_') ? documentsDir() : artifactsDir()
@@ -78,9 +79,9 @@ export interface SaveMediaMeta {
   messageId?: string
   taskId?: string
   name?: string
-  /** Id da imagem de origem, quando esta nasceu de uma edição de outra. */
+  /** Id of the source image, when this one was born from an edit of another. */
   parentId?: string
-  /** Autor e licença, quando a imagem veio de uma busca na web. */
+  /** Author and license, when the image came from a web search. */
   credit?: MediaCredit
 }
 
@@ -88,14 +89,14 @@ function mediaDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'media')
 }
 
-/** Artefatos moram fora de media/ para não colidirem com o backfill, que varre
- *  o diretório de imagens e registraria qualquer arquivo novo como imagem. */
+/** Artifacts live outside media/ so they do not collide with the backfill, which scans
+ *  the images directory and would register any new file as an image. */
 function artifactsDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'artifacts')
 }
 
-/** Documentos: fonte .md, preview .html, renderizações .pdf/.docx e a
- *  miniatura .png, todos com o mesmo id-base. */
+/** Documents: .md source, .html preview, .pdf/.docx renderings and the
+ *  .png thumbnail, all with the same base id. */
 function documentsDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'documents')
 }
@@ -105,9 +106,9 @@ function indexFile(): string {
 }
 
 /**
- * Mutex de escrita do índice: toda mutação entra numa fila serial. Sem isso,
- * duas capturas simultâneas (batch + show_image) leriam a mesma versão do
- * index.json e uma sobrescreveria a outra.
+ * Index write mutex: every mutation enters a serial queue. Without it,
+ * two simultaneous captures (batch + show_image) would read the same version of
+ * index.json and one would overwrite the other.
  */
 let indexQueue: Promise<unknown> = Promise.resolve()
 
@@ -124,16 +125,16 @@ async function readIndex(): Promise<MediaEntry[]> {
     if (!Array.isArray(parsed)) return []
     return parsed.filter((e): e is MediaEntry => !!e && typeof (e as MediaEntry).id === 'string')
   } catch {
-    // Ausente ou corrompido: o disco é a fonte da verdade
+    // Missing or corrupted: the disk is the source of truth
     return []
   }
 }
 
 async function writeIndex(entries: MediaEntry[]): Promise<void> {
-  // Dentro de um turno do agente, cada entrada criada, alterada ou removida
-  // guarda o estado anterior no diário — é o que deixa o revert da mensagem
-  // desfazer o que ela pôs (ou tirou) da galeria. Sempre sob o withIndexLock
-  // de quem chamou, então o índice lido aqui é o de imediatamente antes.
+  // Inside an agent turn, every entry created, changed or removed
+  // keeps the previous state in the journal — it is what lets the message revert
+  // undo what it put into (or removed from) the gallery. Always under the withIndexLock
+  // of the caller, so the index read here is the one from immediately before.
   if (mediaJournalActive()) await journalMediaIndex(await readIndex(), entries)
   await fsp.mkdir(mediaDir(), { recursive: true })
   const tmp = `${indexFile()}.${Date.now()}.tmp`
@@ -141,7 +142,7 @@ async function writeIndex(entries: MediaEntry[]): Promise<void> {
   await fsp.rename(tmp, indexFile())
 }
 
-/** Dimensões da imagem — falha silenciosa (o registro vale mesmo sem elas). */
+/** Image dimensions — silent failure (the record counts even without them). */
 async function dimensions(buffer: Buffer): Promise<{ width?: number; height?: number }> {
   try {
     const meta = await sharp(buffer).metadata()
@@ -152,13 +153,13 @@ async function dimensions(buffer: Buffer): Promise<{ width?: number; height?: nu
 }
 
 /**
- * Salva o buffer e retorna a URL orbit-media:// para usar na ImagePart.
- * `meta` registra a origem no índice — sem ela a imagem entra como 'chat'
- * (compatibilidade com chamadores antigos).
+ * Saves the buffer and returns the orbit-media:// URL to use in the ImagePart.
+ * `meta` records the origin in the index — without it the image enters as 'chat'
+ * (compatibility with old callers).
  */
 export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMeta): Promise<string> {
   const id = `img_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`
-  if (!SAFE_ID.test(id)) throw new Error(`extensão de imagem inválida: ${ext}`)
+  if (!SAFE_ID.test(id)) throw new Error(`invalid image extension: ${ext}`)
   await fsp.mkdir(mediaDir(), { recursive: true })
   const file = path.join(mediaDir(), id)
   await fsp.writeFile(file, buffer)
@@ -191,13 +192,13 @@ export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMet
 }
 
 /**
- * Avisa as janelas de que o acervo mudou.
+ * Warns the windows that the collection changed.
  *
- * A galeria lia o índice só ao abrir: com o painel aberto, uma imagem gerada
- * no meio da conversa não aparecia, e uma apagada continuava lá — era preciso
- * fechar e abrir para ver a verdade. Emitido daqui pelo mesmo motivo do
- * artifact:updated: passar pelo broadcast.ts criaria o ciclo media →
- * broadcast → companion-server → companion-http → media.
+ * The gallery read the index only when opening: with the panel open, an image generated
+ * in the middle of the conversation did not appear, and a deleted one stayed there —
+ * you had to close and open to see the truth. It is emitted from here for the same
+ * reason as artifact:updated: going through broadcast.ts would create the cycle
+ * media → broadcast → companion-server → companion-http → media.
  */
 function notifyMediaChanged(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -205,19 +206,19 @@ function notifyMediaChanged(): void {
   }
 }
 
-/** Ids dos áudios (ver audio-store.ts): minúsculos, prefixo `aud_`. */
+/** Ids of the audio files (see audio-store.ts): tiny, `aud_` prefix. */
 export const SAFE_AUDIO_ID = /^aud_[a-z0-9]+\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/
 
-/** Id de um áudio a partir da URL orbit-audio:// ou do id cru. */
+/** Id of an audio file from the orbit-audio:// URL or from the raw id. */
 export function audioMediaId(url: string): string | null {
   const id = url.trim().replace(`${AUDIO_SCHEME}://`, '').replace(/\/+$/, '')
   return SAFE_AUDIO_ID.test(id) ? id : null
 }
 
 /**
- * Registra no acervo um áudio já gravado em disco (anexo ou gerado). O arquivo
- * mora na pasta de áudio, não em media/ — o backfill de lá registraria tudo
- * como imagem —, e o registro aponta para ele pelo `path`.
+ * Registers an audio file already written to disk in the collection (attachment or
+ * generated). The file lives in the audio folder, not in media/ — the backfill there
+ * would register everything as an image —, and the record points to it through `path`.
  */
 export async function registerAudioMedia(entry: {
   id: string
@@ -228,7 +229,7 @@ export async function registerAudioMedia(entry: {
   messageId?: string
   name?: string
 }): Promise<void> {
-  if (!SAFE_AUDIO_ID.test(entry.id)) throw new Error(`id de áudio inválido: ${entry.id}`)
+  if (!SAFE_AUDIO_ID.test(entry.id)) throw new Error(`invalid audio id: ${entry.id}`)
   await withIndexLock(async () => {
     const entries = await readIndex()
     entries.push({ ...entry, createdAt: Date.now(), kind: 'audio' })
@@ -237,11 +238,11 @@ export async function registerAudioMedia(entry: {
   notifyMediaChanged()
 }
 
-/** O que um vídeo precisa para entrar na galeria. */
+/** What a video needs to enter the gallery. */
 export interface SaveVideoMeta {
-  /** Id do arquivo (`vdo_….mp4`) — o mesmo da referência que o agente recebe. */
+  /** File id (`vdo_….mp4`) — the same as the reference the agent receives. */
   id: string
-  /** Arquivo do vídeo, no app. */
+  /** Video file, in the app. */
   file: string
   size: number
   name?: string
@@ -251,18 +252,18 @@ export interface SaveVideoMeta {
   width?: number
   height?: number
   durationMs?: number
-  /** URL do player (orbit-video://) que o visor da galeria toca. */
+  /** Player URL (orbit-video://) that the gallery viewer plays. */
   videoUrl?: string
 }
 
 /**
- * Registra um vídeo na galeria. Como o áudio, o arquivo mora fora de media/ (o
- * backfill de lá o registraria como imagem) e o registro aponta para ele pelo
- * `path`; a CAPA é um quadro, gravado na pasta de artefatos como a de uma peça de
- * motion. Registrar o mesmo id de novo atualiza o item.
+ * Registers a video in the gallery. Like audio, the file lives outside media/ (the
+ * backfill there would register it as an image) and the record points to it through
+ * `path`; the COVER is a frame, written in the artifacts folder like that of a motion
+ * piece. Registering the same id again updates the item.
  */
 export async function saveVideoMedia(poster: Buffer | null, meta: SaveVideoMeta): Promise<MediaEntry> {
-  if (!SAFE_VIDEO_MEDIA_ID.test(meta.id)) throw new Error(`id de vídeo inválido: ${meta.id}`)
+  if (!SAFE_VIDEO_MEDIA_ID.test(meta.id)) throw new Error(`invalid video id: ${meta.id}`)
   let thumb: string | undefined
   if (poster) {
     thumb = `vdp_${meta.id.replace(/^vdo_/, '').replace(/\.[a-z0-9]+$/, '')}.png`
@@ -298,21 +299,21 @@ export async function saveVideoMedia(poster: Buffer | null, meta: SaveVideoMeta)
   return entry
 }
 
-/** Extrai o id de uma URL orbit-media:// (ou devolve a entrada se já for um id). */
+/** Extracts the id from an orbit-media:// URL (or returns the entry if it is already an id). */
 export function mediaIdFromUrl(url: string): string | null {
   const id = url.startsWith(`${SCHEME}://`) ? url.slice(`${SCHEME}://`.length).replace(/\/+$/, '') : url
   return SAFE_ID.test(id) ? id : null
 }
 
 /**
- * Vincula ativos (imagem, artefato ou documento) a uma sessão ADICIONAL —
- * hoje, só o fork: `forkSession` clona as mensagens com o MESMO
- * documentId/artifactId/mediaUrl (nada é duplicado), então sem isto o card
- * continua visível na conversa do fork mas some do filtro "Neste chat" da
- * galeria, porque `sessionId` do registro é fixo na sessão original.
+ * Links assets (image, artifact or document) to an ADDITIONAL session —
+ * today, only the fork: `forkSession` clones the messages with the SAME
+ * documentId/artifactId/mediaUrl (nothing is duplicated), so without this the card
+ * stays visible in the fork conversation but disappears from the gallery's
+ * "In this chat" filter, because the record's `sessionId` is fixed to the original session.
  *
- * Ids inválidos são ignorados em silêncio — o chamador passa tudo que achou
- * nas parts clonadas, e nem toda part vira um id de mídia reconhecível.
+ * Invalid ids are ignored silently — the caller passes everything it found
+ * in the cloned parts, and not every part becomes a recognizable media id.
  */
 export async function linkMediaSessions(ids: string[], sessionId: string): Promise<void> {
   if (ids.length === 0) return
@@ -333,9 +334,9 @@ export async function linkMediaSessions(ids: string[], sessionId: string): Promi
 }
 
 /**
- * Vincula uma imagem já salva à mensagem onde ela apareceu. O show_image não
- * conhece o id da mensagem (a tool roda no meio do turno) — o chat-engine
- * completa o registro quando materializa a ImagePart.
+ * Links an image already saved to the message where it appeared. show_image does not
+ * know the message id (the tool runs in the middle of the turn) — the chat-engine
+ * completes the record when it materializes the ImagePart.
  */
 export async function attachMediaMessage(url: string, messageId: string, sessionId?: string): Promise<void> {
   const id = mediaIdFromUrl(url) ?? audioMediaId(url)
@@ -359,7 +360,7 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
     const kinds = Array.isArray(filter.kind) ? filter.kind : [filter.kind]
     if (!kinds.includes(mediaKind(entry))) return false
   }
-  // Sessão de origem OU uma sessão vinculada (fork) — ver linkMediaSessions.
+  // Source session OR a linked session (fork) — see linkMediaSessions.
   if (
     filter.sessionId &&
     entry.sessionId !== filter.sessionId &&
@@ -367,8 +368,8 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
   ) {
     return false
   }
-  // Escopo de projeto: é o que faz o agente reencontrar, no modo código, o
-  // que ele produziu antes no MESMO repositório — em qualquer sessão.
+  // Project scope: it is what makes the agent find again, in code mode,
+  // what it produced before in the SAME repository — in any session.
   if (filter.directory && entry.directory !== filter.directory) return false
   if (filter.folderId && entry.folderId !== filter.folderId) return false
   if (filter.since != null && entry.createdAt < filter.since) return false
@@ -380,20 +381,20 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
   return true
 }
 
-/** Lista o registry (mais recentes primeiro), opcionalmente filtrado. */
+/** Lists the registry (most recent first), optionally filtered. */
 export async function listMedia(filter?: MediaFilter): Promise<MediaEntry[]> {
   const entries = await readIndex()
   const filtered = filter ? entries.filter((e) => matches(e, filter)) : entries
   return filtered.sort((a, b) => b.createdAt - a.createdAt)
 }
 
-/** Atualiza campos de um item do acervo (o escopo de um material, por exemplo). */
+/** Updates fields of a collection item (the scope of a material, for example). */
 export async function updateMediaEntry(id: string, patch: Partial<MediaEntry>): Promise<MediaEntry | null> {
   const updated = await withIndexLock(async () => {
     const entries = await readIndex()
     const at = entries.findIndex((e) => e.id === id)
     if (at < 0) return null
-    // Chaves com `undefined` APAGAM o campo (é assim que se tira o escopo da pasta).
+    // Keys with `undefined` DELETE the field (that is how the folder scope is removed).
     const next = { ...entries[at], ...patch } as MediaEntry
     for (const key of Object.keys(patch) as Array<keyof MediaEntry>) {
       if (patch[key] === undefined) delete next[key]
@@ -412,11 +413,11 @@ export async function getMediaEntry(id: string): Promise<MediaEntry | null> {
 }
 
 /**
- * Remove arquivo + registro. Retorna false quando o id é inválido.
+ * Removes file + record. Returns false when the id is invalid.
  *
- * O caminho sai da ENTRADA (imagens e artefatos vivem em pastas diferentes);
- * o `mediaDir() + id` só entra como fallback para registros órfãos — mídia em
- * disco que o índice perdeu. Num artefato, a miniatura vai junto.
+ * The path comes from the ENTRY (images and artifacts live in different folders);
+ * `mediaDir() + id` only enters as a fallback for orphan records — media on
+ * disk that the index lost. For an artifact, the thumbnail goes along.
  */
 export async function deleteMedia(id: string): Promise<boolean> {
   const isImage = SAFE_ID.test(id)
@@ -425,10 +426,10 @@ export async function deleteMedia(id: string): Promise<boolean> {
   const entry = await getMediaEntry(id)
   const file = entry?.path ?? (isImage ? path.join(mediaDir(), id) : null)
   if (!file) return false
-  // Quem guarda MAIS que o arquivo do registro (a pasta de uma peça de motion, o
-  // índice de vídeos) limpa o resto ANTES de o registro sumir: se limpar falhar,
-  // o item continua na galeria e a pessoa pode tentar de novo, em vez de sobrar
-  // espaço ocupado que nada mais aponta.
+  // Whoever keeps MORE than the record's file (the folder of a motion piece, the
+  // video index) cleans the rest BEFORE the record disappears: if cleaning fails,
+  // the item stays in the gallery and the person can try again, instead of leaving
+  // occupied space that nothing points to anymore.
   const hook = entry ? deleteHooks.get(mediaKind(entry)) : undefined
   if (entry) await journalEntryFiles(entry)
   if (entry && hook) await hook(entry)
@@ -449,10 +450,10 @@ export async function deleteMedia(id: string): Promise<boolean> {
 }
 
 /**
- * Os arquivos que uma entrada da galeria POSSUI: o do registro, as capas e, num
- * documento, cada renderização com o mesmo id-base (.md, .html, .pdf, .docx).
- * É a unidade do revert: o que entra no diário antes de ser reescrito, e o que
- * sai do disco quando a entrada criada no turno é desfeita.
+ * The files that a gallery entry OWNS: the record's, the covers and, for a
+ * document, each rendering with the same base id (.md, .html, .pdf, .docx).
+ * It is the unit of the revert: what enters the journal before being rewritten, and what
+ * leaves the disk when the entry created in the turn is undone.
  */
 export async function entryOwnedFiles(entry: MediaEntry): Promise<string[]> {
   const files = new Set<string>()
@@ -470,27 +471,27 @@ export async function entryOwnedFiles(entry: MediaEntry): Promise<string[]> {
   return [...files]
 }
 
-/** Antes de reescrever ou apagar os arquivos de uma entrada (no turno do agente). */
+/** Before rewriting or deleting the files of an entry (in the agent turn). */
 async function journalEntryFiles(entry: MediaEntry): Promise<void> {
   if (!mediaJournalActive()) return
-  // O `owner` liga cada arquivo à entrada: no revert, quem decide se ele pode
-  // voltar é a comparação da ENTRADA (revisão/estado), não o hash solto do
-  // arquivo — a capa pode ser regerada em segundo plano sem ser edição.
+  // The `owner` links each file to the entry: in the revert, what decides whether it can
+  // come back is the comparison of the ENTRY (revision/state), not the loose hash of the
+  // file — the cover may be regenerated in the background without being an edit.
   for (const file of await entryOwnedFiles(entry)) await journalPath(file, undefined, entry.id)
 }
 
 /**
- * Põe entradas da galeria de volta no estado guardado pelo diário — uma por
- * uma, sob o lock do índice, sem tocar nas que não estão na lista (outro chat
- * pode ter gravado as dele no meio). `before: null` tira a entrada. Os
- * ARQUIVOS são do chamador (o diário os restaura antes); aqui é só o índice e o
- * aviso às janelas, inclusive aos cards de artefato/documento já na tela.
+ * Puts gallery entries back in the state saved by the journal — one by
+ * one, under the index lock, without touching the ones that are not in the list (another chat
+ * may have written its own in the middle). `before: null` removes the entry. The
+ * FILES belong to the caller (the journal restores them before); here it is only the index and the
+ * notice to the windows, including the artifact/document cards already on screen.
  */
 export async function restoreMediaEntries(
   records: Array<{ id: string; before: MediaEntry | null }>,
-  /** Revalida cada entrada DENTRO da trava do índice, logo antes de trocar:
-   *  quem decidiu que era seguro leu o índice antes, e outra conversa pode ter
-   *  gravado no meio. A entrada recusada fica como está. */
+  /** Revalidates each entry INSIDE the index lock, right before swapping:
+   *  whoever decided it was safe read the index before, and another conversation may have
+   *  written in the middle. The refused entry stays as it is. */
   stillSafe?: (id: string, current: MediaEntry | null) => boolean,
 ): Promise<Set<string>> {
   const skipped = new Set<string>()
@@ -517,7 +518,7 @@ export async function restoreMediaEntries(
       if (before) next.push(before)
       wanted.delete(entry.id)
     }
-    // O que não está mais no índice e existia antes volta ao fim dele.
+    // What is no longer in the index and existed before goes back to the end of it.
     for (const before of wanted.values()) if (before) next.push(before)
     await writeIndex(next)
   })
@@ -535,10 +536,10 @@ export async function restoreMediaEntries(
 }
 
 /**
- * Ganchos de exclusão por TIPO. Alguns ativos têm o que apagar além do arquivo do
- * registro: a peça de motion é uma pasta inteira, o vídeo está no índice do
- * player. Quem sabe fazer isso (e importa media.ts) registra aqui, em vez de
- * media.ts importar todos eles e fechar um ciclo.
+ * Deletion hooks per TYPE. Some assets have more to delete than the record's
+ * file: the motion piece is a whole folder, the video is in the player's
+ * index. Whoever knows how to do that (and imports media.ts) registers here, instead of
+ * media.ts importing all of them and closing a cycle.
  */
 const deleteHooks = new Map<MediaKind, (entry: MediaEntry) => Promise<void>>()
 
@@ -546,7 +547,7 @@ export function setMediaDeleteHook(kind: MediaKind, hook: (entry: MediaEntry) =>
   deleteHooks.set(kind, hook)
 }
 
-/** Remove vários ativos de uma vez (seleção em lote na galeria). */
+/** Removes several assets at once (batch selection in the gallery). */
 export async function deleteManyMedia(ids: string[]): Promise<number> {
   let removed = 0
   for (const id of ids) {
@@ -556,9 +557,9 @@ export async function deleteManyMedia(ids: string[]): Promise<number> {
 }
 
 /**
- * Limpeza rápida: apaga as imagens geradas por scripts/lotes (source
- * 'script'/'batch') que NÃO foram mostradas em nenhuma mensagem — o material
- * intermediário das automações, que costuma dominar o disco.
+ * Quick cleanup: deletes the images generated by scripts/batches (source
+ * 'script'/'batch') that were NOT shown in any message — the intermediate
+ * material of the automations, which tends to dominate the disk.
  */
 export async function cleanupScriptMedia(): Promise<number> {
   const entries = await readIndex()
@@ -569,12 +570,12 @@ export async function cleanupScriptMedia(): Promise<number> {
 }
 
 /**
- * Uso de disco dos ativos (arquivos reais, não o índice): imagens em media/ e
- * artefatos em artifacts/.
+ * Disk usage of the assets (real files, not the index): images in media/ and
+ * artifacts in artifacts/.
  *
- * `count` conta ATIVOS — as miniaturas dos artefatos somam bytes mas não
- * contam como item, senão cada artefato apareceria duas vezes no número que o
- * usuário lê na galeria.
+ * `count` counts ASSETS — the artifact thumbnails add bytes but do not
+ * count as items, otherwise each artifact would show up twice in the number that the
+ * user reads in the gallery.
  */
 export async function mediaDiskUsage(): Promise<MediaUsage> {
   let count = 0
@@ -589,19 +590,19 @@ export async function mediaDiskUsage(): Promise<MediaUsage> {
           if (countable(name)) count += 1
           bytes += stat.size
         } catch {
-          // arquivo removido no meio da varredura
+          // file removed in the middle of the scan
         }
       }
     } catch {
-      // pasta ainda não existe
+      // folder does not exist yet
     }
   }
 
   await scan(mediaDir(), SAFE_ID, () => true)
   await scan(artifactsDir(), SAFE_ARTIFACT_ID, (name) => name.endsWith('.html'))
-  // Vídeos e áudios moram em pastas próprias (fora do que o scan acima varre) e
-  // são, de longe, o que mais ocupa disco: contam pelo registro, que aponta o
-  // arquivo. Sem isto "excluir libera espaço" não apareceria no número.
+  // Videos and audio live in their own folders (outside what the scan above covers) and
+  // are, by far, what takes the most disk: they count through the record, which points to the
+  // file. Without this, "deleting frees space" would not show up in the number.
   for (const entry of await readIndex()) {
     const kind = mediaKind(entry)
     if (kind !== 'video' && kind !== 'audio') continue
@@ -609,19 +610,19 @@ export async function mediaDiskUsage(): Promise<MediaUsage> {
       bytes += (await fsp.stat(entry.path)).size
       count += 1
     } catch {
-      // arquivo já removido: o registro órfão não conta
+      // file already removed: the orphan record does not count
     }
   }
   return { count, bytes }
 }
 
 /**
- * Índice das imagens presentes no disco mas ausentes do registry (mídia
- * anterior ao registry, ou salva enquanto o índice estava corrompido). Varre
- * as mensagens das sessões para descobrir de qual chat/mensagem cada arquivo
- * veio; o que não aparecer em nenhuma mensagem entra como 'chat' órfã.
+ * Index of the images present on disk but absent from the registry (media
+ * from before the registry, or saved while the index was corrupted). It scans
+ * the session messages to find out which chat/message each file
+ * came from; what does not show up in any message enters as an orphan 'chat'.
  *
- * Roda uma vez, na primeira abertura da galeria — barato e idempotente.
+ * It runs once, on the first opening of the gallery — cheap and idempotent.
  */
 export async function backfillMedia(): Promise<number> {
   return withIndexLock(async () => {
@@ -636,7 +637,7 @@ export async function backfillMedia(): Promise<number> {
     }
     if (files.length === 0) return 0
 
-    // id da imagem → { sessionId, messageId } a partir das ImageParts persistidas
+    // image id → { sessionId, messageId } from the persisted ImageParts
     const origins = new Map<string, { sessionId: string; messageId: string }>()
     for (const key of await listKeys(StorageKeys.sessionPrefix)) {
       const sessionId = key.slice(StorageKeys.sessionPrefix.length)
@@ -667,7 +668,7 @@ export async function backfillMedia(): Promise<number> {
       try {
         dims = await dimensions(await fsp.readFile(file))
       } catch {
-        // arquivo ilegível — registra sem dimensões
+        // unreadable file — registers it without dimensions
       }
       entries.push({
         id,
@@ -694,19 +695,19 @@ const CONTENT_TYPES: Record<string, string> = {
   svg: 'image/svg+xml',
 }
 
-/** Lê um arquivo de mídia persistido — usado pelo servidor HTTP do companion
- *  (que não tem acesso ao protocolo orbit-media:// do Electron). Valida o id
- *  com SAFE_ID (nada de path traversal). */
+/** Reads a persisted media file — used by the companion HTTP server
+ *  (which has no access to Electron's orbit-media:// protocol). It validates the id
+ *  with SAFE_ID (no path traversal). */
 export async function readMedia(
   id: string,
 ): Promise<{ buffer: Buffer; contentType: string; ext: string } | null> {
   if (!SAFE_ID.test(id)) return null
   try {
     const buffer = await fsp.readFile(path.join(mediaDir(), id))
-    // A extensao sai do ID, que e a fonte da verdade: nos a escolhemos ao
-    // gravar. Deduzi-la do tipo do conteudo depende de um mapa que alguem
-    // precisa lembrar de estender a cada formato novo — e foi assim que o SVG
-    // saiu salvo com a extensao errada.
+    // The extension comes from the ID, which is the source of truth: we choose it when
+    // writing. Deducing it from the content type depends on a map that someone
+    // has to remember to extend on every new format — and that is how the SVG
+    // ended up saved with the wrong extension.
     const ext = id.split('.').pop() ?? ''
     return { buffer, contentType: CONTENT_TYPES[ext] ?? 'application/octet-stream', ext }
   } catch {
@@ -714,36 +715,36 @@ export async function readMedia(
   }
 }
 
-/** Registra o protocolo (chamar após app.whenReady). */
+/** Registers the protocol (call after app.whenReady). */
 export function registerMediaProtocol(): void {
   protocol.handle(SCHEME, (request) => {
-    // request.url = orbit-media://img_x.png (host carrega o id em schemes não-standard)
+    // request.url = orbit-media://img_x.png (the host carries the id on non-standard schemes)
     const id = request.url.slice(`${SCHEME}://`.length).replace(/\/+$/, '')
     if (!SAFE_ID.test(id)) return new Response('not found', { status: 404 })
     return net.fetch(pathToFileURL(path.join(mediaDir(), id)).toString())
   })
 }
 
-// ─── Artefatos HTML ──────────────────────────────────────────────────────────
+// ─── HTML artifacts ──────────────────────────────────────────────────────────
 
 /**
- * Página renderizável produzida pelo agente (create_artifact): dashboard,
- * protótipo, diagrama, relatório. Mesma mecânica das imagens — arquivo em
- * disco, registro no índice, URL na mensagem — com duas diferenças:
+ * Renderable page produced by the agent (create_artifact): dashboard,
+ * prototype, diagram, report. Same mechanics as the images — file on
+ * disk, record in the index, URL in the message — with two differences:
  *
- * 1. Scheme próprio. `orbit-media://` não é privilegiado, e HTML sem origem
- *    não roda script nem carrega módulo. `orbit-artifact://` é registrado como
- *    standard+secure (ver registerSchemePrivileges, que PRECISA rodar
- *    antes do app ficar pronto).
- * 2. Miniatura. A galeria é um grid de <img>; o artefato ganha um PNG
- *    capturado numa janela oculta para caber nesse grid.
+ * 1. Its own scheme. `orbit-media://` is not privileged, and HTML without an origin
+ *    runs no script and loads no module. `orbit-artifact://` is registered as
+ *    standard+secure (see registerSchemePrivileges, which HAS to run
+ *    before the app is ready).
+ * 2. Thumbnail. The gallery is a grid of <img>; the artifact gets a PNG
+ *    captured in a hidden window to fit that grid.
  *
- * O conteúdo é escrito pelo modelo, que pode ter lido a web no mesmo turno:
- * quem renderiza trata como não-confiável (iframe sandbox sem
- * allow-same-origin, partição isolada).
+ * The content is written by the model, which may have read the web in the same turn:
+ * whoever renders it treats it as untrusted (sandboxed iframe without
+ * allow-same-origin, isolated partition).
  */
 
-/** Altura máxima capturada na miniatura — páginas longas viram tira inútil. */
+/** Maximum height captured in the thumbnail — long pages become a useless strip. */
 const THUMB_VIEWPORT = { width: 1024, height: 768 }
 const THUMB_WIDTH = 640
 const THUMB_LOAD_TIMEOUT_MS = 8_000
@@ -755,7 +756,7 @@ export interface SaveArtifactMeta {
 }
 
 export interface ArtifactRef {
-  /** Nome do arquivo: art_xxx.html — também o id do registro na galeria */
+  /** File name: art_xxx.html — also the record id in the gallery */
   id: string
   url: string
   title: string
@@ -764,14 +765,14 @@ export interface ArtifactRef {
 }
 
 /**
- * Privilégios do scheme dos artefatos. TEM que ser chamado no topo do main,
- * antes de `app.whenReady()` — depois disso o Chromium já fixou a tabela de
- * schemes e a chamada não tem efeito (a página carregaria como origem opaca,
- * sem script).
+ * Privileges of the artifact scheme. It HAS to be called at the top of main,
+ * before `app.whenReady()` — after that Chromium has already fixed the scheme
+ * table and the call has no effect (the page would load as an opaque origin,
+ * without script).
  *
- * ATENÇÃO: o Chromium guarda só a ÚLTIMA chamada — registrar uma segunda
- * lista faz a primeira deixar de valer. TODO scheme privilegiado do app entra
- * NESTA lista, nunca numa chamada separada.
+ * ATTENTION: Chromium keeps only the LAST call — registering a second
+ * list makes the first one stop counting. EVERY privileged scheme of the app goes
+ * in THIS list, never in a separate call.
  */
 export function registerSchemePrivileges(): void {
   protocol.registerSchemesAsPrivileged([
@@ -781,28 +782,28 @@ export function registerSchemePrivileges(): void {
         standard: true,
         secure: true,
         supportFetchAPI: true,
-        // Sem CORS o artefato não consegue nem buscar dados de uma API pública
-        // que o próprio modelo colocou no script.
+        // Without CORS the artifact cannot even fetch data from a public API
+        // that the model itself put in the script.
         corsEnabled: true,
         stream: true,
       },
     },
-    // Áudios das conversas (ver audio-store.ts). O Chromium aceita UMA chamada
-    // de registro, antes do app ficar pronto — por isso o scheme mora aqui.
-    // `stream` é o que deixa o <audio> tocar e buscar posição.
+    // Conversation audio (see audio-store.ts). Chromium accepts ONE registration
+    // call, before the app is ready — that is why the scheme lives here.
+    // `stream` is what lets the <audio> play and seek.
     {
       scheme: AUDIO_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
-    // Vídeos renderizados pelo agente (ver video/store.ts) — mesma razão:
-    // sem `stream` o <video> não toca nem busca posição.
+    // Videos rendered by the agent (see video/store.ts) — same reason:
+    // without `stream` the <video> neither plays nor seeks.
     {
       scheme: VIDEO_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
-    // Composições de motion (ver video/motion-store.ts). Mesmas flags do
-    // artefato, e por um motivo a mais: o preview roda num iframe de origem
-    // opaca, onde o módulo do gsap e as fontes só carregam com CORS.
+    // Motion compositions (see video/motion-store.ts). Same flags as the
+    // artifact, and for one more reason: the preview runs in an opaque-origin
+    // iframe, where the gsap module and the fonts only load with CORS.
     {
       scheme: MOTION_SCHEME,
       privileges: {
@@ -813,8 +814,8 @@ export function registerSchemePrivileges(): void {
         stream: true,
       },
     },
-    // Canvas de design (ver design/design-store.ts): mesmas flags do motion,
-    // sem `stream` — o artboard é HTML estático, sem faixa de mídia.
+    // Design canvas (see design/design-store.ts): same flags as motion,
+    // without `stream` — the artboard is static HTML, with no media track.
     {
       scheme: DESIGN_SCHEME,
       privileges: {
@@ -824,9 +825,9 @@ export function registerSchemePrivileges(): void {
         corsEnabled: true,
       },
     },
-    // Decks de slides (ver slides/slides-store.ts): o palco é servido da pasta
-    // registrada, com o runtime de navegação injetado no <head>. As flags são as
-    // do design — sem `stream`, porque slide não tem faixa de mídia.
+    // Slide decks (see slides/slides-store.ts): the stage is served from the
+    // registered folder, with the navigation runtime injected into the <head>. The flags are those
+    // of design — no `stream`, because a slide has no media track.
     {
       scheme: SLIDES_SCHEME,
       privileges: {
@@ -836,17 +837,17 @@ export function registerSchemePrivileges(): void {
         corsEnabled: true,
       },
     },
-    // Biblioteca de fontes do Orbit (ver fonts/store.ts): scheme próprio porque
-    // o artboard, a composição de motion e a janela do app declaram o MESMO
-    // @font-face, cada um numa origem diferente.
+    // Orbit's font library (see fonts/store.ts): a scheme of its own because
+    // the artboard, the motion composition and the app window declare the SAME
+    // @font-face, each one in a different origin.
     {
       scheme: FONT_SCHEME,
       privileges: {
         standard: true,
         secure: true,
         supportFetchAPI: true,
-        // Fonte é recurso CORS-obrigatório: sem isto o artboard (origem opaca)
-        // e a janela do app baixariam o arquivo e o descartariam.
+        // A font is a CORS-mandatory resource: without this the artboard (opaque origin)
+        // and the app window would download the file and discard it.
         corsEnabled: true,
       },
     },
@@ -862,33 +863,33 @@ const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
 }
 
 /**
- * Barra de rolagem no visual do Orbit, injetada no HTML servido.
+ * Scrollbar in the Orbit look, injected into the served HTML.
  *
- * O artefato roda num iframe de origem opaca (ver artifact-part.tsx), então
- * NÃO carrega a folha do app: o ::-webkit-scrollbar / scrollbar-color de
- * src/index.css não chega lá e a página mostra a barra nativa do Chromium,
- * grossa e deslocada do resto da interface. Como quem serve é este handler, o
- * estilo viaja junto com o documento — e vale para fragmento E para documento
- * completo, que é justamente onde o wrapper do `ensureDocument`
- * (lib/tools/artifact.ts) desiste, por já reconhecer um HTML inteiro.
+ * The artifact runs in an opaque-origin iframe (see artifact-part.tsx), so
+ * it does NOT load the app's stylesheet: the ::-webkit-scrollbar / scrollbar-color from
+ * src/index.css does not reach there and the page shows Chromium's native scrollbar,
+ * thick and out of place with the rest of the interface. Since this handler serves it, the
+ * style travels with the document — and it counts for a fragment AND for a complete
+ * document, which is exactly where the `ensureDocument` wrapper
+ * (lib/tools/artifact.ts) gives up, because it already recognizes a whole HTML.
  *
- * São as mesmas duas declarações do index.css: as regras ::-webkit-scrollbar
- * valem onde `scrollbar-color` não existe, e onde existe ele vence — igual ao
- * app. A cor vem resolvida em variável local porque o documento não tem os
- * tokens do Orbit.
+ * They are the same two declarations from index.css: the ::-webkit-scrollbar
+ * rules apply where `scrollbar-color` does not exist, and where it does, it wins — as in
+ * the app. The color comes resolved in a local variable because the document does not have
+ * Orbit's tokens.
  */
 /**
- * Os tokens do design system do Orbit, para o artefato usar por padrão.
+ * Orbit's design system tokens, for the artifact to use by default.
  *
- * O iframe é de origem opaca e não herda a folha do app, então as variáveis
- * (as mesmas de src/index.css, claro e escuro) viajam no HTML. Tudo vai dentro
- * de `@layer`: declaração em camada PERDE de qualquer declaração sem camada,
- * então se o artefato define o próprio `--background`, `body { ... }` ou a
- * própria fonte — porque o usuário pediu outro visual —, a dele vale e a nossa
- * só preenche o que ficou em branco.
+ * The iframe has an opaque origin and does not inherit the app stylesheet, so the variables
+ * (the same as in src/index.css, light and dark) travel in the HTML. Everything goes inside
+ * `@layer`: a declaration in a layer LOSES to any declaration without a layer,
+ * so if the artifact defines its own `--background`, `body { ... }` or its
+ * own font — because the user asked for another look —, theirs wins and ours
+ * only fills in what was left blank.
  *
- * O tema segue o mesmo caminho da barra de rolagem: `prefers-color-scheme` até
- * o pai avisar (`orbit-dark` / `orbit-light` na raiz).
+ * The theme follows the same path as the scrollbar: `prefers-color-scheme` until
+ * the parent says otherwise (`orbit-dark` / `orbit-light` on the root).
  */
 const ORBIT_LIGHT_TOKENS = `--background: oklch(1 0 0); --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0); --card-foreground: oklch(0.141 0.005 285.823);
@@ -937,13 +938,13 @@ const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
   *::-webkit-scrollbar-thumb, html::-webkit-scrollbar-thumb { background: var(--orbit-scroll-thumb); border-radius: 9999px; min-height: 20px; }
   *::-webkit-scrollbar-corner, html::-webkit-scrollbar-corner { background: transparent; }
   * { scrollbar-width: thin; scrollbar-color: var(--orbit-scroll-thumb) transparent; }
-  /* Barra da raiz: a trilha transparente deixava ver o fundo branco do iframe
-     (a faixa branca no tema escuro). Aqui ela leva a cor do card do app. */
+  /* Root bar: the transparent track let the white background of the iframe show through
+     (the white band in the dark theme). Here it takes the app card color. */
   html { scrollbar-width: thin; scrollbar-color: var(--orbit-scroll-thumb) var(--orbit-scroll-track); }
 </style>
 <script>
-  // O tema do Orbit (claro/escuro/sistema) chega do pai; sem isso o artefato
-  // seguiria só o sistema operacional e destoaria da barra do chat.
+  // The Orbit theme (light/dark/system) comes from the parent; without that the artifact
+  // would follow only the operating system and clash with the chat bar.
   window.addEventListener('message', function (e) {
     var d = e.data
     if (!d || d.type !== 'orbit:theme') return
@@ -953,8 +954,8 @@ const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
 </script>`
 
 /**
- * Injeta a barra uma única vez, imediatamente antes do fecho do body (o
- * marcador evita duplicar caso o próprio artefato já traga o bloco).
+ * Injects the scrollbar a single time, right before the body closing tag (the
+ * marker avoids duplicating it in case the artifact already brings the block).
  */
 function injectArtifactChrome(html: string): string {
   if (html.includes(ARTIFACT_CHROME_MARK)) return html
@@ -965,26 +966,26 @@ function injectArtifactChrome(html: string): string {
 }
 
 async function handleArtifactRequest(request: Request): Promise<Response> {
-  // Scheme standard: a URL tem host + path (orbit-artifact://art_x.html/?rev=2),
-  // diferente do orbit-media://, onde o id inteiro cai no host e não há query.
+  // Standard scheme: the URL has host + path (orbit-artifact://art_x.html/?rev=2),
+  // unlike orbit-media://, where the whole id falls on the host and there is no query.
   const parsed = new URL(request.url)
   const id = decodeURIComponent(parsed.host || parsed.pathname.replace(/^\/+/, '')).replace(/\/+$/, '')
   if (!SAFE_ARTIFACT_ID.test(id)) return new Response('not found', { status: 404 })
   try {
     const buffer = await fsp.readFile(path.join(assetFileDir(id), id))
     const ext = id.split('.').pop() ?? ''
-    // HTML sai com a barra de rolagem do app injetada (ver ARTIFACT_CHROME).
-    // A anotação é BodyInit (e não a união) para o Uint8Array manter o generic
-    // que o construtor infere — declarar `string | Uint8Array` o alargaria para
-    // Uint8Array<ArrayBufferLike>, que o lib DOM não aceita no Response.
+    // HTML goes out with the app scrollbar injected (see ARTIFACT_CHROME).
+    // The annotation is BodyInit (and not the union) so the Uint8Array keeps the generic
+    // that the constructor infers — declaring `string | Uint8Array` would widen it to
+    // Uint8Array<ArrayBufferLike>, which the DOM lib does not accept in Response.
     const body: BodyInit =
       ext === 'html' ? injectArtifactChrome(buffer.toString('utf8')) : new Uint8Array(buffer)
     return new Response(body, {
       status: 200,
       headers: {
         'Content-Type': ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream',
-        // O arquivo é reescrito no lugar pelo update_artifact: cache aqui
-        // serviria a revisão antiga.
+        // The file is rewritten in place by update_artifact: caching here
+        // would serve the old revision.
         'Cache-Control': 'no-store',
       },
     })
@@ -993,19 +994,19 @@ async function handleArtifactRequest(request: Request): Promise<Response> {
   }
 }
 
-/** Registra o protocolo dos artefatos (chamar após app.whenReady). */
+/** Registers the artifacts protocol (call after app.whenReady). */
 export function registerArtifactProtocol(): void {
   protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
 }
 
 /**
- * Bytes de um arquivo de artefato/documento — a página (.html), a miniatura
- * (.png), o fonte (.md) ou uma renderização (.pdf/.docx).
+ * Bytes of an artifact/document file — the page (.html), the thumbnail
+ * (.png), the source (.md) or a rendering (.pdf/.docx).
  *
- * Serve o servidor HTTP do companion (o celular não tem o protocolo
- * orbit-artifact://). Sai o arquivo COMO ESTÁ: a barra de rolagem que
- * handleArtifactRequest injeta existe para casar com a moldura do iframe no
- * desktop, e no WebView do celular ela só atrapalharia.
+ * It serves the companion HTTP server (the phone has no
+ * orbit-artifact:// protocol). The file goes out AS IT IS: the scrollbar that
+ * handleArtifactRequest injects exists to match the iframe frame on the
+ * desktop, and in the phone's WebView it would only get in the way.
  */
 export async function readArtifactAsset(
   id: string,
@@ -1020,7 +1021,7 @@ export async function readArtifactAsset(
   }
 }
 
-/** Extrai o id de uma URL orbit-artifact:// (ou devolve a entrada se já for um id). */
+/** Extracts the id from an orbit-artifact:// URL (or returns the entry if it is already an id). */
 export function artifactIdFromUrl(url: string): string | null {
   let id = url
   if (url.startsWith(`${ARTIFACT_SCHEME}://`)) {
@@ -1031,37 +1032,37 @@ export function artifactIdFromUrl(url: string): string | null {
 }
 
 /**
- * Id servido pela própria janela de captura quando o HTML vem em memória —
- * evita gravar um arquivo em disco só para poder fotografá-lo.
+ * Id served by the capture window itself when the HTML comes in memory —
+ * it avoids writing a file to disk just to be able to photograph it.
  *
- * Sem ponto extra no nome: o SAFE_ARTIFACT_ID só aceita um, o da extensão.
+ * No extra dot in the name: SAFE_ARTIFACT_ID accepts only one, the extension's.
  */
 const INLINE_THUMB_ID = 'inline_thumb.html'
 
 /**
- * O scheme das fontes vale só na sessão default. Toda janela que carrega HTML
- * nosso numa partição própria - miniatura, PDF - precisa do handler também,
- * senão a fonte instalada no Orbit não carrega e o render cai no fallback em
- * silêncio, que é justamente o que a instalação existia para evitar.
+ * The fonts scheme counts only in the default session. Every window that loads our
+ * HTML in its own partition - thumbnail, PDF - needs the handler too,
+ * otherwise the font installed in Orbit does not load and the render falls back
+ * silently, which is exactly what the installation existed to avoid.
  */
 function serveFontsOn(partition: string): void {
   session.fromPartition(partition).protocol.handle(FONT_SCHEME, handleFontRequest)
 }
 
 /**
- * Janela oculta e isolada para fotografar uma página.
+ * Hidden and isolated window to photograph a page.
  *
- * `inlineHtml` é servido pelo protocolo dentro da partição desta captura, que
- * é efêmera e exclusiva — o artefato é conteúdo do modelo e não divide
- * cookies/storage com o browser do agente nem com o app. Sem o prefixo
- * "persist:" nada disso encosta no disco.
+ * `inlineHtml` is served by the protocol inside this capture's partition, which
+ * is ephemeral and exclusive — the artifact is the model's content and does not share
+ * cookies/storage with the agent's browser or with the app. Without the
+ * "persist:" prefix none of it touches the disk.
  */
 function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
   const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   serveFontsOn(partition)
-  // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
-  // vale só para a sessão default, e sem isto o loadURL fica pendurado para
-  // sempre (nem carrega, nem rejeita).
+  // The protocol HAS to be registered in this session too: protocol.handle
+  // counts only for the default session, and without this the loadURL hangs
+  // forever (it neither loads nor rejects).
   session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, (request) => {
     if (inlineHtml !== null && request.url.includes(INLINE_THUMB_ID)) {
       return new Response(inlineHtml, {
@@ -1076,8 +1077,8 @@ function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
       width: THUMB_VIEWPORT.width,
       height: THUMB_VIEWPORT.height,
       useContentSize: true,
-      // Sem isto o Chromium não pinta uma janela nunca exibida e o capturePage
-      // volta em branco (mesmo motivo do engine de scripts).
+      // Without this Chromium does not paint a window that was never shown and capturePage
+      // comes back blank (same reason as the script engine).
       paintWhenInitiallyHidden: true,
       webPreferences: {
         partition,
@@ -1089,10 +1090,10 @@ function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
   })
 }
 
-/** Carrega e dá um respiro para fontes/CDN/script pintarem. */
+/** Loads and gives it a breather so fonts/CDN/script can paint. */
 async function loadForCapture(win: BrowserWindow, url: string): Promise<void> {
-  // O .catch é obrigatório no race: uma rejeição do loadURL depois do timeout
-  // ficaria sem tratamento e derrubaria o processo main.
+  // The .catch is mandatory in the race: a rejection of the loadURL after the timeout
+  // would be left unhandled and would crash the main process.
   await Promise.race([
     win.loadURL(url).catch(() => {}),
     new Promise((resolve) => setTimeout(resolve, THUMB_LOAD_TIMEOUT_MS)),
@@ -1100,11 +1101,11 @@ async function loadForCapture(win: BrowserWindow, url: string): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 900))
 }
 
-/** Fotografa a janela e grava o PNG reduzido. undefined em qualquer falha. */
+/** Photographs the window and writes the reduced PNG. undefined on any failure. */
 async function shot(win: BrowserWindow, thumbId: string): Promise<string | undefined> {
   if (win.isDestroyed()) return undefined
-  // Mesma proteção do painel: com o renderer ocupado o capturePage pode nunca
-  // resolver, e aí a tool inteira ficaria pendurada.
+  // Same protection as the panel: with the renderer busy, capturePage may never
+  // resolve, and then the whole tool would hang.
   const CAPTURE_TIMED_OUT = Symbol('captureTimedOut')
   const outcome = await Promise.race([
     win.webContents.capturePage(),
@@ -1116,15 +1117,16 @@ async function shot(win: BrowserWindow, thumbId: string): Promise<string | undef
   const png = outcome.toPNG()
   if (png.length === 0) return undefined
   const buffer = await sharp(png).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).png().toBuffer()
-  // assetFileDir pelo prefixo: a mesma captura serve artefato e documento,
-  // que moram em diretórios diferentes.
+  // assetFileDir by prefix: the same capture serves artifact and document,
+  // which live in different directories.
   await fsp.writeFile(path.join(assetFileDir(thumbId), thumbId), buffer)
   return thumbId
 }
 
 /**
- * Captura a miniatura. Best-effort: qualquer falha devolve undefined e o
- * artefato fica sem thumb (o tile cai no ícone) — nunca derruba a criação.
+ * Captures the thumbnail. Best-effort: any failure returns undefined and the
+ * artifact stays without a thumb (the tile falls back to the icon) — the creation never
+ * breaks.
  */
 async function captureThumbnail(artifactId: string): Promise<string | undefined> {
   let win: BrowserWindow | null = null
@@ -1140,14 +1142,14 @@ async function captureThumbnail(artifactId: string): Promise<string | undefined>
 }
 
 /**
- * Miniatura do documento VIVO em Markdown: a capa tem que parecer a tela que
- * o usuário abre, no tema do Orbit, e não a folha A4 branca — essa é a cara
- * do arquivo, e só quem foi pedido como arquivo merece.
+ * Thumbnail of the LIVE document in Markdown: the cover has to look like the screen that
+ * the user opens, in Orbit's theme, and not the white A4 sheet — that is the
+ * face of the file, and only what was asked for as a file deserves it.
  *
- * Os dois temas saem da MESMA janela: carregar custa quase um segundo,
- * fotografar de novo custa quase nada. Ter as duas versões é o que deixa o
- * tile certo mesmo quando o usuário troca o tema depois — capturar só o atual
- * deixaria a galeria inteira desencontrada no primeiro clique do seletor.
+ * Both themes come from the SAME window: loading costs almost a second,
+ * photographing again costs almost nothing. Having both versions is what gets the
+ * right tile even when the user switches the theme later — capturing only the current
+ * one would leave the whole gallery mismatched on the first click of the selector.
  */
 async function captureNativeThumbs(
   base: string,
@@ -1164,7 +1166,7 @@ async function captureNativeThumbs(
     await win.webContents
       .executeJavaScript("document.documentElement.classList.add('dark')")
       .catch(() => {})
-    // Um quadro para o Chromium repintar com a paleta trocada.
+    // One frame for Chromium to repaint with the swapped palette.
     await new Promise((resolve) => setTimeout(resolve, 150))
     return { thumb, thumbDark: await shot(win, `${base}_dark.png`) }
   } catch {
@@ -1174,12 +1176,12 @@ async function captureNativeThumbs(
   }
 }
 
-/** O que uma peça de motion precisa para entrar na galeria (ver abaixo). */
+/** What a motion piece needs to enter the gallery (see below). */
 export interface SaveMotionMeta {
-  /** Id da composição no registro do main (`orbit-data/motion.json`). */
+  /** Id of the composition in the main registry (`orbit-data/motion.json`). */
   motionId: string
   title: string
-  /** Pasta de trabalho da peça — o projeto a que ela pertence, para agrupar. */
+  /** The piece's working folder — the project it belongs to, for grouping. */
   directory?: string
   sessionId?: string
   messageId?: string
@@ -1188,24 +1190,24 @@ export interface SaveMotionMeta {
 }
 
 /**
- * Registra uma PEÇA de motion na galeria.
+ * Registers a motion PIECE in the gallery.
  *
- * Irmão de `saveArtifact`, com uma diferença que decide o resto: o conteúdo NÃO
- * é um arquivo do Orbit. A composição é uma pasta do PROJETO (a entrada HTML
- * mais as dependências dela) e nada dela é copiado para cá — o registro aponta
- * para ela pelo `motionId`, e abrir é reabrir a aba Motion.
+ * A sibling of `saveArtifact`, with a difference that decides the rest: the content is NOT
+ * an Orbit file. The composition is a folder of the PROJECT (the HTML entry
+ * plus its dependencies) and nothing from it is copied here — the record points
+ * to it through `motionId`, and opening means reopening the Motion tab.
  *
- * Por isso o `path` aponta para a CAPA: apagar o item da galeria tem de apagar
- * a NOSSA cópia (a miniatura), nunca o arquivo de quem fez a peça. E por isso o
- * id é derivado do motionId — registrar de novo a mesma peça ATUALIZA o mesmo
- * item, em vez de encher a galeria de cards da mesma composição.
+ * That is why `path` points to the COVER: deleting the gallery item has to delete
+ * OUR copy (the thumbnail), never the file of whoever made the piece. And that is why the
+ * id is derived from motionId — registering the same piece again UPDATES the same
+ * item, instead of filling the gallery with cards of the same composition.
  */
 export async function saveMotionMedia(
   thumb: Buffer | null,
   meta: SaveMotionMeta,
 ): Promise<MediaEntry> {
-  // O id sai do motionId (que já é `mv_<hex>`): estável entre execuções e sem
-  // nada que o SAFE_ARTIFACT_ID recuse.
+  // The id comes from motionId (which is already `mv_<hex>`): stable between runs and with
+  // nothing that SAFE_ARTIFACT_ID refuses.
   const id = `mot_${meta.motionId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
   await fsp.mkdir(artifactsDir(), { recursive: true })
   const file = path.join(artifactsDir(), id)
@@ -1237,9 +1239,9 @@ export async function saveMotionMedia(
   })
 }
 
-/** O que um canvas de design precisa para entrar na galeria — espelha SaveMotionMeta. */
+/** What a design canvas needs to enter the gallery — mirrors SaveMotionMeta. */
 export interface SaveDesignMeta {
-  /** Id do canvas no registro do main (`orbit-data/design.json`). */
+  /** Id of the canvas in the main registry (`orbit-data/design.json`). */
   designId: string
   title: string
   directory?: string
@@ -1250,10 +1252,10 @@ export interface SaveDesignMeta {
 }
 
 /**
- * Registra um CANVAS de design na galeria — irmão de `saveMotionMedia`: o
- * conteúdo não é um arquivo do Orbit, é uma pasta (canvas.json + artboards) no
- * armazenamento do app; o registro só guarda a capa (do primeiro artboard) e o
- * `designId`, e abrir é reabrir a aba Design.
+ * Registers a design CANVAS in the gallery — a sibling of `saveMotionMedia`: the
+ * content is not an Orbit file, it is a folder (canvas.json + artboards) in the
+ * app storage; the record only keeps the cover (from the first artboard) and the
+ * `designId`, and opening means reopening the Design tab.
  */
 export async function saveDesignMedia(thumb: Buffer | null, meta: SaveDesignMeta): Promise<MediaEntry> {
   const id = `dsn_${meta.designId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
@@ -1287,9 +1289,9 @@ export async function saveDesignMedia(thumb: Buffer | null, meta: SaveDesignMeta
   })
 }
 
-/** O que um deck de slides precisa para entrar na galeria — espelha SaveDesignMeta. */
+/** What a slide deck needs to enter the gallery — mirrors SaveDesignMeta. */
 export interface SaveSlidesMeta {
-  /** Id do deck no registro do main (`orbit-data/slides.json`). */
+  /** Id of the deck in the main registry (`orbit-data/slides.json`). */
   slidesId: string
   title: string
   directory?: string
@@ -1300,13 +1302,13 @@ export interface SaveSlidesMeta {
 }
 
 /**
- * Registra um DECK de slides na galeria — irmão de `saveDesignMedia`: o conteúdo
- * é a pasta do deck (um `index.html` só), o registro guarda a capa (o primeiro
- * slide) e o `slidesId`, e abrir é reabrir a aba Slides.
+ * Registers a slide DECK in the gallery — a sibling of `saveDesignMedia`: the content
+ * is the deck folder (a single `index.html`), the record keeps the cover (the first
+ * slide) and the `slidesId`, and opening means reopening the Slides tab.
  *
- * O prefixo da capa é `dck_` e não `sld_` de propósito: `sld_` já é o id do
- * DECK no registro do main, e dois nomes iguais em espaços diferentes viram
- * confusão na hora de depurar.
+ * The cover prefix is `dck_` and not `sld_` on purpose: `sld_` is already the
+ * DECK id in the main registry, and two equal names in different spaces become
+ * confusion when debugging.
  */
 export async function saveSlidesMedia(thumb: Buffer | null, meta: SaveSlidesMeta): Promise<MediaEntry> {
   const id = `dck_${meta.slidesId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
@@ -1340,7 +1342,7 @@ export async function saveSlidesMedia(thumb: Buffer | null, meta: SaveSlidesMeta
   })
 }
 
-/** Salva o HTML, captura a miniatura e registra o artefato na galeria. */
+/** Saves the HTML, captures the thumbnail and registers the artifact in the gallery. */
 export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promise<ArtifactRef> {
   const id = `art_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.html`
   await fsp.mkdir(artifactsDir(), { recursive: true })
@@ -1370,9 +1372,9 @@ export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promis
 }
 
 /**
- * Reescreve um artefato existente NO MESMO arquivo (a URL e o lugar dele na
- * conversa se mantêm) e recaptura a miniatura. Retorna null quando o id não
- * existe no índice.
+ * Rewrites an existing artifact IN THE SAME file (its URL and its place in the
+ * conversation are kept) and recaptures the thumbnail. Returns null when the id does not
+ * exist in the index.
  */
 export async function updateArtifact(
   id: string,
@@ -1383,10 +1385,10 @@ export async function updateArtifact(
 }
 
 /**
- * Lê o HTML atual, deixa o chamador transformá-lo e grava — tudo dentro do
- * mesmo lock. É o que sustenta a EDIÇÃO como fila: dois chats no mesmo artefato
- * são serializados, e quem chega depois aplica sobre o resultado do primeiro;
- * se o texto que ele ia trocar já não existe, `mutate` lança e nada é gravado.
+ * Reads the current HTML, lets the caller transform it and writes — all inside the
+ * same lock. It is what sustains EDITING as a queue: two chats on the same artifact
+ * are serialized, and whoever arrives later applies over the first one's result;
+ * if the text it was going to replace no longer exists, `mutate` throws and nothing is written.
  */
 export async function mutateArtifact(
   id: string,
@@ -1423,12 +1425,12 @@ export async function mutateArtifact(
     })
 
     /**
-     * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
-     * descobre sozinho: o iframe do card antigo foi montado com a revisão
-     * anterior e não recarrega por conta própria. Sem este evento o usuário
-     * veria a versão velha logo acima da nova, na mesma conversa.
+     * Notifies the windows. There is a single file, but whoever is ALREADY on screen does not
+     * find out on their own: the iframe of the old card was built with the
+     * previous revision and does not reload by itself. Without this event the user
+     * would see the old version right above the new one, in the same conversation.
      *
-     * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
+     * Emitted straight from here (and not by broadcast.ts) to avoid creating the cycle
      * media → broadcast → companion-server → companion-http → media.
      */
     for (const win of BrowserWindow.getAllWindows()) {
@@ -1440,9 +1442,9 @@ export async function mutateArtifact(
 }
 
 /**
- * Vincula um artefato à mensagem onde ele apareceu — mesmo motivo do
- * attachMediaMessage: a tool roda no meio do turno e não conhece o id da
- * mensagem, e é esse vínculo que faz o "abrir no chat" da galeria funcionar.
+ * Links an artifact to the message where it appeared — same reason as
+ * attachMediaMessage: the tool runs in the middle of the turn and does not know the
+ * message id, and it is that link that makes the gallery's "open in chat" work.
  */
 export async function attachArtifactMessage(
   id: string,
@@ -1460,8 +1462,8 @@ export async function attachArtifactMessage(
   })
 }
 
-/** Lê o HTML de um artefato — usado pelo companion (sem acesso ao protocolo)
- *  e pela exportação. */
+/** Reads the HTML of an artifact — used by the companion (no access to the protocol)
+ *  and by the export. */
 export async function readArtifact(id: string): Promise<{ html: string; entry: MediaEntry } | null> {
   if (!SAFE_ARTIFACT_ID.test(id)) return null
   const entry = await getMediaEntry(id)
@@ -1473,27 +1475,27 @@ export async function readArtifact(id: string): Promise<{ html: string; entry: M
   }
 }
 
-// ─── Documentos (PDF / DOCX) ─────────────────────────────────────────────
+// ─── Documents (PDF / DOCX) ─────────────────────────────────────────────
 
 /**
- * Documento autorado pelo agente. O FONTE é Markdown; PDF e DOCX são
- * renderizações dele, e o HTML é o preview mostrado na conversa.
+ * Document authored by the agent. The SOURCE is Markdown; PDF and DOCX are
+ * renderings of it, and the HTML is the preview shown in the conversation.
  *
- * O documento NASCE só em Markdown: `formats` vazio é o caso normal, não uma
- * falha. Renderizar na criação custava uma janela do Chromium por documento —
- * e a maioria nunca vira arquivo, porque o usuário lê no chat e segue. PDF e
- * DOCX passam a ser produzidos no primeiro pedido (baixar, abrir no painel) e
- * ficam em cache no registro. Quem pede explicitamente um PDF ou um .docx
- * continua recebendo a renderização na hora da criação, pelo `formats`.
+ * The document is BORN only in Markdown: an empty `formats` is the normal case, not a
+ * failure. Rendering on creation cost one Chromium window per document —
+ * and most never become a file, because the user reads in the chat and moves on. PDF and
+ * DOCX start to be produced on the first request (download, open in the panel) and
+ * stay cached in the record. Whoever explicitly asks for a PDF or a .docx
+ * still gets the rendering at creation time, through `formats`.
  *
- * O preview é HTML, e não o PDF, por uma limitação dura: o Electron não
- * embarca o visualizador de PDF do Chrome — carregar um .pdf falha com
- * ERR_FAILED até como página de topo. Como o PDF nasce DESTE html (via
- * printToPDF), o preview é fiel ao impresso mesmo sem renderizar o binário.
+ * The preview is HTML, and not the PDF, because of a hard limitation: Electron does not
+ * ship Chrome's PDF viewer — loading a .pdf fails with
+ * ERR_FAILED even as a top-level page. Since the PDF is born FROM THIS html (via
+ * printToPDF), the preview is faithful to the printed output even without rendering the binary.
  *
- * Guardar o Markdown é o que torna "modificar" possível de verdade: editar um
- * PDF ou preservar a formatação de um .docx existente é intratável; reescrever
- * o fonte e renderizar de novo é exato.
+ * Keeping the Markdown is what makes "modify" truly possible: editing a
+ * PDF or preserving the formatting of an existing .docx is intractable; rewriting
+ * the source and rendering again is exact.
  */
 
 export interface SaveDocumentMeta {
@@ -1501,14 +1503,14 @@ export interface SaveDocumentMeta {
   style?: DocumentStyle
   sessionId?: string
   messageId?: string
-  /** Pasta de trabalho da sessão — escopo de projeto do documento. */
+  /** Session working folder — the document's project scope. */
   directory?: string
-  /** Pasta da sidebar (modo chat, sem diretório). */
+  /** Sidebar folder (chat mode, without a directory). */
   folderId?: string
 }
 
 export interface DocumentRef {
-  /** Id do FONTE: doc_xxx.md — também o id do registro na galeria. */
+  /** SOURCE id: doc_xxx.md — also the record id in the gallery. */
   id: string
   title: string
   previewUrl: string
@@ -1526,22 +1528,22 @@ async function fileExists(file: string): Promise<boolean> {
   }
 }
 
-/** Base do id, sem extensão: doc_xxx */
+/** Base of the id, without extension: doc_xxx */
 function documentBase(id: string): string {
   return id.replace(/\.(md|html|pdf|docx|png)$/, '')
 }
 
 /**
- * Gera o PDF a partir do HTML já gravado, com o Chromium — nenhuma biblioteca
- * de PDF entra no projeto. A janela carrega pelo orbit-artifact://, então o
- * CSS de impressão (@page A4) é o mesmo que o preview usa.
+ * Generates the PDF from the HTML already written, with Chromium — no PDF
+ * library enters the project. The window loads through orbit-artifact://, so the
+ * print CSS (@page A4) is the same one the preview uses.
  */
 async function renderPdf(htmlId: string): Promise<Buffer | null> {
   let win: BrowserWindow | null = null
   try {
     const partition = `document-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // Mesma armadilha do thumbnail: protocol.handle só vale na sessão default,
-    // e sem registrar aqui o loadURL nunca resolve.
+    // The same trap as the thumbnail: protocol.handle counts only in the default session,
+    // and without registering it here the loadURL never resolves.
     session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
     serveFontsOn(partition)
 
@@ -1563,9 +1565,9 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
     return await target.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      // Zero aqui de propósito: as margens já vêm do padding do CSS do
-      // documento (@page + body), e somar as do printToPDF daria margem
-      // dobrada — o texto ficaria espremido no meio da folha.
+      // Zero here on purpose: the margins already come from the document's CSS
+      // padding (@page + body), and adding printToPDF's would give a doubled
+      // margin — the text would be squeezed into the middle of the sheet.
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
     })
   } catch {
@@ -1576,23 +1578,23 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
 }
 
 /**
- * O HTML do documento — a prévia e a matriz do PDF — com os diagramas Mermaid
- * já desenhados em SVG. O PDF é a impressão desse arquivo, sem script rodando,
- * então o diagrama tem que estar pronto nele.
+ * The document's HTML — the preview and the matrix of the PDF — with the Mermaid diagrams
+ * already drawn as SVG. The PDF is the print of that file, with no script running,
+ * so the diagram has to be ready in it.
  */
 async function documentHtml(markdown: string, title: string, style?: DocumentStyle): Promise<string> {
   const blocks = parseMarkdown(markdown)
-   // A fonte pedida pode ser da biblioteca do Orbit: aí o PDF só a conhece se
-   // o @font-face vier junto no HTML (a janela de impressão é outra sessão).
-   // Nome de fonte do sistema não tem declaração - devolve vazio e nada muda.
+   // The requested font may be from Orbit's library: then the PDF only knows it if
+   // the @font-face comes along in the HTML (the print window is another session).
+   // A system font name has no declaration - it returns empty and nothing changes.
   const faces = await fontFacesForFamily(normalizeStyle(style).fontFamily)
   return renderHtml(blocks, title, style, await renderDiagrams(blocks), faces)
 }
 
 /**
- * Uma renderização, a partir do que já está em disco: o PDF nasce do .html
- * (printToPDF), o .docx nasce do Markdown. null quando falhou — um formato que
- * não saiu não pode constar no registro.
+ * A rendering, from what is already on disk: the PDF is born from the .html
+ * (printToPDF), the .docx is born from the Markdown. null when it failed — a format that
+ * did not come out cannot be in the record.
  */
 async function renderDocumentFormat(
   base: string,
@@ -1610,8 +1612,8 @@ async function renderDocumentFormat(
   }
 }
 
-/** Escreve fonte, preview e as renderizações pedidas. Retorna os formatos que
- *  realmente foram gerados — um PDF que falhou não pode constar no registro. */
+/** Writes the source, the preview and the requested renderings. Returns the formats that
+ *  were actually generated — a PDF that failed cannot be in the record. */
 async function writeDocumentFiles(
   base: string,
   markdown: string,
@@ -1626,8 +1628,8 @@ async function writeDocumentFiles(
   await fsp.writeFile(path.join(dir, `${base}.html`), html, 'utf8')
 
   const done: DocumentFormat[] = []
-  // Set: `formats` vem do modelo e um formato repetido gravaria o arquivo duas
-  // vezes e entraria duplicado no registro.
+  // Set: `formats` comes from the model and a repeated format would write the file twice
+  // and enter the record duplicated.
   for (const format of new Set(formats)) {
     const bytes = await renderDocumentFormat(base, format, markdown, title, style)
     if (!bytes) continue
@@ -1645,8 +1647,8 @@ export async function saveDocument(
   const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
   const html = await documentHtml(markdown, meta.title, meta.style)
   const written = await writeDocumentFiles(base, markdown, html, formats, meta.title, meta.style)
-  // A capa segue o DESTINO do documento: quem vai virar arquivo é fotografado
-  // como folha; quem fica vivo em Markdown, como a tela nativa.
+  // The cover follows the document's DESTINATION: what is going to become a file is photographed
+  // as a sheet; what stays live in Markdown, as the native screen.
   const { thumb, thumbDark } =
     formats.length > 0
       ? { thumb: await captureThumbnail(`${base}.html`), thumbDark: undefined }
@@ -1667,8 +1669,8 @@ export async function saveDocument(
     folderId: meta.folderId,
     name: meta.title,
     formats: written,
-    // O que foi PEDIDO, e não o que saiu: um PDF que falhou não vira documento
-    // vivo por acidente — o destino continua sendo o arquivo.
+    // What was REQUESTED, and not what came out: a PDF that failed does not become a live
+    // document by accident — the destination is still the file.
     delivery: formats.length > 0 ? [...new Set(formats)] : undefined,
     style: meta.style as Record<string, unknown> | undefined,
     thumb,
@@ -1693,24 +1695,24 @@ export async function saveDocument(
 export type UpdateDocumentResult =
   | { ok: true; ref: DocumentRef }
   | { ok: false; reason: 'notFound' }
-  /** O documento andou desde a versão em que o agente se baseou. */
+  /** The document moved on since the version the agent based itself on. */
   | { ok: false; reason: 'stale'; revision: number }
 
 /**
- * Reescreve um documento existente NO MESMO id. "Modificar" é reescrever o
- * fonte e renderizar de novo: editar o binário preservando formatação é
- * intratável, e o fonte guardado torna a reescrita exata.
+ * Rewrites an existing document UNDER THE SAME id. "Modify" is rewriting the
+ * source and rendering again: editing the binary while preserving formatting is
+ * intractable, and the stored source makes the rewrite exact.
  *
- * E reescrever é DESTRUTIVO: o texto novo substitui o anterior inteiro. Como o
- * usuário edita o mesmo arquivo no canvas, uma reescrita baseada numa leitura
- * velha apagaria em silêncio o que ele digitou no meio do caminho. Daí o
- * `baseRevision`: o agente diz de que versão partiu, e esta função recusa
- * quando o documento já andou.
+ * And rewriting is DESTRUCTIVE: the new text replaces the previous one entirely. Since the
+ * user edits the same file in the canvas, a rewrite based on an old read
+ * would silently erase what they typed in the meantime. Hence the
+ * `baseRevision`: the agent says which version it started from, and this function refuses
+ * when the document has already moved on.
  *
- * Sem `baseRevision` a escrita passa — é o caso de quem produziu o texto do
- * zero e não leu nada. A exceção é o documento com edição humana pendente:
- * ali escrever às cegas é justamente o acidente que se quer evitar, então a
- * leitura passa a ser obrigatória.
+ * Without `baseRevision` the write goes through — that is the case of whoever produced the text
+ * from scratch and read nothing. The exception is the document with a pending human edit:
+ * there, writing blind is exactly the accident to be avoided, so reading
+ * becomes mandatory.
  */
 export async function updateDocument(
   id: string,
@@ -1735,12 +1737,12 @@ export async function updateDocument(
 
   const base = documentBase(id)
   const title = options.title ?? entry.name ?? 'Documento'
-  // Omitir `formats` mantém o que o documento já tem renderizado — inclusive
-  // nada. Cair em ['pdf'] aqui faria a primeira edição de um documento que
-  // nasceu só em Markdown gerar um arquivo que ninguém pediu.
+  // Omitting `formats` keeps what the document already has rendered — including
+  // nothing. Falling back to ['pdf'] here would make the first edit of a document that
+  // was born only in Markdown generate a file nobody asked for.
   const formats = options.formats ?? entry.formats ?? []
-  // Estilo omitido = mantem o que o documento ja tinha. Sem isso, mexer no
-  // texto ressetaria a fonte e as cores escolhidas antes.
+  // Omitted style = keeps what the document already had. Without this, touching the
+  // text would reset the font and colors chosen before.
   const style = (options.style ?? entry.style) as DocumentStyle | undefined
   const html = await documentHtml(markdown, title, style)
   const written = await writeDocumentFiles(base, markdown, html, formats, title, style)
@@ -1749,8 +1751,8 @@ export async function updateDocument(
     ? { thumb: await captureThumbnail(`${base}.html`), thumbDark: undefined }
     : await captureNativeThumbs(base, markdown, title)
   const thumb = captured.thumb ?? entry.thumb
-  // Virou arquivo: a capa escura deixa de existir, senão o tile continuaria
-  // mostrando a tela nativa de um documento que agora é uma folha.
+  // It became a file: the dark cover stops existing, otherwise the tile would keep
+  // showing the native screen of a document that is now a sheet.
   const thumbDark = asFile ? undefined : (captured.thumbDark ?? entry.thumbDark)
   const revision = (entry.revision ?? 1) + 1
 
@@ -1761,11 +1763,11 @@ export async function updateDocument(
     current.size = Buffer.byteLength(markdown, 'utf8')
     current.name = title
     current.formats = written
-    // Pedir um formato agora ("me manda em Word") muda o destino do documento;
-    // omitir mantém o que ele já era.
+    // Asking for a format now ("send it to me in Word") changes the document's destination;
+    // omitting keeps what it already was.
     if (options.formats?.length) current.delivery = [...new Set(options.formats)]
-    // O agente escreveu sabendo da versão do usuário: não há mais edição
-    // humana pendente de ser vista.
+    // The agent wrote knowing the user's version: there is no longer a human
+    // edit pending to be seen.
     current.userEdited = false
     current.style = style as Record<string, unknown> | undefined
     current.thumb = thumb
@@ -1786,7 +1788,7 @@ export async function updateDocument(
   }
 }
 
-/** Markdown de origem — é o que o agente relê antes de modificar. */
+/** Source Markdown — it is what the agent re-reads before modifying. */
 export async function readDocumentSource(
   id: string,
 ): Promise<{ markdown: string; entry: MediaEntry } | null> {
@@ -1800,25 +1802,25 @@ export async function readDocumentSource(
 }
 
 /**
- * A edição do USUÁRIO no canvas: reescreve o fonte e o preview, e nada além.
+ * The USER's edit in the canvas: rewrites the source and the preview, and nothing else.
  *
- * Diferente do updateDocument, que é a reescrita do agente, aqui não se
- * renderiza arquivo nem se captura miniatura: isto roda a cada pausa da
- * digitação, e abrir uma janela do Chromium a cada frase deixaria o editor
- * pesado. As renderizações em disco ficam marcadas como vencidas — `formats`
- * é zerado, então o próximo download refaz o arquivo a partir do texto novo em
- * vez de entregar a versão anterior.
+ * Unlike updateDocument, which is the agent's rewrite, here no file is
+ * rendered and no thumbnail is captured: this runs on every pause in
+ * typing, and opening a Chromium window on every sentence would make the editor
+ * heavy. The renderings on disk are marked as stale — `formats`
+ * is zeroed, so the next download redoes the file from the new text in
+ * stead of delivering the previous version.
  *
- * A miniatura envelhece até a próxima escrita do agente. Ela é a capa do tile
- * na galeria: atrasa, não mente sobre o conteúdo.
+ * The thumbnail ages until the agent's next write. It is the cover of the tile
+ * in the gallery: it lags, it does not lie about the content.
  *
- * Derivado não entra aqui: o Markdown dele é um bilhete, e gravar por cima
- * apagaria o bilhete sem tocar no arquivo que o usuário vê.
+ * A derived document does not enter here: its Markdown is a note, and writing over
+ * it would erase the note without touching the file the user sees.
  *
- * O `baseRevision` é a mesma guarda do updateDocument, na direção oposta: o
- * agente também escreve neste arquivo, e uma gravação baseada no texto de
- * antes apagaria o que ele acabou de produzir. Recusar devolve a revisão que
- * está em disco, para o canvas oferecer a escolha em vez de decidir sozinho.
+ * The `baseRevision` is the same guard as updateDocument, in the opposite direction: the
+ * agent also writes in this file, and a write based on the previous text
+ * would erase what it just produced. Refusing returns the revision that
+ * is on disk, so the canvas can offer the choice instead of deciding on its own.
  */
 export type SaveDocumentEditResult =
   | { ok: true; revision: number }
@@ -1857,14 +1859,14 @@ export async function saveDocumentEdit(
     current.size = Buffer.byteLength(markdown, 'utf8')
     current.formats = []
     current.revision = revision
-    // A partir daqui o agente não pode reescrever sem antes ler: o que está em
-    // disco é trabalho da pessoa, não a última versão que ele conhece.
+    // From here on the agent cannot rewrite without reading first: what is on
+    // disk is the person's work, not the last version it knows.
     current.userEdited = true
     await writeIndex(entries)
   })
 
-  // Mesmo aviso do updateDocument: o card na conversa mostra o preview pela
-  // URL do .html, que não muda quando o arquivo é reescrito no lugar.
+  // Same warning as updateDocument: the card in the conversation shows the preview through
+  // the .html URL, which does not change when the file is rewritten in place.
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('artifact:updated', { artifactId: `${base}.html`, revision })
@@ -1873,7 +1875,7 @@ export async function saveDocumentEdit(
   return { ok: true, revision }
 }
 
-/** Anota a fonte que este documento virou, para não promover duas vezes. */
+/** Records the source this document became, so as not to promote it twice. */
 export async function setDocumentSourceId(id: string, sourceId: string): Promise<void> {
   await withIndexLock(async () => {
     const entries = await readIndex()
@@ -1884,7 +1886,7 @@ export async function setDocumentSourceId(id: string, sourceId: string): Promise
   })
 }
 
-/** O que o renderer precisa para decidir em que aba o documento abre. */
+/** What the renderer needs to decide in which tab the document opens. */
 export async function documentInfo(
   id: string,
 ): Promise<Pick<MediaEntry, 'id' | 'name' | 'delivery' | 'derived' | 'formats' | 'revision'> | null> {
@@ -1900,7 +1902,7 @@ export async function documentInfo(
   }
 }
 
-/** Caminho absoluto de uma renderização QUE JÁ EXISTE — não gera nada. */
+/** Absolute path of a rendering THAT ALREADY EXISTS — it generates nothing. */
 export async function documentFilePath(id: string, format: DocumentFormat): Promise<string | null> {
   const entry = await getMediaEntry(id)
   if (!entry || mediaKind(entry) !== 'document') return null
@@ -1909,17 +1911,17 @@ export async function documentFilePath(id: string, format: DocumentFormat): Prom
 }
 
 /**
- * Caminho de uma renderização, GERANDO-A quando ainda não existe.
+ * Path of a rendering, GENERATING IT when it does not exist yet.
  *
- * É o que sustenta o documento que nasce só em Markdown: o PDF e o .docx são
- * produzidos no momento em que alguém os pede — o botão de baixar, o
- * visualizador do painel — e ficam gravados no registro, então o segundo
- * pedido sai de graça.
+ * It is what sustains the document that is born only in Markdown: the PDF and the .docx are
+ * produced at the moment someone asks for them — the download button, the
+ * panel viewer — and stay written in the record, so the second request
+ * is free.
  *
- * Só vale para documento com fonte em Markdown. Os DERIVADOS (a cópia de um
- * .docx anexado, o resultado de juntar PDFs) não têm fonte: o que seria
- * renderizado ali é o preview, não o documento, e a conversão sairia pior que
- * o arquivo que já está em disco.
+ * It only applies to a document with a Markdown source. The DERIVED ones (the copy of an
+ * attached .docx, the result of merging PDFs) have no source: what would be
+ * rendered there is the preview, not the document, and the conversion would come out worse than
+ * the file already on disk.
  */
 export async function ensureDocumentRender(
   id: string,
@@ -1930,13 +1932,13 @@ export async function ensureDocumentRender(
 
   const base = documentBase(id)
   const file = path.join(documentsDir(), `${base}.${format}`)
-  // Derivado não tem o que renderizar: o Markdown do registro é um bilhete, e
-  // gerar um .docx a partir dele entregaria um arquivo vazio com cara de
-  // documento. Vale o que está em disco, e só.
+  // A derived document has nothing to render: the record's Markdown is a note, and
+  // generating a .docx from it would deliver an empty file that looks like a
+  // document. What is on disk counts, and only that.
   if (entry.derived) return (entry.formats ?? []).includes(format) ? file : null
-  // O registro diz o que foi renderizado, mas quem decide é o disco: o arquivo
-  // pode ter sido apagado por fora, e aí vale gerar de novo em vez de devolver
-  // um caminho que não abre.
+  // The record says what was rendered, but the disk is what decides: the file
+  // may have been deleted from outside, and then it is worth generating it again instead of returning
+  // a path that does not open.
   if ((entry.formats ?? []).includes(format) && (await fileExists(file))) return file
 
   const markdown = await fsp.readFile(entry.path, 'utf8').catch(() => null)
@@ -1961,8 +1963,8 @@ export async function ensureDocumentRender(
   return file
 }
 
-/** Vincula o documento à mensagem onde ele apareceu (mesmo motivo do
- *  attachMediaMessage: a tool roda no meio do turno). */
+/** Links the document to the message where it appeared (same reason as
+ *  attachMediaMessage: the tool runs in the middle of the turn). */
 export async function attachDocumentMessage(
   id: string,
   messageId: string,
@@ -1974,15 +1976,15 @@ export async function attachDocumentMessage(
 export type { MediaKind }
 
 /**
- * Documento DERIVADO: uma cópia editada de um .docx que veio de fora.
+ * DERIVED document: an edited copy of a .docx that came from outside.
  *
- * Diferente do saveDocument, aqui NÃO há fonte em Markdown — o arquivo é o
- * original do usuário com o texto trocado, e é justamente isso que preserva a
- * formatação. Por isso o .docx é gravado como está e o preview é gerado à
- * parte (mammoth → HTML), só para o card da conversa ter o que mostrar.
+ * Unlike saveDocument, here there is NO Markdown source — the file is the
+ * user's original with the text swapped, and that is exactly what preserves the
+ * formatting. That is why the .docx is written as it is and the preview is generated
+ * separately (mammoth → HTML), just so the conversation card has something to show.
  *
- * O original nunca é tocado: a cópia vive no storage do Orbit e sai de lá pelo
- * botão de baixar.
+ * The original is never touched: the copy lives in Orbit's storage and leaves it through the
+ * download button.
  */
 export async function saveDerivedDocx(
   docx: Buffer,
@@ -1993,22 +1995,22 @@ export async function saveDerivedDocx(
   await fsp.mkdir(dir, { recursive: true })
   await fsp.writeFile(path.join(dir, `${base}.docx`), docx)
 
-  // Preview: o HTML do mammoth dentro do mesmo CSS de documento, para o card
-  // ficar igual ao dos documentos que o Orbit escreve.
+  // Preview: mammoth's HTML inside the same document CSS, so the card
+  // looks like the ones of the documents Orbit writes.
   let previewHtml: string
   try {
     const { value } = await mammoth.convertToHtml({ buffer: docx })
     previewHtml = renderHtml([], meta.title).replace('</body>', `${value}\n</body>`)
   } catch {
-    previewHtml = renderHtml(parseMarkdown(`# ${meta.title}\n\n(pré-visualização indisponível)`), meta.title)
+    previewHtml = renderHtml(parseMarkdown(`# ${meta.title}\n\n${tNow('media.previewUnavailable')}`), meta.title)
   }
   await fsp.writeFile(path.join(dir, `${base}.html`), previewHtml, 'utf8')
   const thumb = await captureThumbnail(`${base}.html`)
 
-  const id = `${base}.md` // o id do registro segue o padrão dos documentos
+  const id = `${base}.md` // the record id follows the documents pattern
   await fsp.writeFile(
     path.join(dir, id),
-    `<!-- cópia editada de ${meta.sourceName ?? 'documento anexado'}; o conteúdo real está no .docx -->\n`,
+    `<!-- edited copy of ${meta.sourceName ?? 'attached document'}; the real content is in the .docx -->\n`,
     'utf8',
   )
   const entry: MediaEntry = {
@@ -2044,16 +2046,16 @@ export async function saveDerivedDocx(
 }
 
 /**
- * PDF DERIVADO: resultado de juntar, recortar, girar, carimbar ou preencher.
+ * DERIVED PDF: result of merging, cropping, rotating, stamping or filling.
  *
- * O preview é feito com as PÁGINAS RASTERIZADAS, não com o binário: o Electron
- * não embarca visualizador de PDF, então a única forma de mostrar um PDF na
- * conversa é renderizá-lo como imagem. É a mesma rasterização que torna o
- * digitalizado legível, reaproveitada para exibir.
+ * The preview is made with the RASTERIZED PAGES, not with the binary: Electron
+ * does not ship a PDF viewer, so the only way to show a PDF in the
+ * conversation is to render it as an image. It is the same rasterization that makes the
+ * scanned file legible, reused for display.
  */
 
-/** Páginas mostradas no preview — o suficiente para reconhecer o documento
- *  sem transformar o card num visualizador. */
+/** Pages shown in the preview — enough to recognize the document
+ *  without turning the card into a viewer. */
 const PREVIEW_PAGE_COUNT = 3
 
 export async function saveDerivedPdf(
@@ -2065,8 +2067,8 @@ export async function saveDerivedPdf(
   await fsp.mkdir(dir, { recursive: true })
   await fsp.writeFile(path.join(dir, `${base}.pdf`), pdf)
 
-  // Rasteriza as primeiras páginas e monta o preview com elas.
-  let body = '<p>(pré-visualização indisponível)</p>'
+  // Rasterizes the first pages and builds the preview with them.
+  let body = `<p>${tNow('media.previewUnavailable')}</p>`
   try {
     const pages = Array.from({ length: PREVIEW_PAGE_COUNT }, (_, i) => i + 1)
     const rendered = await rasterizePdf(pdf, { pages, scale: 1.2 })
@@ -2075,16 +2077,16 @@ export async function saveDerivedPdf(
       const name = `${base}-p${page.pageNumber}.png`
       await fsp.writeFile(path.join(dir, name), page.png)
       imgs.push(
-        `<img src="${ARTIFACT_SCHEME}://${name}" alt="página ${page.pageNumber}" style="width:100%;display:block;margin:0 0 1.2em;box-shadow:0 0 0 1px #ddd">`,
+        `<img src="${ARTIFACT_SCHEME}://${name}" alt="page ${page.pageNumber}" style="width:100%;display:block;margin:0 0 1.2em;box-shadow:0 0 0 1px #ddd">`,
       )
     }
     const rest =
       rendered.total > rendered.pages.length
-        ? `<p style="text-align:center;color:#666">… ${rendered.total - rendered.pages.length} página(s) a mais — baixe o PDF para ver o documento inteiro.</p>`
+        ? `<p style="text-align:center;color:#666">${tNow('media.morePages', { count: rendered.total - rendered.pages.length })}</p>`
         : ''
     body = imgs.join('\n') + rest
   } catch {
-    // preview é conveniência: o arquivo vale mesmo sem ele
+    // the preview is a convenience: the file counts even without it
   }
   const html = renderHtml([], meta.title).replace('</body>', `${body}\n</body>`)
   await fsp.writeFile(path.join(dir, `${base}.html`), html, 'utf8')
@@ -2093,7 +2095,7 @@ export async function saveDerivedPdf(
   const id = `${base}.md`
   await fsp.writeFile(
     path.join(dir, id),
-    `<!-- PDF derivado de ${meta.sourceName ?? 'documento anexado'}; o conteúdo real está no .pdf -->\n`,
+    `<!-- PDF derived from ${meta.sourceName ?? 'attached document'}; the real content is in the .pdf -->\n`,
     'utf8',
   )
   const entry: MediaEntry = {

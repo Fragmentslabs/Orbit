@@ -25,6 +25,7 @@ import {
   StorageKeys,
   type QuotePayload,
 } from '@shared/chat'
+import { isRoutineSessionId } from '@shared/routines'
 import { getProvider, modelSupportsVision } from './catalog'
 import { resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
 import {
@@ -39,7 +40,7 @@ import { estimateTokens, maxStepsFor } from './context-budget'
 import { createStepPreparer } from './agent-step'
 import { manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
-import { t as mainT } from './i18n'
+import { MESSAGES, t as mainT } from './i18n'
 import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
@@ -94,9 +95,9 @@ import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
-import { construirCatalogo } from './tools/catalogo-turno'
-import { montarMapa } from './tools/catalogo'
-import { derivarAtivas, familiasMencionadasNoTexto } from './tools/ativas'
+import { buildCatalog } from './tools/catalog-turn'
+import { buildMap } from './tools/catalog'
+import { deriveActive, familiesMentionedInText } from './tools/active'
 import { recordTurn } from './tools/metrics'
 import { hoistToolImages } from './tool-images'
 import { endActivity } from './computer/session'
@@ -109,12 +110,13 @@ import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 import { forwardToOverlay, getOverlayWindow } from './overlay/window'
-import { modoGlobal } from './permission/modo-global'
+import { globalMode } from './permission/global-mode'
+import { perfSpan } from './perf'
 
-// Tools cujo input (ainda em streaming) abre a aba correspondente AO VIVO,
-// assim que o campo `name` aparece no JSON — antes do modelo terminar de
-// transmitir o payload (o HTML dos artboards ou da composição). O report()
-// final da tool segue como estava; isto só adianta a abertura.
+// Tools whose input (still streaming) opens the matching tab LIVE, as
+// soon as the `name` field shows up in the JSON — before the model ends
+// streaming the payload (the artboards' or the composition's HTML). The
+// tool's final report() stays as it is; this only brings the opening forward.
 const LIVE_OPEN_TOOLS: Record<string, (sessionId: string, name: string) => Promise<void>> = {
   design_write: openDesignLive,
   design_edit: (sessionId, name) => openDesignLive(sessionId, name, { placeholder: false }),
@@ -123,25 +125,25 @@ const LIVE_OPEN_TOOLS: Record<string, (sessionId: string, name: string) => Promi
 }
 
 /**
- * Motor de chat portado do processador de sessões do opencode: converte o
- * histórico persistido em mensagens de modelo, roda o loop de streamText com
- * ferramentas e emite eventos incrementais para o renderer via IPC.
+ * Chat engine ported from opencode's session processor: turns the persisted
+ * history into model messages, runs the streamText loop with tools and emits
+ * incremental events to the renderer over IPC.
  */
 
-// Teto de segurança, não um limite operacional normal — o opencode (de onde
-// este engine foi portado) roda sem teto por padrão (agent.steps ?? Infinity)
-// e só para quando o modelo decide (finishReason === 'stop'). 50 era baixo
-// demais: tarefas de código reais passam disso e a stream cortava no meio,
-// indistinguível de uma conclusão normal. O teto agora sai de `maxStepsFor`
-// (context-budget), que o escala pelo contexto do modelo: quem tem janela
-// pequena não tem o que fazer com 300 idas ao provedor. Existe só pra não
-// deixar um loop patológico rodar para sempre — o estouro de contexto quem
-// segura é o trimTurnContext no prepareStep.
-// Nudge do último passo permitido — mesma ideia do MAX_STEPS_PROMPT do
-// opencode (packages/core/src/session/runner/max-steps.ts): em vez de
-// cortar a stream no meio de uma tool call, desabilita as tools e força o
-// modelo a resumir em texto o que fez e o que falta. `truncated` (abaixo)
-// vira um backstop raro, não o caminho comum.
+// Safety ceiling, not a normal operational limit — opencode (where this
+// engine was ported from) runs with no ceiling by default (agent.steps ?? Infinity)
+// and only stops when the model decides (finishReason === 'stop'). 50 was
+// too low: real coding tasks go past that and the stream cut mid-way,
+// indistinguishable from a normal conclusion. The ceiling now comes from
+// `maxStepsFor` (context-budget), which scales it by the model's context:
+// one with a small window has nothing to do with 300 trips to the provider.
+// It exists only so a pathological loop does not run forever — the context
+// overflow is held by trimTurnContext in prepareStep.
+// Nudge on the last allowed step — same idea as opencode's MAX_STEPS_PROMPT
+// (packages/core/src/session/runner/max-steps.ts): instead of
+// cutting the stream in the middle of a tool call, it disables the tools and forces the
+// model to summarize in text what it did and what is left. `truncated` (below)
+// becomes a rare backstop, not the common path.
 const MAX_STEPS_PROMPT = `MAXIMUM STEPS REACHED for this turn. Tools are now disabled — respond with text ONLY.
 
 Your response must:
@@ -150,34 +152,34 @@ Your response must:
 - List any remaining pending items
 - Suggest what to do next (the user can say "continue" to resume)`
 
-// Auto-continue quando o modelo bate no limite de TOKENS DE SAÍDA
-// (finish_reason "length") — o padrão do opencode (#17471/#18108): a
-// resposta foi CORTADA, não finalizada; re-roda-se o turno com um pedido de
-// continuação e o contexto completo, limitado por turno. Sem isso, a stream
-// cortava no meio de um texto/tool call silenciosamente, indistinguível de
-// conclusão normal — a causa raiz das "respostas interrompidas do nada".
+// Auto-continue when the model hits the OUTPUT TOKEN limit
+// (finish_reason "length") — opencode's default (#17471/#18108): the
+// answer was CUT, not finished; the turn runs again with a request for
+// continuation and the full context, capped per turn. Without this, the stream
+// cut in the middle of a text/tool call silently, indistinguishable from
+// a normal conclusion — the root cause of the "answers interrupted out of nowhere".
 const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: resume mid-sentence if the cut happened mid-sentence, do NOT repeat what was already written, do NOT restart the answer, and do NOT append a closing summary — the text you produce now is displayed as the direct continuation of the previous text, together forming one single answer. If you were mid-task, complete it.]`
 const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") in the middle of a ${toolNames} tool call. That tool call was NOT executed. Do NOT retry it as one giant operation — split it into smaller operations (smaller file writes, shorter commands, less data per call) and continue from where you left off.]`
-// Nudge de fechamento da TODO: o turno terminou em 'stop' mas o modelo não
-// reenviou a lista marcando os itens como completed (os checkboxes ficam com
-// spinner infinito na UI). Re-entramos no loop com uma synthetic user
-// message pedindo para resolver o estado — mesmo padrão do auto-continue,
-// com teto por turno para não virar loop.
+// TODO-closing nudge: the turn ended on 'stop' but the model did not
+// send the list back marking the items as completed (the checkboxes stay with
+// an endless spinner in the UI). We re-enter the loop with a synthetic user
+// message asking to settle the state — same pattern as auto-continue,
+// with a per-turn cap so it does not become a loop.
 const MAX_TODO_NUDGES = 2
 const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO list still has items marked as "in_progress". If you actually completed them, re-send the TODO list marking those items as "completed" (do NOT repeat the work summary — just update the checklist). If they are truly still not finished, say so briefly. Do not end the turn again without resolving the TODO state.]`
 /**
- * Nudge de overclaim: o turno terminou afirmando trabalho feito, mas o
- * snapshot prova que NENHUM arquivo mudou — o overclaim clássico é o turno
- * que relata conclusão sem ter chamado write/editar nenhum e mesmo assim
- * afirma ter feito algo.
+ * Overclaim nudge: the turn ended claiming work done, but the
+ * snapshot proves that NO file changed — the classic overclaim is the turn
+ * that reports completion without having called write/edit at all and still
+ * claims to have done something.
  */
 const MAX_OVERCLAIM_NUDGES = 1
 
 /**
- * A tela não tem snapshot de filesystem que prove nada: o que prova é a tool
- * chamada. Um turno que fala de ter olhado ou agido na tela sem chamar
- * nenhuma destas inventou — visto num modelo rápido em modo de voz, que
- * respondia "abri o TextEdit e escrevi oi" sem tool call nenhuma.
+ * The screen has no filesystem snapshot that proves anything: what proves it is the tool
+ * call. A turn that talks about having looked at or acted on the screen without calling
+ * any of these made it up — seen in a fast model in voice mode, which
+ * answered "I opened TextEdit and wrote hi" with no tool call at all.
  */
 const SCREEN_TOOL_PREFIXES = ['cu_', 'see_']
 const SCREEN_TOOL_NAMES = new Set(['computer_task'])
@@ -191,12 +193,12 @@ const NO_SCREEN_TOOL_PROMPT = `[SYSTEM: automatic verification — you called NO
 const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools (then end with your normal final answer), or correct the claim briefly in 1-2 sentences starting with "Correção:". Do not repeat the full answer and do not produce a new concluding text unless you actually changed files. If your reply made no false claim (e.g. it only described work from previous turns or answered a question), reply ONLY with the single line: Nada a corrigir. — nothing else.]`
 
 /**
- * Ferramentas que podem gravar no diretório de trabalho — o snapshot do
- * verifyTurn cobre esse diretório, então só faz sentido cobrar overclaim em
- * turnos que as usaram. Texto de conclusão num turno sem nenhuma delas (ex.:
- * pergunta informativa respondida só com leitura ou texto puro) descreve
- * trabalho de turnos anteriores, não deste — cobrar seria ruído. MCP entra
- * por conservadorismo: o engine não conhece as capacidades de cada servidor.
+ * Tools that can write to the working directory — verifyTurn's snapshot
+ * covers that directory, so charging overclaim only makes sense in
+ * turns that used them. A conclusion text in a turn without any of them (e.g.
+ * an informative question answered with reading only or plain text) describes
+ * work from previous turns, not from this one — charging would be noise. MCP is in
+ * out of conservatism: the engine does not know each server's capabilities.
  */
 const WRITE_TOOL_NAMES = new Set(['write', 'edit', 'bash', 'bash_background', 'panel_screenshot'])
 function usedFileWritingTools(parts: MessagePart[]): boolean {
@@ -205,22 +207,22 @@ function usedFileWritingTools(parts: MessagePart[]): boolean {
   )
 }
 
-/** Veredito da comparação de snapshots do turno (ver verifyTurn em runChat). */
+/** Verdict of the turn's snapshot comparison (see verifyTurn in runChat). */
 type TurnVerification =
   | { state: 'changed'; end: string; files: string[]; patch: string }
-  // `end` presente quando a pasta MUDOU (só saves manuais do painel): o
-  // veredito é "o agente não escreveu", mas o revert ainda precisa da árvore
-  // final para desfazer sem tocar no que a pessoa salvou.
+  // `end` present when the folder CHANGED (panel manual saves only): the
+  // verdict is "the agent did not write", but the revert still needs the final
+  // tree to undo without touching what the person saved.
   | { state: 'unchanged'; end?: string }
   | { state: 'unknown'; error?: string }
 const abortControllers = new Map<string, AbortController>()
-// Comando bash ativo por sessão (diagnóstico): preenchido no tool-call e
-// limpo no tool-result/error — o abortChat loga o comando que estava rodando
-// quando o usuário apertou parar, e o finally avisa se ele pode ter ficado vivo.
+// Active bash command per session (diagnostics): filled on the tool-call and
+// cleared on the tool-result/error — abortChat logs the command that was running
+// when the user pressed stop, and the finally reports whether it may have stayed alive.
 const activeBashCommands = new Map<string, string>()
 
-/** true quando a última todowrite da mensagem tem itens "in_progress" —
- * o card de tarefas ficaria com spinner eterno se o turno acabar assim. */
+/** true when the message's last todowrite has "in_progress" items —
+ * the task card would keep an endless spinner if the turn ends like this. */
 function hasTodoInProgress(parts: MessagePart[]): boolean {
   const todo = [...parts]
     .reverse()
@@ -229,8 +231,8 @@ function hasTodoInProgress(parts: MessagePart[]): boolean {
   return items.some((i) => i.status === 'in_progress')
 }
 
-/** Mensagem final do /init: o que foi gravado na árvore, ou por que nada foi.
- *  É texto do produto para o usuário, então segue o idioma do app. */
+/** Final message of /init: what was written to the tree, or why nothing was.
+ *  It is product text for the user, so it follows the app's language. */
 async function initSummary(result: InitResult): Promise<string> {
   const note = result.note ? `\n\n${result.note}` : ''
   const limit = result.unfinished ? `\n\n${await mainT('init.unfinished')}` : ''
@@ -272,7 +274,7 @@ function partText(parts: MessagePart[], type: 'text'): string {
     .join('\n')
 }
 
-/** Decodifica o payload de um data URL como texto UTF-8. */
+/** Decodes the payload of a data URL as UTF-8 text. */
 function decodeDataUrlText(url: string): string | null {
   const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(url)
   if (!match) return null
@@ -283,7 +285,7 @@ function decodeDataUrlText(url: string): string | null {
   }
 }
 
-/** Decodifica o payload de um data URL como bytes (para formatos binários: ZIP, planilhas). */
+/** Decodes the payload of a data URL as bytes (for binary formats: ZIP, spreadsheets). */
 function decodeDataUrlBytes(url: string): Buffer | null {
   const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(url)
   if (!match) return null
@@ -295,22 +297,22 @@ function decodeDataUrlBytes(url: string): Buffer | null {
 }
 
 /**
- * O anexo é um PROJETO de composição exportado pela aba Motion? O `.zip` é a
- * pista (nome ou mime); quem confirma é o manifesto lá dentro, em
- * `readMotionProject`. Acima do teto de importação nem tenta: decodificar um
- * base64 desse tamanho custa a memória do app inteiro.
+ * Is the attachment a composition PROJECT exported from the Motion tab? The `.zip` is the
+ * hint (name or mime); what confirms it is the manifest inside, in
+ * `readMotionProject`. Above the import ceiling it does not even try: decoding a
+ * base64 that size costs the whole app's memory.
  */
 function isMotionProjectAttachment(file: FilePart, filename: string): boolean {
   const zip = /\.zip$/i.test(filename) || /zip/i.test(file.mime ?? '')
   if (!zip) return false
-  // base64 cresce ~4/3: acima do teto nem vale decodificar.
+  // base64 grows ~4/3: above the ceiling it is not even worth decoding.
   return file.url.length <= Math.ceil(MAX_PROJECT_ZIP_BYTES * 1.4) + 1024
 }
 
 const PDF_EXT = /\.pdf$/i
 const TEXT_MIME = /^(text\/|application\/(json|xml|javascript|typescript|yaml|toml|x-sh|sql))/
-// Fallback por extensão: navegadores às vezes reportam mime vazio ou
-// "application/octet-stream" para .md/.skill/.csv no Windows.
+// Fallback by extension: browsers sometimes report an empty mime or
+// "application/octet-stream" for .md/.skill/.csv on Windows.
 const TEXT_EXT_FALLBACK = /\.(md|markdown|txt|log|csv|yaml|yml|toml|env|ini|conf|skill)$/i
 const SPREADSHEET_MIME = /^application\/(vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.oasis\.opendocument\.spreadsheet)$/
 const SPREADSHEET_EXT = /\.(xlsx?|ods)$/i
@@ -319,17 +321,17 @@ const DOCX_EXT = /\.docx$/i
 const SKILL_LIKE_EXT = /\.(skill|md|markdown)$/i
 
 /**
- * Abaixo deste tamanho o documento entra INTEIRO na mensagem, como antes.
- * Paginar um anexo de duas páginas só trocaria contexto barato por uma ida e
- * volta de tool — o custo da paginação só compensa quando o documento é
- * grande o bastante para pesar em todos os turnos seguintes.
+ * Below this size the document goes WHOLE into the message, as before.
+ * Paginating a two-page attachment would only trade cheap context for a round
+ * trip of the tool — the cost of pagination only pays off when the document is
+ * big enough to weigh on every following turn.
  */
 const INLINE_DOC_CHARS = 8000
-/** Páginas do trecho de abertura de um documento grande. */
+/** Pages of the opening excerpt of a large document. */
 const PREVIEW_PAGES = 2
 
-/** O anexo é um documento paginável? Combina o MIME (quando o navegador
- *  informa) com a extensão (quando ele manda octet-stream). */
+/** Is the attachment a pageable document? It combines the MIME (when the browser
+ *  reports it) with the extension (when it sends octet-stream). */
 function attachmentDocumentKind(mime: string, filename: string): DocumentKind | null {
   if (mime === 'application/pdf' || PDF_EXT.test(filename)) return 'pdf'
   if (mime === DOCX_MIME || DOCX_EXT.test(filename)) return 'docx'
@@ -338,11 +340,11 @@ function attachmentDocumentKind(mime: string, filename: string): DocumentKind | 
 }
 
 /**
- * Texto que representa o documento na mensagem. Pequeno vai inteiro; grande
- * vai como trecho de abertura mais a instrução de como alcançar o resto.
+ * Text that represents the document in the message. Small goes whole; large
+ * goes as an opening excerpt plus the instruction on how to reach the rest.
  *
- * Este texto é persistido e reenviado em todo turno, então ele é justamente o
- * que precisa ficar pequeno — é aqui que a economia acontece.
+ * This text is persisted and resent on every turn, so it is exactly what
+ * needs to stay small — this is where the saving happens.
  */
 function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]): string {
   const unit = doc.kind === 'spreadsheet' ? 'sheets' : doc.kind === 'docx' ? 'blocks' : 'pages'
@@ -363,18 +365,18 @@ function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]):
   )
 }
 
-/** Converte um anexo (FilePart) em conteúdo de modelo: imagem/PDF nativos,
- * arquivos de texto viram texto inline; o resto vira só uma nota. Usado só
- * para HISTÓRICO já persistido — anexos novos são pré-processados em
- * `preprocessAttachment` antes de chegar aqui (ver runChat). */
+/** Converts an attachment (FilePart) into model content: image/PDF native,
+ * text files become inline text; the rest becomes just a note. Used only
+ * for persisted HISTORY — new attachments are preprocessed in
+ * `preprocessAttachment` before reaching here (see runChat). */
 function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserContent, string>[number] {
   if (file.mime.startsWith('image/')) {
-    // Parte `file`, e não `image`: o ai-sdk depreciou o tipo `image` e avisa no
-    // terminal a cada anexo. A parte `file` com mediaType de imagem é o
-    // substituto, e os provedores a recebem igual.
+    // A `file` part, not `image`: the ai-sdk deprecated the `image` type and warns in
+    // the terminal on every attachment. The `file` part with an image mediaType is the
+    // replacement, and the providers receive it the same way.
     if (modelVision) return { type: 'file', data: file.url, mediaType: file.mime }
-    // Modelo sem visão (histórico): nota de texto — a descrição, quando
-    // existe, já está no TextPart irmão gerado em preprocessAttachment.
+    // Model without vision (history): text note — the description, when
+    // it exists, is already in the sibling TextPart generated in preprocessAttachment.
     return { type: 'text', text: `[Image attached earlier: ${file.filename ?? 'image'}]` }
   }
   if (file.mime === 'application/pdf' || PDF_EXT.test(file.filename ?? '')) {
@@ -389,7 +391,7 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
   return { type: 'text', text: `[Unsupported file attached: ${file.filename ?? file.mime}]` }
 }
 
-/** Texto que o usuário/modelo escreveu numa mensagem (sem chips de anexo). */
+/** Text that the user/model wrote in a message (no attachment chips). */
 function turnText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is TextPart => p.type === 'text' && !p.source)
@@ -398,10 +400,10 @@ function turnText(message: ChatMessage): string {
     .trim()
 }
 
-/** Últimos turnos da conversa, para desambiguar uma mensagem curta. */
+/** Last turns of the conversation, to disambiguate a short message. */
 function recentTurns(history: ChatMessage[]): Array<{ role: 'user' | 'assistant'; text: string }> {
   return history
-    // As duas últimas são o turno ATUAL (a pergunta e o assistant ainda vazio).
+    // The last two are the CURRENT turn (the question and the still-empty assistant).
     .slice(0, -2)
     .slice(-6)
     .map((m) => ({ role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const), text: turnText(m) }))
@@ -409,12 +411,12 @@ function recentTurns(history: ChatMessage[]): Array<{ role: 'user' | 'assistant'
 }
 
 /**
- * Cola o bloco de memórias no FIM da última mensagem do usuário.
+ * Glues the memory block at the END of the last user message.
  *
- * No fim, e não no começo, porque a pergunta do usuário é o que o modelo
- * precisa ler por último antes de responder; e na mensagem, e não no system
- * prompt, porque o system é congelado por sessão e o cache de prefixo dos
- * provedores depende disso.
+ * At the end, and not at the beginning, because the user's question is what the model
+ * needs to read last before answering; and in the message, and not in the system
+ * prompt, because the system is frozen per session and the providers' prefix cache
+ * depends on that.
  */
 function withMemoryBlock(messages: ModelMessage[], block: string): ModelMessage[] {
   if (!block) return messages
@@ -430,11 +432,11 @@ function withMemoryBlock(messages: ModelMessage[], block: string): ModelMessage[
   ]
 }
 
-/** Chip de anexo sem o data URL original (evita duplicar bytes grandes no
- * histórico — o conteúdo já vai como texto no TextPart que acompanha este
- * chip). Em imagens, `thumbUrl` traz um thumbnail reduzido só para a bolha do
- * chat (o modelo continua não recebendo o arquivo: toModelMessages ignora
- * chips pela flag `chip`). */
+/** Attachment chip without the original data URL (avoids duplicating large bytes in
+ * the history — the content already goes as text in the TextPart that accompanies
+ * this chip). For images, `thumbUrl` carries a reduced thumbnail just for the chat
+ * bubble (the model still does not receive the file: toModelMessages ignores
+ * chips through the `chip` flag). */
 function attachmentChip(
   file: FilePart,
   thumbUrl?: string,
@@ -450,15 +452,15 @@ function attachmentChip(
     chip: true,
     ...(documentId ? { documentId } : {}),
     ...(mediaUrl ? { mediaUrl } : {}),
-    // A fonte anexada continua sendo uma referência depois de gravada: o chip
-    // da bolha mostra o nome do documento, e não um anexo sem conteúdo.
+    // The attached source remains a reference after being written: the chip
+    // in the bubble shows the document name, and not an attachment without content.
     ...(file.sourceId ? { sourceId: file.sourceId } : {}),
   }
 }
 
-/** Thumbnail (WebP, máx 320px) de um data URL de imagem — só para exibição na
- * bolha do chat; o histórico guarda o thumbnail em vez dos bytes originais.
- * Falha silenciosa → undefined (o chip fica sem url, como antes). */
+/** Thumbnail (WebP, max 320px) of an image data URL — only for display in the
+ * chat bubble; the history stores the thumbnail instead of the original bytes.
+ * Silent failure → undefined (the chip stays without a url, as before). */
 async function imageThumbDataUrl(url: string): Promise<string | undefined> {
   try {
     const bytes = decodeDataUrlBytes(url)
@@ -470,7 +472,7 @@ async function imageThumbDataUrl(url: string): Promise<string | undefined> {
       .toBuffer()
     return `data:image/webp;base64,${out.toString('base64')}`
   } catch (err) {
-    console.error('[attachment] thumbnail falhou:', err)
+    console.error('[attachment] thumbnail failed:', err)
     return undefined
   }
 }
@@ -482,8 +484,8 @@ const IMAGE_MIME_EXT: Record<string, string> = {
   'image/gif': 'gif',
 }
 
-/** Extensão de arquivo para persistir uma imagem anexada (mime → ext, com
- * fallback pelo filename e, por fim, png). */
+/** File extension to persist an attached image (mime → ext, with
+ * fallback by the filename and, finally, png). */
 function imageExt(file: FilePart): string {
   const fromMime = IMAGE_MIME_EXT[file.mime]
   if (fromMime) return fromMime
@@ -496,11 +498,11 @@ function imageExt(file: FilePart): string {
 }
 
 /**
- * Registra a print colada pelo usuário na galeria de mídia (source 'user'):
- * o original ganha arquivo em disco + registro no índice — com o modo Visão,
- * hoje os bytes originais se perdem (o histórico guarda só o thumbnail).
- * Melhor esforço: falha silenciosa — o envio da mensagem nunca quebra por
- * causa do registro.
+ * Registers the screenshot pasted by the user in the media gallery (source 'user'):
+ * the original gets a file on disk + a record in the index — with Vision mode,
+ * today the original bytes get lost (the history keeps only the thumbnail).
+ * Best effort: silent failure — sending the message never breaks because
+ * of the record.
  */
 async function saveUserImage(
   file: FilePart,
@@ -517,14 +519,14 @@ async function saveUserImage(
       name: file.filename,
     })
   } catch (err) {
-    console.error('[attachment] registro da imagem na galeria falhou:', err)
+    console.error('[attachment] registering the image in the gallery failed:', err)
     return undefined
   }
 }
 
 /**
- * Nota que o agente recebe por um anexo de áudio. Com a transcrição ligada,
- * a referência e quando usá-la; desligada, o que dizer ao usuário.
+ * Note that the agent receives for an audio attachment. With transcription on,
+ * the reference and when to use it; off, what to tell the user.
  */
 function audioAttachmentNote(filename: string, id: string, file: string): string {
   const head = `[Audio attached: ${filename || 'unnamed'} — ref ${id}]\nFile: ${file} (in this chat's media)`
@@ -542,13 +544,13 @@ function audioAttachmentNote(filename: string, id: string, file: string): string
 }
 
 /**
- * Um vídeo anexado vira: o arquivo guardado no app (o agente só recebe a
- * REFERÊNCIA e uma linha de metadados), uma miniatura para a bolha e a nota.
+ * An attached video becomes: the file saved in the app (the agent only receives the
+ * REFERENCE and a line of metadata), a thumbnail for the bubble and the note.
  *
- * O vídeo chega de duas formas. Escolhido ou arrastado do disco, o renderer manda
- * só o CAMINHO (`file://…`) e o arquivo é copiado aqui, por clone quando o
- * sistema de arquivos permite — nunca passa inteiro pela memória. Colado da área
- * de transferência não há caminho, e vêm os bytes (data URL).
+ * The video arrives in two ways. Chosen or dragged from the disk, the renderer sends
+ * only the PATH (`file://…`) and the file is copied here, by clone when the
+ * filesystem allows it — it never goes wholly through memory. Pasted from the
+ * clipboard there is no path, and the bytes come (data URL).
  */
 async function preprocessVideoAttachment(
   file: FilePart,
@@ -580,11 +582,11 @@ async function preprocessVideoAttachment(
     }
     const probe = await probeVideoAttachment(saved.file)
     if (!probe || probe.video.length === 0) {
-      // Não é um vídeo de verdade: não deixa a cópia para trás.
+      // Not a real video: it does not leave the copy behind.
       await fs.rm(saved.file, { force: true })
       return refuse('Attachment, not a user message. The file is not a readable video.')
     }
-    // Entra na galeria de mídia (aba Mídia, filtro de vídeo, excluir libera o arquivo).
+    // It goes into the media gallery (Media tab, video filter, deleting frees the file).
     const gallery = await addVideoToGallery({
       file: saved.file,
       id: saved.id,
@@ -610,7 +612,7 @@ async function preprocessVideoAttachment(
   }
 }
 
-/** Rótulo do tipo na nota que o agente lê para um anexo da galeria. */
+/** Type label in the note that the agent reads for a gallery attachment. */
 const MEDIA_REF_LABEL: Record<string, string> = {
   artifact: 'Artifact',
   document: 'Document',
@@ -619,9 +621,9 @@ const MEDIA_REF_LABEL: Record<string, string> = {
 }
 
 /**
- * A nota de um anexo que JÁ é um item da galeria (arrastado da aba Mídia).
- * O arquivo está em disco; a nota dá o caminho e como abrir, sem prometer
- * nenhuma cópia — que é justamente o que não acontece.
+ * The note of an attachment that already IS a gallery item (dragged from the Media tab).
+ * The file is on disk; the note gives the path and how to open it, without promising
+ * any copy — which is exactly what does not happen.
  */
 function mediaRefNote(kind: string, name: string, entry: MediaEntry): string {
   const label = MEDIA_REF_LABEL[kind] ?? 'File'
@@ -648,11 +650,11 @@ function mediaRefNote(kind: string, name: string, entry: MediaEntry): string {
 }
 
 /**
- * Anexo que JÁ é um item da galeria (arrastado da aba Mídia). Diferente de todo
- * outro caminho, AQUI NADA É COPIADO: o arquivo existe, e o agente recebe uma
- * referência (`img_/vdo_/aud_…` ou o caminho) com a mesma nota dos anexos por
- * referência. A bolha mostra o chip — a imagem/vídeo só vai para o modelo
- * quando a visão exige os pixels (lidos de disco, sem reescrever).
+ * Attachment that already IS a gallery item (dragged from the Media tab). Unlike every
+ * other path, HERE NOTHING IS COPIED: the file exists, and the agent receives a
+ * reference (`img_/vdo_/aud_…` or the path) with the same note as the attachments by
+ * reference. The bubble shows the chip — the image/video only goes to the model
+ * when vision demands the pixels (read from disk, without rewriting).
  */
 async function preprocessMediaRefAttachment(
   file: FilePart,
@@ -704,8 +706,8 @@ async function preprocessMediaRefAttachment(
   }
 
   if (kind === 'image') {
-    // A imagem já está em disco: os bytes são lidos só para a VISÃO (o modelo
-    // precisa dos pixels) e para o thumbnail do chip — o arquivo NÃO é reescrito.
+    // The image is already on disk: the bytes are read only for VISION (the model
+    // needs the pixels) and for the chip thumbnail — the file is NOT rewritten.
     const media = await readMedia(entry.id)
     const dataUrl = media ? `data:${media.contentType};base64,${media.buffer.toString('base64')}` : undefined
     const thumb = dataUrl ? await imageThumbDataUrl(dataUrl) : undefined
@@ -730,11 +732,11 @@ async function preprocessMediaRefAttachment(
       ]
     }
     if (deps.modelVision && dataUrl && media) {
-      // Visão nativa: o modelo vê os pixels NO TURNO EM QUE A IMAGEM CHEGA.
-      // Nos seguintes fica só a linha de referência — a imagem já está na
-      // galeria, com id, e o agente volta a ela com describe_image/image_edit
-      // se precisar. O `refLine` vazio desarma a marca: sem referência, perder
-      // a imagem seria pior que pagar por ela em todo turno.
+      // Native vision: the model sees the pixels IN THE TURN THE IMAGE ARRIVES.
+      // In the following ones only the reference line stays — the image is already in the
+      // gallery, with an id, and the agent goes back to it with describe_image/image_edit
+      // if it needs to. The empty `refLine` disarms the mark: without a reference, losing
+      // the image would be worse than paying for it on every turn.
       const withData: FilePart = {
         ...file,
         mime: media.contentType,
@@ -759,8 +761,8 @@ async function preprocessMediaRefAttachment(
     ]
   }
 
-  // Artefato, documento, peça de motion, canvas de design: o arquivo/pasta já
-  // vive no app — a nota dá o caminho e como abrir.
+  // Artifact, document, motion piece, design canvas: the file/folder already
+  // lives in the app — the note gives the path and how to open it.
   return [
     attachmentChip(file, thumbUrl(entry) ?? undefined),
     { id: newId('prt'), type: 'text', text: mediaRefNote(kind, name, entry), state: 'done', source: 'attachment' },
@@ -768,13 +770,13 @@ async function preprocessMediaRefAttachment(
 }
 
 /**
- * Fonte da conversa arrastada da aba Fontes até o composer.
+ * Source of the conversation dragged from the Sources tab into the composer.
  *
- * Nada é copiado: o documento JÁ está guardado e tem id (`doc1`, `src2`), então
- * o anexo é uma referência — o chip na bolha mostra o nome exato do documento e
- * o agente recebe a nota com o endereço que as tools dele entendem. Antes, o
- * arrasto morria no meio do caminho (o composer não conhecia o MIME) e citar
- * uma fonte exigia escrever "o src2" e torcer para o modelo adivinhar qual era.
+ * Nothing is copied: the document already IS stored and has an id (`doc1`, `src2`), so
+ * the attachment is a reference — the chip in the bubble shows the exact document name and
+ * the agent receives the note with the address its tools understand. Before, the
+ * drag died half-way (the composer did not know the MIME) and citing
+ * a source required writing "the src2" and hoping the model guessed which one it was.
  */
 async function sourceRefAttachment(file: FilePart, sessionId: string | undefined): Promise<MessagePart[]> {
   const id = file.sourceId ?? ''
@@ -812,49 +814,49 @@ async function sourceRefAttachment(file: FilePart, sessionId: string | undefined
   ]
 }
 
-/** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
- *  texto extraído (evita data URLs enormes no histórico) + um chip sem dados
- *  pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
- *  melhor via image part). Espelha o mesmo padrão para cada tipo — extrai,
- *  embrulha em TextPart, nunca falha o envio da mensagem. */
+/** Preprocesses a NEW attachment before persisting: PDF, spreadsheet and skill become
+ *  extracted text (avoids huge data URLs in the history) + a chip without data
+ *  so the UI keeps showing the attachment; image stays native (the model reads it
+ *  better through an image part). Mirrors the same pattern for each type — extracts,
+ *  wraps in a TextPart, never fails the message send. */
 async function preprocessAttachment(
   file: FilePart,
   deps: {
-    /** O modelo desta execução tem visão nativa? */
+    /** Does the model of this execution have native vision? */
     modelVision: boolean
-    /** Modelo de visão delegado (modo Visão) — usado quando modelVision é false */
+    /** Delegated vision model (Vision mode) — used when modelVision is false */
     visionModel?: { providerId: string; modelId: string }
     language?: string
-    /** Sessão/mensagem de origem — a print vira registro na galeria de mídia */
+    /** Source session/message — the screenshot becomes a record in the media gallery */
     sessionId?: string
     messageId?: string
-    /** Registro do turno (modo Visão): onde as imagens ficam para a tool describe_image */
+    /** Turn record (Vision mode): where the images stay for the describe_image tool */
     turnImages?: TurnImage[]
-    /** Texto que o usuário escreveu neste turno — o anexo de motion o cola ao
-     *  instante apontado (ver formatMotionQuoteText). */
+    /** Text that the user wrote in this turn — the motion attachment glues it to
+     *  the pointed instant (see formatMotionQuoteText). */
     userText?: string
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
 
-  // Anexo que já é um item da galeria (arrastado da aba Mídia): nada é copiado,
-  // o agente recebe a referência e o caminho. É o primeiro corte porque `url`
-  // aqui é só o preview — nenhum dos caminhos abaixo vale para ele.
+  // Attachment that is already a gallery item (dragged from the Media tab): nothing is copied,
+  // the agent receives the reference and the path. It is the first cut because `url`
+  // here is only the preview — none of the paths below applies to it.
   if (file.mediaId) return preprocessMediaRefAttachment(file, deps)
 
-  // Fonte da conversa (aba Fontes): mesma ideia da galeria — referência, não
-  // cópia. O conteúdo já está guardado e endereçado no escopo da conversa.
+  // Conversation source (Sources tab): same idea as the gallery — a reference, not a
+  // copy. The content is already stored and addressed in the conversation scope.
   if (file.sourceId) return sourceRefAttachment(file, deps.sessionId)
 
-  // PROJETO de composição de motion (.zip com `orbit.json` na raiz, o que
-  // "Salvar projeto" na aba Motion gera). Arrastar o arquivo aqui é o caminho
-  // de volta: a peça é recriada numa pasta NOVA desta conversa — mesmo nome,
-  // id novo, nada sobrescrito —, entra no registro e a aba abre nela. O agente
-  // recebe uma nota dizendo que a peça existe e como alcançá-la pelo id; o
-  // conteúdo (HTML, mídias, fontes) já está no disco, não vai para o contexto.
+  // Motion composition PROJECT (.zip with `orbit.json` at the root, which
+  // "Save project" in the Motion tab generates). Dragging the file here is the way
+  // back: the piece is recreated in a NEW folder of this conversation — same name,
+  // new id, nothing overwritten —, it enters the record and the tab opens on it. The agent
+  // receives a note saying the piece exists and how to reach it by id; the
+  // content (HTML, media, fonts) is already on disk, it does not go into the context.
   //
-  // Um `.zip` SEM o manifesto não é assunto daqui: segue o fluxo de anexo de
-  // sempre. E um `.skill` (que também é zip) chega no fluxo dele logo abaixo.
+  // A `.zip` WITHOUT the manifest is not this business: it follows the usual
+  // attachment flow. And a `.skill` (which is also a zip) arrives in its flow right below.
   if (isMotionProjectAttachment(file, filename)) {
     const bytes = decodeDataUrlBytes(file.url)
     if (bytes) {
@@ -863,8 +865,8 @@ async function preprocessAttachment(
         if (!deps.sessionId) return [attachmentChip(file)]
         try {
           const imported = await importMotionProject(bytes, { sessionId: deps.sessionId })
-          // Galeria e aba: a peça importada tem que aparecer onde as outras
-          // aparecem — e já aberta, porque importar é para trabalhar nela.
+          // Gallery and tab: the imported piece must appear where the others
+          // appear — and already open, because importing is for working on it.
           void registerMotionCover(imported.id, { title: imported.name, sessionId: deps.sessionId }).catch(() => false)
           void reopenMotion(imported.id).catch(() => false)
           const note = [
@@ -893,11 +895,11 @@ async function preprocessAttachment(
     }
   }
 
-  // Elemento selecionado no browser do painel (modo seleção): o renderer
-  // serializa o elemento (tag/url/selector/texto/html) como data URL JSON no
-  // MIME marcador. Vira chip (badge na bolha do chat) + TextPart com source
-  // 'attachment' — mesmo padrão do PDF: o modelo recebe o detalhe completo, a
-  // bolha do usuário mostra só o chip.
+  // Element selected in the panel browser (selection mode): the renderer
+  // serializes the element (tag/url/selector/text/html) as a JSON data URL in the
+  // marker MIME. It becomes a chip (badge in the chat bubble) + a TextPart with source
+  // 'attachment' — same pattern as the PDF: the model receives the full detail, the
+  // user's bubble shows only the chip.
   if (file.mime === BROWSER_SELECTION_MIME) {
     const raw = decodeDataUrlText(file.url)
     let text = `[Element selected in the panel browser — ${file.filename || 'element'}]`
@@ -911,7 +913,7 @@ async function preprocessAttachment(
           `html: ${sel.html ?? ''}`,
         ].join('\n')
       } catch {
-        // payload inválido — o filename do chip já dá contexto suficiente
+        // invalid payload — the chip filename already gives enough context
       }
     }
     return [
@@ -920,13 +922,13 @@ async function preprocessAttachment(
     ]
   }
 
-  // Trecho citado no visualizador de documento, ou INSTANTE apontado na aba
-  // Motion — os dois chegam pelo mesmo MIME (ver DOCUMENT_QUOTE_MIME) e o
-  // `kind` do payload diz qual é. O usuário grifou/apontou e mandou: o modelo
-  // recebe o essencial JÁ AQUI, sem precisar de uma ida ao documento ou à
-  // composição para responder, e recebe junto a citação clicável para devolver
-  // na resposta. A bolha mostra só o chip — o trecho pode ser longo, e
-  // repeti-lo na conversa seria mostrar ao usuário o que ele acabou de marcar.
+  // Excerpt quoted in the document viewer, or INSTANT pointed at in the Motion
+  // tab — both arrive through the same MIME (see DOCUMENT_QUOTE_MIME) and the
+  // payload's `kind` says which one. The user highlighted/pointed and sent it: the model
+  // receives the essential RIGHT HERE, without a trip to the document or the
+  // composition to answer, and receives along the clickable citation to return
+  // in the answer. The bubble shows only the chip — the excerpt can be long, and
+  // repeating it in the conversation would show the user what they just marked.
   if (file.mime === DOCUMENT_QUOTE_MIME) {
     const raw = decodeDataUrlText(file.url)
     let text = `[Excerpt quoted by the user — ${file.filename || 'document'}]`
@@ -934,48 +936,48 @@ async function preprocessAttachment(
       try {
         const quote = JSON.parse(raw) as QuotePayload
         if (quote.kind === 'motion') {
-          // O instante: arquivo, quadro e fps (e os segundos com vírgula, que
-          // são só exibição), com o texto do usuário colado — ver
+          // The instant: file, frame and fps (and the seconds with a comma, which
+          // are display only), with the user's text glued — see
           // formatMotionQuoteText.
           text = formatMotionQuoteText(quote, deps.userText)
         } else if (quote.kind === 'design') {
-          // O elemento apontado no canvas: artboard, caminho e o HTML dele, com
-          // o texto do usuário colado — ver formatDesignQuoteText.
+          // The element pointed at in the canvas: artboard, path and its HTML, with
+          // the user's text glued — see formatDesignQuoteText.
           text = formatDesignQuoteText(quote, deps.userText)
         } else {
-          const onde = quote.page
+          const where = quote.page
             ? `, page ${quote.page}${
                 quote.fromLine
                   ? `, line${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
                   : ''
               }`
             : ''
-          const linhas = [`[Excerpt quoted by the user — ${quote.name ?? 'document'}${onde}]`]
+          const lines = [`[Excerpt quoted by the user — ${quote.name ?? 'document'}${where}]`]
 
-          // O ENDEREÇO do que foi citado, na linguagem da ferramenta que o
-          // alcança. Sem isto o modelo recebia um nome e um texto, ia procurar
-          // o arquivo com as tools que tinha e respondia que não achou — com o
-          // documento inteiro a um id de distância. O id vale por si: ler um
-          // documento não depende de ele ser fonte da conversa, nem de a
-          // conversa ser a mesma em que ele nasceu.
+          // The ADDRESS of what was quoted, in the language of the tool that
+          // reaches it. Without this the model received a name and a text, went looking for
+          // the file with the tools it had and answered that it did not find it — with the
+          // whole document one id away. The id is worth on its own: reading a
+          // document does not depend on it being a source of the conversation, nor on the
+          // conversation being the same one it was born in.
           if (quote.docId) {
-            linhas.push(
+            lines.push(
               quote.kind === 'source'
                 ? `Source in this conversation: ${quote.docId} — use doc_read/doc_search with this docId to see the rest.`
                 : `Agent document: ${quote.docId} — use read_document with this documentId to see the full text, and update_document to change it (read first: baseRevision comes from the read).`,
             )
           }
           if (quote.docId && quote.page) {
-            const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
+            const target = `#orbit-source/${quote.docId}/p${quote.page}${
               quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''
             }`
-            linhas.push(`To cite it back in your reply: [${quote.name ?? 'document'}](${alvo})`)
+            lines.push(`To cite it back in your reply: [${quote.name ?? 'document'}](${target})`)
           }
-          linhas.push('---', quote.text ?? '')
-          text = linhas.join('\n')
+          lines.push('---', quote.text ?? '')
+          text = lines.join('\n')
         }
       } catch {
-        // payload inválido — o filename do chip já dá o contexto mínimo
+        // invalid payload — the chip filename already gives the minimum context
       }
     }
     return [
@@ -984,15 +986,15 @@ async function preprocessAttachment(
     ]
   }
 
-  // PDF, DOCX e planilha: um caminho só. O texto extraído é guardado na
-  // sessão e a mensagem leva apenas o trecho de abertura — o resto o agente
-  // alcança com doc_search/doc_read.
+  // PDF, DOCX and spreadsheet: a single path. The extracted text is stored in the
+  // session and the message carries only the opening excerpt — the rest the agent
+  // reaches with doc_search/doc_read.
   //
-  // Antes, os três despejavam o documento inteiro numa TextPart, que o
-  // toModelMessages reenvia A CADA TURNO: um PDF grande ocupava a janela de
-  // contexto pelo resto da conversa, sendo cobrado de novo em toda mensagem
-  // (e o PDF nem tinha teto — só DOCX e planilha cortavam em 30k, perdendo o
-  // resto em silêncio).
+  // Before, all three dumped the whole document into a TextPart, which
+  // toModelMessages resends ON EVERY TURN: a large PDF took up the context
+  // window for the rest of the conversation, being charged again on every message
+  // (and the PDF did not even have a ceiling — only DOCX and spreadsheet cut at 30k, losing the
+  // rest silently).
   const documentKind = attachmentDocumentKind(file.mime, filename)
   if (documentKind) {
     const bytes = decodeDataUrlBytes(file.url)
@@ -1004,14 +1006,14 @@ async function preprocessAttachment(
     }
     try {
       const { doc, pages } = await saveSessionDocument(
-        deps.sessionId ?? 'sem-sessao',
+        deps.sessionId ?? 'no-session',
         Buffer.from(bytes),
-        filename || 'documento',
+        filename || 'document',
         documentKind,
       )
       return [
-        // O chip leva o id do documento: e o que permite clicar no anexo e
-        // abrir o arquivo no painel, ja que o conteudo nao vive na mensagem.
+        // The chip carries the document id: it is what allows clicking the attachment and
+        // opening the file in the panel, since the content does not live in the message.
         attachmentChip(file, undefined, doc.id),
         {
           id: newId('prt'),
@@ -1029,9 +1031,9 @@ async function preprocessAttachment(
     }
   }
 
-  // Skill anexada (.skill texto/ZIP, ou .md com frontmatter de skill) — o
-  // agente lê o conteúdo e PODE propor com a tool create_skill se fizer
-  // sentido; se não for uma skill válida, cai no tratamento de texto comum.
+  // Attached skill (.skill text/ZIP, or .md with skill frontmatter) — the
+  // agent reads the content and MAY propose one with the create_skill tool if it
+  // makes sense; if it is not a valid skill, it falls back to plain text handling.
   if (SKILL_LIKE_EXT.test(filename)) {
     const bytes = decodeDataUrlBytes(file.url)
     const description = bytes ? describeSkillAttachment(bytes, filename) : null
@@ -1051,20 +1053,20 @@ async function preprocessAttachment(
     }
   }
 
-  // Texto anexado (.md, .txt, .json, código, o texto colado no composer):
-  // MESMO caminho do PDF — vira documento da conversa, e a mensagem leva só o
-  // trecho de abertura. Antes o arquivo inteiro era despejado numa TextPart,
-  // que o toModelMessages reenvia a cada turno: um .md de 200 KB ficava no
-  // contexto para sempre, enquanto o PDF ao lado já era paginado. Conteúdo
-  // pequeno continua vindo inteiro (ver INLINE_DOC_CHARS em
-  // documentAttachmentPreview) — o que muda é que ele passa a existir também
-  // na aba Fontes, alcançável depois do turno em que chegou.
+  // Attached text (.md, .txt, .json, code, the text pasted into the composer):
+  // SAME path as the PDF — it becomes a document of the conversation, and the message carries only the
+  // opening excerpt. Before, the whole file was dumped into a TextPart,
+  // which toModelMessages resends on every turn: a 200 KB .md stayed in the
+  // context forever, while the PDF next to it was already paginated. Small
+  // content keeps coming whole (see INLINE_DOC_CHARS in
+  // documentAttachmentPreview) — what changes is that it also starts to exist
+  // in the Sources tab, reachable after the turn in which it arrived.
   if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(filename)) {
     const text = decodeDataUrlText(file.url)
     if (text != null) {
       try {
         const { doc, pages } = await saveSessionDocument(
-          deps.sessionId ?? 'sem-sessao',
+          deps.sessionId ?? 'no-session',
           Buffer.from(text, 'utf8'),
           filename || 'texto',
           'text',
@@ -1074,8 +1076,8 @@ async function preprocessAttachment(
           { id: newId('prt'), type: 'text', text: documentAttachmentPreview(doc, pages), state: 'done', source: 'attachment' },
         ]
       } catch {
-        // Sem documento (disco indisponível) o texto ainda pode viajar: é o
-        // comportamento de antes, e perder o anexo seria pior.
+        // Without a document (disk unavailable) the text can still travel: it is the
+        // behavior from before, and losing the attachment would be worse.
         return [
           attachmentChip(file),
           { id: newId('prt'), type: 'text', text: `[File attached: ${filename || 'unnamed'}]\n\n${text}`, state: 'done', source: 'attachment' },
@@ -1084,14 +1086,14 @@ async function preprocessAttachment(
     }
   }
 
-  // Vídeo: guardado no app, o agente recebe a referência e a ficha — nunca o conteúdo.
+  // Video: saved in the app, the agent receives the reference and the metadata card — never the content.
   if (isVideoFile(file.mime, filename)) return preprocessVideoAttachment(file, deps)
 
-  // Áudio: vai para o acervo de áudio (a bolha toca o anexo pelo chip) e NÃO é
-  // transcrito aqui — pode ser uma música ou um efeito para usar em algum
-  // lugar. O agente recebe a referência e decide (tool transcribe). A
-  // transcrição, quando houver, volta para ESTA nota (ver
-  // persistAudioTranscript): é conteúdo do anexo, não fala do usuário.
+  // Audio: it goes to the audio store (the bubble plays the attachment from the chip) and is NOT
+  // transcribed here — it may be a song or a sound effect to use somewhere.
+  // The agent receives the reference and decides (transcribe tool). The
+  // transcript, when there is one, comes back to THIS note (see
+  // persistAudioTranscript): it is attachment content, not the user's speech.
   if (isAudioFile(file.mime, filename)) {
     const bytes = decodeDataUrlBytes(file.url)
     const ext = audioExt(file.mime, filename)
@@ -1107,28 +1109,28 @@ async function preprocessAttachment(
       name: filename || undefined,
       source: 'user',
     })
-    // O agente recebe só a referência e o caminho — nunca o conteúdo: o áudio
-    // não ocupa o contexto, e ele escolhe o que fazer (transcrever, usar o
-    // arquivo num projeto, nada).
+    // The agent receives only the reference and the path — never the content: the audio
+    // does not take up context, and it chooses what to do (transcribe, use the
+    // file in a project, nothing).
     return [
       attachmentChip(file, undefined, undefined, saved.url),
       { id: newId('prt'), type: 'text', text: audioAttachmentNote(filename, saved.id, saved.path), state: 'done', source: 'attachment' },
     ]
   }
 
-  // Imagem: com o modo Visão ativo (visionModel configurado), a imagem NÃO
-  // entra no contexto e não é descrita automaticamente — o agente decide ver
-  // (tool describe_image, com o contexto que ele quiser passar) e a descrição
-  // retornada substitui este placeholder no histórico. Sem modo ativo: visão
-  // nativa mantém o image part; sem visão e sem modelo, avisa no histórico que
-  // o anexo não foi visto (a UI também mostra o card).
+  // Image: with Vision mode on (visionModel configured), the image does NOT
+  // enter the context and is not described automatically — the agent decides to see
+  // it (describe_image tool, with whatever context it wants to pass) and the description
+  // returned replaces this placeholder in the history. Without active mode: native
+  // vision keeps the image part; without vision and without a model, it warns in the history that
+  // the attachment was not seen (the UI also shows the card).
   if (file.mime.startsWith('image/')) {
-    // A print colada pelo usuário também entra na galeria de mídia: o
-    // original é persistido em disco (source 'user') — o histórico não muda,
-    // a mensagem continua com o data URL/thumb de sempre.
+    // The screenshot pasted by the user also enters the media gallery: the
+    // original is persisted on disk (source 'user') — the history does not change,
+    // the message keeps the usual data URL/thumb.
     const mediaUrl = await saveUserImage(file, deps.sessionId, deps.messageId)
-    // Thumbnail só para a bolha do chat: o chip não leva os bytes originais
-    // (o histórico não duplica imagens inteiras), mas a UI mostra a imagem.
+    // Thumbnail only for the chat bubble: the chip does not carry the original bytes
+    // (the history does not duplicate whole images), but the UI shows the image.
     const thumbUrl = await imageThumbDataUrl(file.url)
     const refLine = imageRefLine(mediaUrl, file.filename ?? '', file.mime)
     if (deps.visionModel) {
@@ -1152,9 +1154,9 @@ async function preprocessAttachment(
       ]
     }
     if (deps.modelVision) {
-      // Mesma regra do anexo por referência: os pixels valem neste turno; nos
-      // seguintes, o indicador é a linha de referência da galeria (ver
-      // FilePart.turnOnly e modelFileParts).
+      // Same rule as the attachment by reference: the pixels count in this turn; in the
+      // following ones, the indicator is the gallery reference line (see
+      // FilePart.turnOnly and modelFileParts).
       const firstLook: FilePart = refLine ? { ...file, turnOnly: true } : file
       return refLine
         ? [firstLook, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
@@ -1179,11 +1181,11 @@ async function preprocessAttachment(
 }
 
 /**
- * Modo Visão (agent-driven): persiste a descrição retornada pela tool
- * describe_image no TextPart placeholder da mensagem do usuário. A ToolPart da
- * chamada nunca é reenviada em turnos futuros (ver toModelMessages) — o texto
- * aqui deixa o histórico autossuficiente, como no fluxo antigo de descrição
- * automática. Usa objeto NOVO (o MessageItem é memoizado por referência na UI).
+ * Vision mode (agent-driven): persists the description returned by the
+ * describe_image tool in the message's placeholder TextPart. The call's
+ * ToolPart is never resent in future turns (see toModelMessages) — the text
+ * here leaves the history self-sufficient, as in the old automatic description
+ * flow. Uses a NEW object (the MessageItem is memoized by reference in the UI).
  */
 async function persistImageDescription(opts: {
   sessionId: string
@@ -1213,26 +1215,26 @@ async function persistImageDescription(opts: {
 }
 
 /**
- * Transcrição de um anexo de áudio (tool transcribe) gravada na NOTA do
- * anexo, como a descrição do modo Visão: a ToolPart não volta nos próximos
- * turnos, e sem isto o agente teria de transcrever de novo a cada pergunta
- * sobre o mesmo áudio. A nota segue com `source: 'attachment'` — o texto é
- * conteúdo do anexo, nunca aparece como fala do usuário na bolha.
+ * Transcript of an audio attachment (transcribe tool) written into the
+ * attachment's NOTE, as with the Vision mode description: the ToolPart does not come back in the
+ * next turns, and without this the agent would have to transcribe again on every question
+ * about the same audio. The note keeps `source: 'attachment'` — the text is
+ * attachment content, it never shows up as the user's speech in the bubble.
  *
- * Procura em todas as mensagens do usuário: o áudio pode ter chegado vários
- * turnos antes de alguém perguntar o que ele diz.
+ * It searches every user message: the audio may have arrived several
+ * turns before someone asks what it says.
  */
 async function persistAudioTranscript(opts: {
   sessionId: string
   audioId: string
-  /** O que entra na nota no lugar das instruções: a transcrição, ou onde ela está. */
+  /** What goes into the note instead of the instructions: the transcript, or where it is. */
   body: string
   history: ChatMessage[]
   win: BrowserWindow
 }): Promise<void> {
-  // O que identifica a nota é a MARCA estrutural (`source: attachment` + o ref
-  // do áudio), não o texto: comparar o começo da mensagem com um prefixo
-  // escrito à mão prendia a regra a um idioma.
+  // What identifies the note is the structural MARK (`source: attachment` + the audio
+  // ref), not the text: comparing the start of the message with a hand-written
+  // prefix tied the rule to a language.
   const marker = `ref ${opts.audioId}]`
   for (let m = opts.history.length - 1; m >= 0; m--) {
     const msg = opts.history[m]
@@ -1242,7 +1244,7 @@ async function persistAudioTranscript(opts: {
     )
     if (idx < 0) continue
     const part = msg.parts[idx] as TextPart
-    // Cabeçalho = a linha da referência e a do arquivo; o resto é substituído.
+    // Header = the reference line and the file line; the rest is replaced.
     const lines = part.text.split('\n')
     const head = lines.slice(0, lines[1]?.startsWith('File:') ? 2 : 1).join('\n')
     const text = `${head}\n${opts.body}`
@@ -1255,31 +1257,31 @@ async function persistAudioTranscript(opts: {
 }
 
 /**
- * Cabeçalho das anotações do engine quando elas entram na mensagem do
- * usuário: marca a fronteira entre o que o engine mediu e o que a pessoa
- * escreveu. Usa o prefixo "[SYSTEM:" de propósito — se o modelo copiar a
- * linha na resposta, stripEngineMarkers a remove junto com as demais.
+ * Header of the engine notes when they enter the user's
+ * message: it marks the boundary between what the engine measured and what the person
+ * wrote. It uses the "[SYSTEM:" prefix on purpose — if the model copies the
+ * line in the answer, stripEngineMarkers removes it along with the others.
  */
 const ENGINE_CONTEXT_HEADER =
   '[SYSTEM: engine bookkeeping about YOUR previous turn — measured from filesystem snapshots, not written by the user. Context only: never quote these lines in your reply.]'
 
 /**
- * Converte o histórico persistido em mensagens para o modelo (texto +
- * anexos do usuário). Havendo compactação, corta no último resumo: envia
- * resumo + mensagens posteriores; o histórico completo continua no storage.
+ * Turns the persisted history into messages for the model (text +
+ * the user's attachments). When there is compaction, it cuts at the last summary: it sends
+ * summary + later messages; the full history stays in storage.
  */
 export function toModelMessages(history: ChatMessage[], modelVision = true): ModelMessage[] {
   const lastSummary = findLastSummaryIndex(history)
   const window = lastSummary >= 0 ? history.slice(lastSummary) : history
   const result: ModelMessage[] = []
-  // Anotações do engine sobre o turno anterior do assistente (estado da TODO,
-  // registro verificado de arquivos, avisos). Ficam PENDENTES aqui e entram na
-  // próxima mensagem de usuário — nunca dentro do texto do próprio assistente.
+  // Engine notes about the assistant's previous turn (TODO state,
+  // verified record of files, warnings). They stay PENDING here and enter the
+  // next user message — never inside the assistant's own text.
   //
-  // Coladas no turno dele, essas linhas viram exemplo do seu próprio formato
-  // de resposta: num histórico longo o modelo passa a imitá-las e escreve
-  // "[Verified record: ...]" no texto que o usuário lê. Do lado do usuário
-  // elas são lidas pelo que são — contexto que o ambiente forneceu.
+  // Glued to its turn, those lines become an example of its own answer
+  // format: in a long history the model starts imitating them and writes
+  // "[Verified record: ...]" in the text the user reads. On the user's side
+  // they are read for what they are — context the environment provided.
   let pending: string[] = []
   const takePending = () => {
     if (pending.length === 0) return ''
@@ -1287,22 +1289,22 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     pending = []
     return notes
   }
-  // O turno corrente é a ÚLTIMA mensagem de usuário: é só nele que um anexo
-  // `turnOnly` (imagem de visão nativa) ainda vai como arquivo — nos turnos
-  // seguintes ele já foi visto, e o que continua valendo é a linha de
-  // referência em texto (ver modelFileParts em @shared/chat).
+  // The current turn is the LAST user message: it is only in it that a
+  // `turnOnly` attachment (native vision image) still goes as a file — in the
+  // following turns it has already been seen, and what still counts is the text
+  // reference line (see modelFileParts in @shared/chat).
   const currentTurn = window.map((m) => m.role).lastIndexOf('user')
   for (const [index, message] of window.entries()) {
     if (message.role === 'assistant') {
       const notes = engineAnnotations(message)
       if (notes) pending.push(notes)
-      // stripEngineMarkers cobre o histórico legado: mensagens gravadas antes
-      // deste saneamento podem trazer o marcador colado no próprio texto.
+      // stripEngineMarkers covers the legacy history: messages written before
+      // this cleanup may carry the marker glued to the text itself.
       const text = stripEngineMarkers(partText(message.parts, 'text'))
-      // Reenvia o raciocínio do assistente ao modelo: provedores com
-      // reasoning_content (ex: DeepSeek) exigem o texto de volta nos turnos
-      // seguintes. O campo é injetado via providerOptions por
-      // normalizeMessages (interleaved) — aqui só preservamos os parts.
+      // Resends the assistant's reasoning to the model: providers with
+      // reasoning_content (e.g. DeepSeek) require the text back in the
+      // following turns. The field is injected via providerOptions by
+      // normalizeMessages (interleaved) — here we only preserve the parts.
       const reasoning = message.parts
         .filter((p): p is ReasoningPart => p.type === 'reasoning')
         .map((p) => p.text)
@@ -1314,16 +1316,16 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
       result.push({ role: 'assistant', content })
       continue
     }
-    // ToolParts nunca são reenviados ao modelo fora do streaming da chamada
-    // que os gerou — o que sobrevive do turno anterior são as anotações.
+    // ToolParts are never resent to the model outside the streaming of the call
+    // that generated them — what survives from the previous turn are the notes.
     const text = [takePending(), partText(message.parts, 'text')]
       .filter((p) => p.trim())
       .join('\n\n')
-    // Chips (flag `chip`) são só decoração da UI — o conteúdo real já está no
-    // TextPart irmão extraído em preprocessAttachment; incluí-los aqui
-    // duplicaria uma nota vazia no lugar do texto já extraído. O `url !== ''`
-    // cobre chips antigos persistidos antes da flag existir, e `turnOnly` para
-    // de reenviar a imagem depois do turno em que ela chegou.
+    // Chips (`chip` flag) are only UI decoration — the real content is already in
+    // the sibling TextPart extracted in preprocessAttachment; including them here
+    // would duplicate an empty note in place of the already extracted text. `url !== ''`
+    // covers old chips persisted before the flag existed, and `turnOnly` stops
+    // resending the image after the turn in which it arrived.
     const files = modelFileParts(message.parts, index === currentTurn)
     if (message.role === 'user' && files.length > 0) {
       const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
@@ -1334,9 +1336,9 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     if (!text.trim()) continue
     result.push({ role: message.role, content: text })
   }
-  // Janela terminada em assistente (sem turno de usuário depois para carregar
-  // as anotações): entrega como mensagem de usuário para o registro verificado
-  // não sumir — é ele que sustenta a verificação anti-overclaim.
+  // Window ended on assistant (with no user turn after it to carry
+  // the notes): deliver it as a user message so the verified record
+  // does not disappear — it is what sustains the anti-overclaim check.
   const trailing = takePending()
   if (trailing.trim()) result.push({ role: 'user', content: trailing })
   return result
@@ -1347,15 +1349,19 @@ const NAMING_SYSTEM =
   'Rules: no bold, no asterisks, no quotes, no emojis and no formatting of any kind; at most 50 characters. ' +
   'Reply with ONLY the final title, nothing else.'
 
-/** Títulos com que toda sessão nasce — o sinal de que ninguém a nomeou ainda. */
+/** Titles every session is born with — the sign that nobody named it yet. */
 function isDefaultTitle(title: string): boolean {
-  return title === 'Nova conversa' || title === 'Nova sessão de código'
+  // Every language counts: the title was written in the language of the moment and
+  // the session may predate a language switch.
+  return (['chat.defaultTitle.chat', 'chat.defaultTitle.code'] as const).some((key) =>
+    (Object.values(MESSAGES[key]) as string[]).includes(title),
+  )
 }
 
 /**
- * Título que aparece ANTES de qualquer modelo responder: a própria mensagem já
- * diz do que se trata, e um comando (`/init`) não serve de título — aí a pista
- * é o nome do projeto. Sem texto, sobra o nome do anexo.
+ * Title that appears BEFORE any model answers: the message itself already
+ * says what it is about, and a command (`/init`) does not serve as a title — then the
+ * hint is the project name. Without text, the attachment name is left.
  */
 function provisionalTitle(input: SendMessageInput): string {
   if (input.text.trim().startsWith('/')) {
@@ -1365,9 +1371,9 @@ function provisionalTitle(input: SendMessageInput): string {
 }
 
 /**
- * O que vai ao modelo de título. Só a mensagem do usuário entra aqui — a
- * resposta nunca entrou, e é justamente por isso que o título pode ser gerado
- * em paralelo com o turno em vez de esperar ele terminar.
+ * What goes to the title model. Only the user message enters here — the
+ * answer never did, and that is exactly why the title can be generated
+ * in parallel with the turn instead of waiting for it to end.
  */
 function namingPrompt(input: SendMessageInput, projectName: string | null): string {
   const text = input.text.trim()
@@ -1383,7 +1389,7 @@ function namingPrompt(input: SendMessageInput, projectName: string | null): stri
     .map((file) => file.filename as string)
     .slice(0, 5)
   const attached = names.length > 0 ? `\n\nAttached files: ${names.join(', ')}` : ''
-  // Só anexo: com o prompt vazio o chat ficava para sempre no título padrão.
+  // Attachment only: with the empty prompt the chat stayed on the default title forever.
   if (!text) {
     return names.length > 0
       ? `The user sent files with no message yet. Name the conversation after what the files are about.${attached}`
@@ -1392,12 +1398,12 @@ function namingPrompt(input: SendMessageInput, projectName: string | null): stri
   return text.slice(0, 2000) + attached
 }
 
-/** Grava o título e propaga. A escrita vem ANTES do evento: os `session`
- *  seguintes releem do disco e, sem ela, o título reverte na troca seguinte. */
+/** Writes the title and propagates. The write comes BEFORE the event: the following
+ *  `session` ones re-read from disk and, without it, the title reverts on the next switch. */
 async function applySessionTitle(win: BrowserWindow, sessionId: string, title: string) {
-  // Relê antes de gravar: o título leva segundos e a sessão pode ter mudado
-  // nesse meio-tempo (ex.: o agente trocou o chat de worktree) — gravar a
-  // cópia lida antes desfaria a mudança.
+  // Re-reads before writing: the title takes seconds and the session may have changed
+  // in the meantime (e.g. the agent moved the chat to another worktree) — writing the
+  // copy read earlier would undo the change.
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!session) return
   await writeJson(StorageKeys.session(sessionId), { ...session, title })
@@ -1406,15 +1412,15 @@ async function applySessionTitle(win: BrowserWindow, sessionId: string, title: s
 }
 
 /**
- * Nomeia a conversa no INÍCIO do primeiro turno, em duas camadas:
+ * Names the conversation at the START of the first turn, in two layers:
  *
- * 1. o título provisório sai da própria mensagem, sem modelo, em milissegundos
- *    — a sidebar para de dizer "Nova conversa" antes de o agente começar;
- * 2. o modelo auxiliar refina em segundo plano, junto com o turno.
+ * 1. the provisional title comes from the message itself, without a model, in milliseconds
+ *    — the sidebar stops saying "New conversation" before the agent starts;
+ * 2. the auxiliary model refines it in the background, along with the turn.
  *
- * Antes isto rodava no FIM do turno (`void generateTitle(...)` depois do
- * `status: idle`): num turno de vários minutos o chat ficava o tempo todo sem
- * nome, embora o prompt nunca tenha usado a resposta.
+ * Before, this ran at the END of the turn (`void generateTitle(...)` after
+ * `status: idle`): in a turn of several minutes the chat stayed the whole time without
+ * a name, even though the prompt never used the answer.
  */
 export async function startSessionNaming(
   win: BrowserWindow,
@@ -1425,21 +1431,21 @@ export async function startSessionNaming(
     const session =
       knownSession ?? (await readJson<SessionInfo>(StorageKeys.session(input.sessionId)))
     if (!session) return
-    // Rotina nasce com "<rotina> — <horário>" e worker com o título da tarefa:
-    // nenhum dos dois é uma conversa que a pessoa está nomeando.
-    if (session.routineId || session.orchestration?.role === 'worker') return
-    // Título já decidido (modelo ou renomeação manual): não é mais a primeira.
+    // A routine session is born with "<routine> — <time>" and a worker with the
+    // task title: neither is a conversation the person is naming.
+    if (session.routineId || isRoutineSessionId(session.id) || session.orchestration?.role === 'worker') return
+    // Title already decided (model or manual rename): it is no longer the first.
     if (!isDefaultTitle(session.title)) return
 
     const provisional = provisionalTitle(input)
     if (provisional) await applySessionTitle(win, input.sessionId, provisional)
     void refineSessionTitle(win, input, provisional)
   } catch {
-    // título é cosmético; falha silenciosa
+    // the title is cosmetic; silent failure
   }
 }
 
-/** Camada 2: o modelo auxiliar, em paralelo com o turno. */
+/** Layer 2: the auxiliary model, in parallel with the turn. */
 async function refineSessionTitle(
   win: BrowserWindow,
   input: SendMessageInput,
@@ -1460,22 +1466,22 @@ async function refineSessionTitle(
     })
     const projectName = input.directory ? basename(input.directory) : null
     const isCommand = input.text.trim().startsWith('/')
-    // Comando (`/init` etc.) não serve de título; aí a reserva é o projeto.
+    // A command (`/init` etc.) does not serve as a title; then the fallback is the project.
     const fallback = isCommand
       ? (projectName ?? '')
       : titleFromUserText(input.text) || titleFromAttachmentNames(input.files) || provisional
     const title = resolveTitle(text, fallback)
     if (!title) return
 
-    // Comparação antes de gravar: enquanto o modelo pensava, a pessoa pode ter
-    // renomeado o chat. Se o título em disco já não é o provisório que
-    // escrevemos (nem o padrão), a decisão é dela — não sobrescreve.
-    const atual = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
-    if (!atual || atual.title === title) return
-    if (atual.title !== provisional && !isDefaultTitle(atual.title)) return
+    // Comparison before writing: while the model was thinking, the person may have
+    // renamed the chat. If the title on disk is no longer the provisional one we
+    // wrote (nor the default), the decision is theirs — it does not overwrite.
+    const current = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
+    if (!current || current.title === title) return
+    if (current.title !== provisional && !isDefaultTitle(current.title)) return
     await applySessionTitle(win, input.sessionId, title)
   } catch {
-    // título é cosmético; falha silenciosa
+    // the title is cosmetic; silent failure
   }
 }
 
@@ -1487,17 +1493,17 @@ const SUGGESTION_SYSTEM =
   'If there is no obvious next step, reply with an empty line.'
 
 /**
- * Sugestão de continuidade ao FIM do turno.
+ * Continuity suggestion at the END of the turn.
  *
- * A compactação automática roda no INÍCIO do turno, antes da resposta — um
- * card ali apareceria no lugar do que a pessoa acabou de pedir. Aqui o usage
- * real do turno já é conhecido e não há turno rodando, que é exatamente o que
- * a compactação manual exige (compactSession recusa durante um turno).
+ * Automatic compaction runs at the START of the turn, before the answer — a
+ * card there would appear in place of what the person just asked for. Here the turn's
+ * real usage is already known and there is no turn running, which is exactly what
+ * manual compaction requires (compactSession refuses during a turn).
  *
- * Só sugere a partir de `compactSuggestionAfter` resumos: uma ou duas
- * compactações funcionam bem; da terceira em diante o resumo já é um resumo de
- * resumo e o começo da conversa se perde. É uma OFERTA — ignorada, a
- * compactação automática do próximo turno roda como sempre.
+ * It only suggests from `compactSuggestionAfter` summaries on: one or two
+ * compactions work well; from the third on the summary is already a summary of a
+ * summary and the beginning of the conversation is lost. It is an OFFER — ignored, the
+ * automatic compaction of the next turn runs as always.
  */
 async function maybeSuggestCompaction(
   win: BrowserWindow,
@@ -1508,9 +1514,9 @@ async function maybeSuggestCompaction(
 ) {
   const { autoCompact, compactSuggestionAfter } = getAppSettings()
   if (!compactSuggestionAfter) return
-  // Rotina não tem ninguém para decidir nada: o card só ficaria parado.
+  // A routine has nobody to decide anything: the card would just sit there.
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
-  if (!session || session.routineId) return
+  if (!session || session.routineId || isRoutineSessionId(session.id)) return
   const summaries = countSummaries(history)
   if (summaries < compactSuggestionAfter) return
   const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
@@ -1521,15 +1527,15 @@ async function maybeSuggestCompaction(
 }
 
 /**
- * Brief de continuidade para um chat novo (a partir do card de compactação).
- * Lê o histórico do disco — o renderer não tem a cópia — e devolve o texto já
- * com o cabeçalho de resumo, que é como o novo chat o recebe: uma mensagem
- * `summary: true` gerada pelo agente, não uma fala do usuário.
+ * Continuity brief for a new chat (from the compaction card).
+ * It reads the history from disk — the renderer does not have the copy — and returns the
+ * text already with the summary header, which is how the new chat receives it: a
+ * `summary: true` message generated by the agent, not a line of the user.
  */
 export async function continuationBrief(
   sessionId: string,
 ): Promise<{ title: string; text: string } | null> {
-  // Turno rodando teria a própria cópia do histórico e gravaria por cima.
+  // A running turn would have its own copy of the history and would overwrite it.
   if (abortControllers.has(sessionId)) return null
   const history = await loadMessages(sessionId)
   const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant' && m.providerId)
@@ -1545,25 +1551,25 @@ export async function continuationBrief(
     const brief = await generateContinuationBrief(history, aux.model, aux.providerOptions)
     if (!brief) return null
     return {
-      title: `${session?.title ?? 'Conversa'} — continuação`,
+      title: `${session?.title ?? 'Conversation'} — continuation`,
       text: `${SUMMARY_PREFIX}\n\n${brief}`,
     }
   } catch (err) {
-    console.error('[continuation] brief falhou:', err)
+    console.error('[continuation] brief failed:', err)
     return null
   }
 }
 
 /**
- * Próxima mensagem provável do usuário, com o modelo auxiliar. Cosmética como
- * o título: qualquer falha só significa não mostrar sugestão.
+ * Next likely user message, with the auxiliary model. Cosmetic like
+ * the title: any failure only means not showing a suggestion.
  */
 async function generateSuggestion(input: SendMessageInput, reply: ChatMessage, win: BrowserWindow) {
   try {
     const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
     if (!session || session.routineId) return
     const answer = reply.parts
-      // Texto com `source` é do engine (nudges, checklist) ou de anexo — não é resposta.
+      // Text with `source` is from the engine (nudges, checklist) or from an attachment — it is not an answer.
       .filter((p): p is TextPart => p.type === 'text' && !p.source)
       .map((p) => p.text)
       .join('\n')
@@ -1579,16 +1585,16 @@ async function generateSuggestion(input: SendMessageInput, reply: ChatMessage, w
     const suggestion = text.trim().split('\n')[0].replace(/^["'“]|["'”]$/g, '').trim().slice(0, 200)
     if (suggestion) emit(win, { type: 'suggestion', sessionId: input.sessionId, text: suggestion })
   } catch {
-    // sugestão é cosmética; falha silenciosa
+    // the suggestion is cosmetic; silent failure
   }
 }
 
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
-  // O overlay é uma janela à parte: sem este repasse, um turno pedido pelo
-  // painel (⇧⌘espaço) transmitiria só para a janela principal, e o painel
-  // ficaria mudo esperando a resposta. Evita o envio duplo quando a origem já
-  // é ele mesmo.
+  // The overlay is a separate window: without this forwarding, a turn requested by the
+  // panel (⇧⌘space) would stream only to the main window, and the panel
+  // would stay mute waiting for the answer. It avoids the double send when the origin
+  // is itself.
   if (win !== getOverlayWindow()) forwardToOverlay('chat:event', event)
   forwardChatEvent(event)
 }
@@ -1596,21 +1602,21 @@ function emit(win: BrowserWindow, event: ChatEvent) {
 export function abortChat(sessionId: string) {
   const cmd = activeBashCommands.get(sessionId)
   console.log(
-    `[chat] abort da sessão ${sessionId}${cmd ? ` — comando bash ativo: ${cmd}` : ''}`,
+    `[chat] abort of session ${sessionId}${cmd ? ` — active bash command: ${cmd}` : ''}`,
   )
   abortControllers.get(sessionId)?.abort()
 }
 
-/** Sessões com um runChat em andamento — o main re-emite o status após um
- *  reload do renderer, para a UI voltar a mostrar spinner/botão de parar. */
+/** Sessions with a runChat in progress — the main re-emits the status after a
+ *  renderer reload, so the UI goes back to showing the spinner/stop button. */
 export function getRunningSessionIds(): string[] {
   return [...abortControllers.keys()]
 }
 
-/** Enviar mensagem = atividade: atualiza o updatedAt da sessão e propaga o
- *  evento "session" para todas as janelas e o mobile. Sem esse evento o store
- *  do renderer nunca vê o novo updatedAt e a sidebar não reordena — o chat
- *  não sobe para o topo dos recentes (nem a pasta que o contém). */
+/** Sending a message = activity: it updates the session's updatedAt and propagates the
+ *  "session" event to every window and to mobile. Without that event the renderer
+ *  store never sees the new updatedAt and the sidebar does not reorder — the chat
+ *  does not rise to the top of recents (nor does the folder that contains it). */
 async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promise<void> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!session) return
@@ -1620,11 +1626,11 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 }
 
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  // O diário de mídia do turno (peças e galeria) é o que deixa o revert da
-  // mensagem desfazer o que o agente produziu fora da pasta de trabalho.
-  // O diário de escrita registra o que as tools do turno gravaram na pasta
-  // de trabalho: é a autoria que o revert usa, sem depender de nenhum outro
-  // turno estar parado. Duas conversas na mesma pasta rodam em paralelo.
+  // The turn's media journal (pieces and gallery) is what lets the message
+  // revert undo what the agent produced outside the working folder.
+  // The write journal records what the turn's tools wrote in the working
+  // folder: it is the ownership the revert uses, without depending on any other
+  // turn being stopped. Two conversations in the same folder run in parallel.
   return runWithWriteScope(() =>
     withProviderSession(input.sessionId, () =>
       runWithMediaJournal(input.sessionId, () => runChatTurn(win, input)),
@@ -1634,6 +1640,16 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
 async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   const { sessionId } = input
+  // Instrumentation (ORBIT_PERF=1): one record per turn with its duration, the
+  // steps it took and the memory peak seen while it was open. A turn of a worker
+  // is a single 30-70 minute window, so the peak — not the average — is the number
+  // that explains the machine.
+  const perf = perfSpan('turn', {
+    sessionId,
+    role: input.orchestrationRole ?? 'user',
+    mode: input.mode,
+    rounds: input.options.retries ?? 0,
+  })
   abortControllers.get(sessionId)?.abort()
   const controller = new AbortController()
   abortControllers.set(sessionId, controller)
@@ -1641,33 +1657,33 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   emit(win, { type: 'status', sessionId, status: 'submitted' })
   await bumpSessionActivity(win, sessionId)
 
-  // Revert ativo: nova mensagem consolida o revert — descarta as mensagens
-  // posteriores ao ponto revertido antes de carregar o histórico
+  // Revert active: a new message consolidates the revert — it discards the messages
+  // after the reverted point before loading the history
   try {
     await cleanupRevert(sessionId)
   } catch (err) {
-    console.error('[revert] cleanup falhou:', err)
+    console.error('[revert] cleanup failed:', err)
   }
 
   const history = await loadMessages(sessionId)
 
-  // Retry ("tentar novamente"): o turno roda DE NOVO sobre a mesma mensagem do
-  // usuário, em vez de mandar uma nova. A resposta que falhou sai do histórico
-  // — o erro já apareceu no card, e mantê-la deixava a conversa com uma bolha
-  // repetida e um card de erro permanente (cada retry empilhava mais um).
-  // O que o modelo precisa saber da tentativa anterior vai na nota, não no
-  // histórico (ver session/retry-note.ts).
+  // Retry ("try again"): the turn runs AGAIN over the same user
+  // message, instead of sending a new one. The answer that failed leaves the history
+  // — the error already showed in the card, and keeping it left the conversation with a
+  // repeated bubble and a permanent error card (each retry stacked one more).
+  // What the model needs to know about the previous attempt goes in the note, not in
+  // the history (see session/retry-note.ts).
   let retriedUser: ChatMessage | null = null
   let retriedFailed: ChatMessage | null = null
   let retryNote = ''
   if (input.retryOf) {
     const failedIndex = history.findIndex((m) => m.id === input.retryOf)
     const failed = failedIndex >= 0 ? history[failedIndex] : undefined
-    // Só a última resposta pode ser refeita: refazer uma do meio descartaria o
-    // que veio depois dela, que o usuário quis manter.
+    // Only the last answer can be redone: redoing one in the middle would discard
+    // what came after it, which the user wanted to keep.
     if (failed?.role === 'assistant' && failedIndex === history.length - 1) {
       retriedUser = [...history.slice(0, failedIndex)].reverse().find((m) => m.role === 'user') ?? null
-      // Sem a mensagem do usuário não há turno a refazer: cai no envio normal.
+      // Without the user message there is no turn to redo: it falls back to the normal send.
       if (retriedUser) {
         retriedFailed = failed
         retryNote = retryContextNote(failed)
@@ -1678,18 +1694,18 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
   }
 
-  // Rotação de modelos: sequência resolvida no momento da chamada (ver
-  // model-rotation.ts) — rotação escolhida no seletor para este chat; senão
-  // o modelo pinado no chat; senão o default. `primaryModel` abaixo é o
-  // primeiro da lista — usado no preprocess de anexos (decisão de visão) e
-  // como fallback do loop de tentativas.
+  // Model rotation: the sequence is resolved at call time (see
+  // model-rotation.ts) — the rotation chosen in the selector for this chat; otherwise
+  // the model pinned in the chat; otherwise the default. `primaryModel` below is the
+  // first of the list — used in attachment preprocessing (vision decision) and
+  // as a fallback of the attempts loop.
   const rotationSequence = resolveRotation(input.sessionId, {
     providerId: input.providerId,
     modelId: input.modelId,
   })
   const primaryModel = rotationSequence[0] ?? { providerId: input.providerId, modelId: input.modelId }
 
-  // Comando /compact — compacta o histórico e não gera resposta do modelo
+  // /compact command — compacts the history and does not generate a model answer
   if (input.text.trim() === '/compact') {
     try {
       const aux = await resolveAuxModel(
@@ -1706,26 +1722,26 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         emit(win, { type: 'messages', sessionId, messages: history })
       }
     } catch (err) {
-      console.error('[compaction] /compact falhou:', err)
+      console.error('[compaction] /compact failed:', err)
     }
     return
   }
 
-  // A mensagem do usuário é emitida ANTES do pré-processamento dos anexos:
-  // o preprocess de imagem com o modo Visão chama o modelo de visão (rede,
-  // pode levar dezenas de segundos) — emitir só depois deixava a UI muda
-  // (chat novo preso na tela vazia, chat existente sem a mensagem) até o
-  // agente responder. O primeiro emit traz os anexos originais (data URL), o
-  // segundo (após o preprocess) substitui pelos chips processados.
+  // The user message is emitted BEFORE the attachment preprocessing:
+  // the image preprocess with Vision mode calls the vision model (network,
+  // can take tens of seconds) — emitting only afterwards left the UI mute
+  // (a new chat stuck on the empty screen, an existing chat without the message) until the
+  // agent answered. The first emit carries the original attachments (data URL), the
+  // second (after the preprocess) replaces them with the processed chips.
   const textPart: TextPart = {
     id: newId('prt'),
     type: 'text',
     text: input.text,
     state: 'done',
   }
-  // Retry reusa a mensagem do usuário que já está no histórico: é o que evita a
-  // bolha duplicada e devolve ao turno os anexos originais (o retry manda só o
-  // texto — os parts processados continuam valendo os mesmos).
+  // Retry reuses the user message that is already in the history: it is what avoids the
+  // duplicated bubble and gives the turn back the original attachments (the retry sends only
+  // the text — the processed parts still count as the same ones).
   let userMessage: ChatMessage
   if (retriedUser) {
     userMessage = retriedUser
@@ -1735,12 +1751,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       role: 'user',
       parts: [...(input.files ?? []), textPart],
       createdAt: Date.now(),
-      // Metadados do turno persistidos na mensagem do usuário — a tool
-      // session_context os lê para responder "o que foi alterado no turno X?"
+      // Turn metadata persisted in the user message — the
+      // session_context tool reads them to answer "what changed in turn X?"
       mode: input.mode,
       permissionMode: input.options.permissionMode ?? 'ask',
-      // orchestrationRole só é preenchido pelo main: num worker, quem mandou foi
-      // o orquestrador. Sem a marca, foi o usuário digitando no chat do worker.
+      // orchestrationRole is only filled by the main process: in a worker, what
+      // sent it was the orchestrator. Without the mark, it was the user typing in
+      // the worker's chat.
       origin: input.orchestrationRole === 'worker' ? 'orchestrator' : undefined,
     }
     history.push(userMessage)
@@ -1754,8 +1771,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     createdAt: Date.now(),
     providerId: input.providerId,
     modelId: input.modelId,
-    // Retry mantém a apresentação do turno original: o envio do retry não
-    // carrega as opções (só texto), e trocar de estilo no meio surpreenderia.
+    // Retry keeps the presentation of the original turn: the retry send does not
+    // carry the options (text only), and switching style midway would be surprising.
     simple: (retriedFailed?.simple || input.options.simple) || undefined,
   }
   history.push(assistantMessage)
@@ -1763,21 +1780,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   await saveMessages(sessionId, history)
   emit(win, { type: 'message', sessionId, message: assistantMessage })
 
-  // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
-  // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
-  // independente da pasta de trabalho selecionada (as tools read/glob/bash só
-  // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
-  // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
-  // delega para o modelo de visão configurado (modo Visão) — sob demanda, via
-  // tool describe_image — ou vira aviso.
+  // Extracts text from attachments (PDF, spreadsheet, skill) before persisting — it avoids
+  // huge data URLs in the history and gives the agent access to the real content,
+  // regardless of the selected working folder (the read/glob/bash tools only
+  // see the filesystem, never the chat attachments — that is why the content
+  // has to enter as text in the message itself). Images: a model without vision
+  // delegates to the configured vision model (Vision mode) — on demand, through the
+  // describe_image tool — or becomes a warning.
   const files = input.files ?? []
   const provider = await getProvider(primaryModel.providerId)
   const modelVision = modelSupportsVision(provider, primaryModel.modelId)
-  // Registro das imagens do turno (modo Visão): a tool describe_image lê
-  // daqui sob demanda; vive só durante o turno (limpo no finally).
+  // Record of the turn's images (Vision mode): the describe_image tool reads
+  // from here on demand; it lives only during the turn (cleared in the finally).
   const turnImages: TurnImage[] = []
-  // Num retry os anexos já foram processados no turno original: reprocessar
-  // trocaria chips por data URLs de novo e duplicaria a nota extraída.
+  // In a retry the attachments were already processed in the original turn: reprocessing
+  // would swap the chips for data URLs again and duplicate the extracted note.
   if (!retriedUser && files.length > 0) {
     const processedParts: MessagePart[] = []
     for (const file of files) {
@@ -1791,8 +1808,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         userText: input.text,
       })))
     }
-    // Substitui a mensagem do usuário (objeto NOVO — o MessageItem é memoizado
-    // por referência) pelos anexos processados e re-emite.
+    // Replaces the user message (a NEW object — the MessageItem is memoized
+    // by reference) with the processed attachments and re-emits.
     const processedUserMessage: ChatMessage = { ...userMessage, parts: [...processedParts, textPart] }
     history[history.indexOf(userMessage)] = processedUserMessage
     await saveMessages(sessionId, history)
@@ -1802,12 +1819,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     registerTurnImages(sessionId, turnImages)
   }
 
-  // Ids de stream → id da part. O adaptador de vários provedores reusa os
-  // mesmos ids a cada passo do loop de ferramentas ("reasoning-0", "txt-0"), e
-  // o upsert por id fazia cada passo SOBRESCREVER a part do anterior: o
-  // raciocínio de 38 ações virava um bloco só no topo (o do último passo), e a
-  // resposta final ocupava o lugar da primeira narração, antes das ações que
-  // vieram depois. Cada start ganha um id próprio quando o do SDK já existe.
+  // Stream ids → part id. The multi-provider adapter reuses the
+  // same ids on every step of the tool loop ("reasoning-0", "txt-0"), and
+  // the upsert by id made each step OVERWRITE the previous part: the
+  // reasoning of 38 actions became a single block at the top (the last step's), and the
+  // final answer took the place of the first narration, before the actions that
+  // came later. Each start gets its own id when the SDK's already exists.
   const streamIds = new Map<string, string>()
   const startStreamPart = (sdkId: string): string => {
     let id = sdkId
@@ -1824,9 +1841,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     emit(win, { type: 'part', sessionId, messageId: assistantMessage.id, part })
   }
 
-  // Imagens inseridas NESTA resposta (show_image/image_edit/svg_*).
+  // Images inserted in THIS answer (show_image/image_edit/svg_*).
   const turnMediaUrls = new Set<string>()
-  // Proveniência do turno: filho → pai, e o que o agente marcou como entrega.
+  // Turn provenance: child → parent, and what the agent marked as a delivery.
   const turnParents = new Map<string, string>()
   const turnKeep = new Set<string>()
 
@@ -1840,16 +1857,16 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     if (assistantMessage.parts.length !== before) {
       emit(win, { type: 'message', sessionId, message: assistantMessage })
     }
-    // Imagem apagada de um turno ANTERIOR: sem tirar a parte do histórico, a
-    // conversa ficaria com um quadrado quebrado onde havia uma foto.
-    let mexeuNoHistorico = false
+    // Image deleted from a PREVIOUS turn: without removing the part from the history, the
+    // conversation would keep a broken square where there was a photo.
+    let touchedHistory = false
     for (const msg of history) {
       if (msg.id === assistantMessage.id) continue
-      const antes = msg.parts.length
+      const before = msg.parts.length
       msg.parts = msg.parts.filter((p) => !(p.type === 'image' && set.has(p.src)))
-      if (msg.parts.length !== antes) mexeuNoHistorico = true
+      if (msg.parts.length !== before) touchedHistory = true
     }
-    if (mexeuNoHistorico) {
+    if (touchedHistory) {
       void saveMessages(sessionId, history)
       emit(win, { type: 'messages', sessionId, messages: history })
     }
@@ -1865,34 +1882,34 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 
   /**
-   * Rascunhos do turno somem no fim da resposta: do disco, da galeria e da
-   * conversa. Quem decide é o runtime, porque é ele que tem o grafo das
-   * chamadas — pedir ao modelo que limpasse foi o desenho anterior, e ele
-   * falha justamente quando mais produz. A regra mora em selectDraftImages,
-   * com os dois formatos (escada e leque) e os testes deles.
+   * Drafts of the turn vanish at the end of the answer: from disk, from the gallery and
+   * from the conversation. The runtime is what decides, because it has the graph of the
+   * calls — asking the model to clean up was the previous design, and it
+   * fails exactly when it produces the most. The rule lives in selectDraftImages,
+   * with both formats (ladder and fan) and their tests.
    */
   const purgeDraftImages = async () => {
-    const rascunhos = selectDraftImages({
+    const drafts = selectDraftImages({
       produced: turnMediaUrls,
       parents: turnParents,
       keep: turnKeep,
     })
-    if (rascunhos.length === 0) return
-    const apagadas: string[] = []
-    for (const url of rascunhos) {
+    if (drafts.length === 0) return
+    const deleted: string[] = []
+    for (const url of drafts) {
       const id = mediaIdFromUrl(url)
-      if (id && (await deleteMedia(id))) apagadas.push(url)
+      if (id && (await deleteMedia(id))) deleted.push(url)
     }
-    if (apagadas.length > 0) removeImageParts(apagadas)
+    if (deleted.length > 0) removeImageParts(deleted)
   }
 
-  // Passos concluídos na tentativa em andamento (todas as iterações de
-  // auto-continue). Distingue o estouro de contexto do histórico (a primeira
-  // chamada já falha) do estouro do trabalho do turno (falha depois de N
-  // passos) — os remédios são outros.
+  // Completed steps in the attempt in progress (all the iterations of
+  // auto-continue). It distinguishes the context overflow of the history (the first
+  // call already fails) from the overflow of the turn's work (it fails after N
+  // steps) — the remedies are different.
   let turnSteps = 0
-  // Último tamanho de contexto enviado ao medidor nesta tentativa: a
-  // estimativa pré-envio só sai quando passa dele.
+  // Last context size sent to the meter in this attempt: the
+  // pre-send estimate only goes out when it passes it.
   let lastContextInput = 0
   const emitContext = (
     input: number,
@@ -1904,21 +1921,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 
   try {
-    // Loop de tentativas da rotação: cada tentativa usa o próximo modelo da
-    // sequência. Só rotaciona falha recuperável (rate-limit/rede/moderação/
-    // modelo indisponível) ANTES do primeiro token; abort e erros finais caem
-    // no catch externo (comportamento atual).
+    // Rotation attempts loop: each attempt uses the next model of the
+    // sequence. It only rotates a recoverable failure (rate-limit/network/moderation/
+    // model unavailable) BEFORE the first token; abort and final errors fall
+    // into the outer catch (current behavior).
     let attemptIndex = 0
-    // Rodadas extras do turno inteiro (sequência da rotação de novo do início)
-    // para falha transitória. Acontecem dentro do MESMO turno: a mensagem do
-    // usuário não é reenviada, e o chat só mostra o erro se todas falharem.
+    // Extra rounds of the whole turn (rotation sequence from the start again)
+    // for a transient failure. They happen inside the SAME turn: the user
+    // message is not resent, and the chat only shows the error if all of them fail.
     const maxRetryRounds = Math.max(0, input.options.retries ?? 0)
     let retryRound = 0
     for (;;) {
       const primary = rotationSequence[attemptIndex] ?? primaryModel
-      // Registra o modelo desta tentativa na mensagem (badge "via X" e
-      // compactação usam ChatMessage.providerId/modelId) e zera o estado do
-      // turno deixado pela tentativa anterior.
+      // Records this attempt's model in the message (the "via X" badge and
+      // compaction use ChatMessage.providerId/modelId) and resets the turn
+      // state left by the previous attempt.
       assistantMessage.providerId = primary.providerId
       assistantMessage.modelId = primary.modelId
       assistantMessage.parts = []
@@ -1935,20 +1952,20 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const modelVision = modelSupportsVision(provider, primary.modelId)
         const catalogModel = provider?.models[primary.modelId]
         const supportsTools = catalogModel?.tool_call !== false
-        // Teto de passos e preparo de cada passo (corte de contexto, reasoning,
-        // cache — ver agent-step.ts) DESTE modelo: a rotação pode cair num
-        // modelo de janela menor, e o corte tem que acompanhar. Um preparador
-        // por tentativa: a memória do corte vale para o turno inteiro, inclusive
-        // as continuações abaixo, que reenviam as mesmas tool calls.
+        // Step ceiling and per-step preparation (context trimming, reasoning,
+        // cache — see agent-step.ts) for THIS model: the rotation may land on a
+        // model with a smaller window, and the trimming has to follow. One preparer
+        // per attempt: the trimming memory holds for the whole turn, including
+        // the continuations below, which resend the same tool calls.
         const maxSteps = maxStepsFor(catalogModel)
         const stepPreparer = createStepPreparer(provider, primary.modelId, { directory: input.directory })
 
-    // Compactação automática: os tokens reais da última resposta indicam que o
-    // contexto está perto do limite → resume o trecho antigo uma única vez.
-    // O usage reportado é o sinal preferido, mas não é confiável sozinho: há
-    // gateway que não devolve usage nenhum, e um turno que falhou não grava
-    // `tokens`. A medida do próprio histórico entra como piso — é exatamente o
-    // que será enviado, então não depende de o provedor colaborar.
+    // Automatic compaction: the real tokens of the last answer indicate that the
+    // context is near the limit → it summarizes the old stretch a single time.
+    // The reported usage is the preferred signal, but it is not reliable on its own: there are
+    // gateways that return no usage at all, and a turn that failed does not record
+    // `tokens`. The measure of the history itself enters as a floor — it is exactly what
+    // will be sent, so it does not depend on the provider cooperating.
     const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
     const historyTokens = estimateTokens(toModelMessages(history, modelVision))
     const { autoCompact } = getAppSettings()
@@ -1961,8 +1978,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         )
         const summary = await compactHistory(history, aux.model, aux.providerOptions)
         if (summary) {
-          // Zera .tokens das mensagens após o sumário — os tokens antigos
-          // refletiam o contexto cheio (pré-compactação) e inflariam o meter
+          // Clears .tokens of the messages after the summary — the old tokens
+          // reflected the full context (pre-compaction) and would inflate the meter
           const lastSummary = findLastSummaryIndex(history)
           for (let i = lastSummary + 1; i < history.length; i++) {
             history[i].tokens = undefined
@@ -1971,15 +1988,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           emit(win, { type: 'messages', sessionId, messages: history })
         }
       } catch (err) {
-        // compactação é otimização — nunca derruba o turno
-        console.error('[compaction] falhou:', err)
+        // compaction is an optimization — it never brings the turn down
+        console.error('[compaction] failed:', err)
       }
     }
 
-    // Snapshot do turno em andamento: preenchido pela captura inicial abaixo e
-    // exposto às tools via getTurnSnapshot — leitura por closure porque a
-    // captura acontece DEPOIS da criação do context (verify_changes difere o
-    // estado atual contra este start).
+    // Snapshot of the turn in progress: filled by the initial capture below and
+    // exposed to the tools via getTurnSnapshot — read through a closure because the
+    // capture happens AFTER the creation of the context (verify_changes diffs the
+    // current state against this start).
     let turnSnapshot: TurnSnapshot | undefined
     let turnStartedAt = Date.now()
     const toolContext: ToolContext | null =
@@ -1990,38 +2007,38 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             extraDirectories: input.extraDirectories ?? [],
             abort: controller.signal,
             getTurnSnapshot: () => turnSnapshot,
-            // Visão do modelo: decide se o panel_screenshot oferece `ver`;
-            // visionModel delega a descrição quando o modelo não tem visão
+            // Model vision: it decides whether panel_screenshot offers `ver`;
+            // visionModel delegates the description when the model has no vision
             modelVision,
             visionModel: input.visionModel,
           }
         : null
 
-    // Snapshot start: estado do filesystem antes do stream (revert per-message)
+    // Snapshot start: filesystem state before the stream (per-message revert)
     if (toolContext) {
-      // Saves manuais contam a partir DAQUI: o que a pessoa salvou antes já
-      // está dentro do `start` e nunca apareceria no diff.
+      // Manual saves count from HERE on: what the person saved before is already
+      // inside the `start` and would never show up in the diff.
       turnStartedAt = Date.now()
       try {
         turnSnapshot = { start: await capture(toolContext.directory) }
         assistantMessage.snapshot = { start: turnSnapshot.start }
       } catch (err) {
-        // Não esconder a falha: grava snapshot marcado como failed (sem start,
-        // motivo em captureError) — o revert de filesystem fica indisponível e
-        // a UI/ferramentas precisam saber por quê, em vez de um turno que
-        // parece ter snapshot normalmente.
+        // Do not hide the failure: it records a snapshot marked as failed (no start,
+        // reason in captureError) — the filesystem revert is unavailable and
+        // the UI/tools need to know why, instead of a turn that
+        // looks like it had a snapshot normally.
         const reason = errorToText(err)
         turnSnapshot = { failed: true, error: reason }
         assistantMessage.snapshot = { failed: true, captureError: reason }
-        console.error('[snapshot] captura inicial falhou:', reason, {
+        console.error('[snapshot] initial capture failed:', reason, {
           directory: toolContext.directory,
         })
       }
     }
 
-    // initMode: pipeline de análise de projeto renderizado como acordeons —
-    // o agente principal (narração da revisão) em cima e um acordeon por
-    // subagent streamando a exploração; no fim todos fecham e fica o resumo
+    // initMode: project analysis pipeline rendered as accordions —
+    // the main agent (review narration) on top and one accordion per
+    // subagent streaming the exploration; in the end they all close and the summary stays
     if (input.options.initMode && toolContext) {
       emit(win, { type: 'status', sessionId, status: 'streaming' })
 
@@ -2076,7 +2093,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           part.state = ok ? 'done' : 'error'
           part.durationMs = Date.now() - (startedAt.get(area) ?? Date.now())
           upsertPart(part)
-          // Persistência incremental: cada área concluída não se perde num crash
+          // Incremental persistence: each completed area is not lost in a crash
           void saveMessages(sessionId, history)
         },
       }
@@ -2091,8 +2108,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           force: input.text.includes('--force'),
           hooks,
           language: input.language,
-          // Sem isto o botão de parar encerrava só a UI: o pipeline continuava
-          // rodando os subagents até o fim, invisível.
+          // Without this the stop button only ended the UI: the pipeline kept
+          // running the subagents to the end, invisible.
           signal: controller.signal,
         })
         mainPart.state = 'done'
@@ -2114,8 +2131,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         upsertPart({
           id: newId('prt'),
           type: 'text',
-          // Cancelar é uma escolha do usuário, não uma falha. A árvore só é
-          // gravada no fim, depois da revisão, então nada ficou pela metade.
+          // Canceling is the user's choice, not a failure. The tree is only
+          // written at the end, after the review, so nothing was left half-done.
           text: cancelled
             ? await mainT('init.cancelled')
             : `${await mainT('init.failed.title')}\n\n${errorToText(err)}\n\n${await mainT('init.failed.nothingSaved')}`,
@@ -2129,12 +2146,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
 
     /**
-     * Verificação de fim de turno: compara o filesystem contra o snapshot
-     * inicial. O resultado é DISCRIMINADO de propósito — antes, "nada mudou" e
-     * "a captura falhou" retornavam ambos undefined, e um erro de git ficava
-     * indistinguível de um turno que não escreveu nada. Como isso agora
-     * alimenta o registro enviado ao modelo, confundir os dois faria o engine
-     * afirmar "nenhum arquivo alterado" sem ter verificado.
+     * End-of-turn check: it compares the filesystem against the initial
+     * snapshot. The result is DISCRIMINATED on purpose — before, "nothing changed" and
+     * "the capture failed" both returned undefined, and a git error was
+     * indistinguishable from a turn that wrote nothing. Since this now
+     * feeds the record sent to the model, confusing the two would make the engine
+     * claim "no file changed" without having checked.
      */
     const verifyTurn = async (): Promise<TurnVerification> => {
       const start = assistantMessage.snapshot?.start
@@ -2143,46 +2160,46 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const end = await capture(toolContext.directory)
         if (end === start) return { state: 'unchanged' }
         const changes = await diff(toolContext.directory, start, end)
-        // O snapshot é da PASTA, não do agente: o que a pessoa salvou à mão no
-        // painel durante o turno também entra no diff. Sem subtrair, o
-        // registro verificado credita ao modelo um arquivo que ele nunca
-        // tocou — e é essa linha que sustenta a verificação anti-overclaim.
+        // The snapshot is of the FOLDER, not of the agent: what the person saved by hand in
+        // the panel during the turn also enters the diff. Without subtracting it, the
+        // verified record credits to the model a file it never
+        // touched — and that is the line that sustains the anti-overclaim check.
         const notAgent = manualSavesUnder(toolContext.directory, turnStartedAt)
-        // E o que as tools de OUTRA conversa gravaram nesta pasta no mesmo
-        // intervalo — os turnos não se esperam mais, então o diff da pasta
-        // pode trazer o trabalho delas.
+        // And what the tools of ANOTHER conversation wrote in this folder in the same
+        // interval — turns no longer wait for each other, so the folder's diff
+        // may bring their work.
         const others = currentTurnWrites(toolContext.directory)?.others ?? []
         for (const file of changes.files) if (coveredBy(file, others)) notAgent.add(file)
         const files = notAgent.size > 0 ? changes.files.filter((f) => !notAgent.has(f)) : changes.files
-        // Só sobraram arquivos do usuário: do ponto de vista do turno, o
-        // agente não escreveu nada — que é exatamente o que 'unchanged' diz.
-        // O `end` vai junto porque a pasta MUDOU (saves manuais): o revert de
-        // um turno anterior precisa desta árvore para não restaurar em bloco.
+        // Only the user's files were left: from the turn's point of view, the
+        // agent wrote nothing — which is exactly what 'unchanged' says.
+        // The `end` goes along because the folder CHANGED (manual saves): the revert of
+        // a previous turn needs this tree so as not to restore in bulk.
         if (files.length === 0) return { state: 'unchanged', end }
         return {
           state: 'changed',
           end,
           files,
-          // O patch não é só bookkeeping: alimenta a aba Diff e a lista de
-          // arquivos do card. Filtrar só `files` deixaria o arquivo do usuário
-          // fora do registro e ainda visível na tela como obra do agente.
+          // The patch is not just bookkeeping: it feeds the Diff tab and the list of
+          // files in the card. Filtering only `files` would leave the user's file
+          // out of the record and still visible on screen as the agent's work.
           patch: notAgent.size > 0 ? stripFilesFromPatch(changes.patch, notAgent) : changes.patch,
         }
       } catch (err) {
-        console.error('[snapshot] captura final falhou:', err)
+        console.error('[snapshot] final capture failed:', err)
         return { state: 'unknown', error: errorToText(err) }
       }
     }
-    /** Veredito da última iteração do loop — reaproveitado após o break para
-     *  não capturar o snapshot duas vezes. */
+    /** Verdict of the last iteration of the loop — reused after the break so as
+     *  not to capture the snapshot twice. */
     let verification: TurnVerification | null = null
 
     const mode: PermissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = supportsTools
       ? createToolApproval(
-          // Turno do seletor global: trocar o modo no meio da resposta vale
-          // já na próxima ferramenta. Modo explícito (plano, rotina) fica fixo.
-          input.options.followGlobalPermission ? () => modoGlobal(input.sessionId, mode) : mode,
+          // Global selector turn: switching the mode mid-answer applies from
+          // the next tool on. Explicit mode (plan, routine) stays fixed.
+          input.options.followGlobalPermission ? () => globalMode(input.sessionId, mode) : mode,
           input.sessionId,
           toolContext?.directory ?? null,
           assistantMessage.id,
@@ -2192,16 +2209,16 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         )
       : undefined
 
-    // Mensagens para a PRIMEIRA chamada da rodada (histórico até a última
-    // mensagem do usuário). As continuações usam as mensagens de resposta
-    // acumuladas do turno anterior + a instrução de continuar (padrão do
-    // opencode: injetar uma "synthetic user message" e re-entrar no loop,
-    // com teto de tentativas por turno).
-    // Memórias do turno entram na MESMA mensagem do usuário, nunca no system
-    // prompt: o system é congelado por sessão para o cache de prefixo dos
-    // provedores, e mudá-lo a cada pergunta jogaria esse cache fora. O bloco é
-    // recuperado com a mensagem atual (e, se ela não se explica sozinha, com o
-    // turno anterior) — ver memory/retrieval.ts.
+    // Messages for the FIRST call of the round (history up to the last
+    // user message). The continuations use the accumulated answer messages
+    // of the previous turn + the instruction to continue (opencode's
+    // pattern: inject a "synthetic user message" and re-enter the loop,
+    // with a cap of attempts per turn).
+    // The turn's memories enter the SAME user message, never the system
+    // prompt: the system is frozen per session for the providers' prefix
+    // cache, and changing it on every question would throw that cache away. The block is
+    // retrieved with the current message (and, if it does not explain itself, with the
+    // previous turn) — see memory/retrieval.ts.
     const memoryBlock =
       input.options.brainContext && input.orchestrationRole !== 'worker'
         ? renderMemorySuggestions(
@@ -2210,18 +2227,18 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               mode: input.mode,
               directory: toolContext?.directory,
               recent: recentTurns(history),
-              // O que já está no bloco fixo do prompt não se repete aqui.
+              // What is already in the prompt's fixed block is not repeated here.
               exclude: promptMemoryIds(input.sessionId, input.mode, input.directory),
             }),
           )
         : ''
-    // Painel do atalho: pedido sobre a tela já chega com a janela lida em
-    // texto, e a conversa vai só com o fio recente (ver overlay/turn-context.ts).
+    // Shortcut panel: a request about the screen already arrives with the window read as
+    // text, and the conversation goes with only the recent thread (see overlay/turn-context.ts).
     const overlayScreen =
       input.options.overlay && wantsScreen(input.text) ? await readFrontWindowText(input.sessionId).catch(() => null) : null
     const goodWindowText = overlayScreen && 'text' in overlayScreen && !overlayScreen.poor ? overlayScreen.text : null
-    // Texto pobre (só moldura) ou janela ilegível: a imagem é o que sobra, e vai
-    // descrita por texto — o modelo do atalho não decide chamar a tool sozinho.
+    // Poor text (frame only) or an unreadable window: the image is what is left, and it goes
+    // described as text — the shortcut's model does not decide to call the tool on its own.
     const screenDescription =
       input.options.overlay && overlayScreen && !goodWindowText && input.visionModel
         ? await describeFrontScreen(input.visionModel, input.text, input.language).catch(() => null)
@@ -2235,8 +2252,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             description: screenDescription,
           })
         : '',
-      // Por último de propósito: é o que o modelo precisa ter lido mais
-      // recentemente antes de responder (ver session/retry-note.ts).
+      // Last on purpose: it is what the model needs to have read most
+      // recently before answering (see session/retry-note.ts).
       retryNote,
     ]
       .filter(Boolean)
@@ -2256,42 +2273,42 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
 
-    // Catálogo de tools sob demanda: o ToolSet real + as famílias. `null`
-    // quando o modelo não aceita tools — aí nada é recortado, o turno segue
-    // como antes (é também o fallback se o recorte for rejeitado).
-    const catalogo = supportsTools
-      ? construirCatalogo(input, toolContext, imageHooks, modelVision, win)
+    // Tool catalog on demand: the real ToolSet + the families. `null`
+    // when the model does not accept tools — then nothing is trimmed, the turn goes
+    // as before (it is also the fallback if the trimming is rejected).
+    const catalog = supportsTools
+      ? buildCatalog(input, toolContext, imageHooks, modelVision, win)
       : null
-    const nomesExistentes = catalogo ? new Set(Object.keys(catalogo.tools)) : new Set<string>()
-    // Auto-ativação determinística (`@mcp:<servidor>` na mensagem). As
-    // heurísticas frágeis do plano (anexo, "pasta com vídeo") entram só depois
-    // de medidas — sem número, elas devolvem tools ao "oi" de graça.
-    const autoFamilias = familiasMencionadasNoTexto(input.text ?? '', catalogo?.familias ?? [])
-    const ativasIniciais = catalogo
-      ? derivarAtivas(initialMessages, catalogo.familias, nomesExistentes, { auto: autoFamilias })
+    const existingNames = catalog ? new Set(Object.keys(catalog.tools)) : new Set<string>()
+    // Deterministic self-activation (`@mcp:<server>` in the message). The
+    // plan's fragile heuristics (attachment, "folder with video") only enter afterwards
+    // of measurement — without a number, they give tools back on a "hi" for free.
+    const autoFamilies = familiesMentionedInText(input.text ?? '', catalog?.families ?? [])
+    const initialActive = catalog
+      ? deriveActive(initialMessages, catalog.families, existingNames, { auto: autoFamilies })
       : null
-    // Telemetria de desfecho: este é o único ponto do turno com o catálogo (a
-    // oferta) e o histórico (o uso) ao mesmo tempo. `usageFromHistory` lê as
-    // tool-calls e os tool-results do histórico já retido, então `calls` e
-    // `failed` são acumulados da sessão — para decidir família isso é melhor
-    // que o turno isolado: mostra a família que foi oferecida e nunca usada.
-    if (catalogo) {
+    // Outcome telemetry: this is the only point of the turn with the catalog (the
+    // offer) and the history (the use) at the same time. `usageFromHistory` reads the
+    // tool-calls and the tool-results of the already retained history, so `calls` and
+    // `failed` are accumulated over the session — to decide a family that is better
+    // than the isolated turn: it shows the family that was offered and never used.
+    if (catalog) {
       void recordTurn({
-        familias: catalogo.familias,
-        offered: nomesExistentes.size,
-        mensagens: initialMessages,
+        families: catalog.families,
+        offered: existingNames.size,
+        messages: initialMessages,
       })
     }
-    // O mapa é o índice: famílias, o que cada uma resolve, o que está ATIVO e
-    // o que está DESATIVADO — com o motivo.
-    const mapaDoPrompt = catalogo
-      ? montarMapa(catalogo.familias, { ativas: ativasIniciais?.familias }).texto
+    // The map is the index: families, what each one solves, what is ACTIVE and
+    // what is DISABLED — with the reason.
+    const promptMap = catalog
+      ? buildMap(catalog.families, { active: initialActive?.families }).text
       : undefined
 
     for (;;) {
       const result = streamText({
         model,
-        system: await buildSystemPrompt(input, modelVision, mapaDoPrompt),
+        system: await buildSystemPrompt(input, modelVision, promptMap),
         messages:
           autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0 && screenNudges === 0
             ? initialMessages
@@ -2315,23 +2332,23 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 ],
                 interleavedReasoningField(provider, primary.modelId),
               ),
-        tools: catalogo?.tools,
-        // O conjunto ativo vale já no step 0 (o prepareStep só roda a partir do
-        // step 1); nos demais, quem manda é o valor devolvido por ele.
-        activeTools: ativasIniciais?.nomes,
-        // Chamada a tool inativa não pode morrer o turno: vira um bounce para
-        // tools_load com a família do nome pedido. O passo seguinte já tem a
-        // família ativa e o modelo reemite a chamada.
+        tools: catalog?.tools,
+        // The active set counts already in step 0 (the prepareStep only runs from
+        // step 1); in the others, the value returned by it is what rules.
+        activeTools: initialActive?.names,
+        // A call to an inactive tool cannot kill the turn: it becomes a bounce to
+        // tools_load with the family of the requested name. The next step already has the
+        // family active and the model re-emits the call.
         repairToolCall: async ({ toolCall }) => {
-          if (!catalogo) return null
-          const familia = catalogo.familias.find(
-            (f) => !f.indisponivel && f.tools.includes(toolCall.toolName),
+          if (!catalog) return null
+          const family = catalog.families.find(
+            (f) => !f.unavailable && f.tools.includes(toolCall.toolName),
           )
-          if (!familia) return null
+          if (!family) return null
           return {
             ...toolCall,
             toolName: 'tools_load',
-            input: JSON.stringify({ family: familia.id, tools: [toolCall.toolName] }),
+            input: JSON.stringify({ family: family.id, tools: [toolCall.toolName] }),
           }
         },
         toolApproval,
@@ -2339,51 +2356,51 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         abortSignal: controller.signal,
         providerOptions: await buildProviderOptions({ ...input, providerId: primary.providerId, modelId: primary.modelId }),
         prepareStep: ({ stepNumber, messages }) => {
-          // Corte do acúmulo do tool loop. É AQUI que o contexto do turno é
-          // segurado: a compactação só alcança o histórico entre turnos, e o
-          // que estoura são as tool calls + resultados que o SDK reenvia a
-          // cada step. Sem isto um turno longo pede milhões de tokens e o
-          // provedor recusa a requisição inteira.
+          // Trimming of the tool loop accumulation. It is HERE that the turn's context is
+          // held: compaction only reaches the history between turns, and what
+          // overflows are the tool calls + results that the SDK resends on
+          // every step. Without this a long turn asks for millions of tokens and the
+          // provider refuses the whole request.
           const droppedBefore = stepPreparer.dropped
           const prepared = stepPreparer.prepare(messages)
-          // Imagem devolvida por tool não chega ao modelo no adaptador
-          // openai-compatible (vira base64 em string): ela sai do resultado e
-          // viaja como mensagem de usuário — ver tool-images.ts. Antes do
-          // medidor, porque o base64 no resultado inflava a conta sem servir
-          // para nada.
+          // An image returned by a tool does not reach the model in the
+          // openai-compatible adapter (it becomes base64 in a string): it leaves the result and
+          // travels as a user message — see tool-images.ts. Before the
+          // meter, because the base64 in the result inflated the bill without serving
+          // any purpose.
           const hoisted = hoistToolImages(prepared)
           const preparedWithImages = hoisted.messages
           if (stepPreparer.dropped > droppedBefore) {
             console.warn(
-              `[context] step ${stepNumber}: ${stepPreparer.dropped - droppedBefore} resultado(s) de tool descartado(s) (teto de trabalho ${stepPreparer.workingBudget}, segurança ${stepPreparer.budget} tokens)`,
+              `[context] step ${stepNumber}: ${stepPreparer.dropped - droppedBefore} tool result(s) dropped (working ceiling ${stepPreparer.workingBudget}, safety ${stepPreparer.budget} tokens)`,
             )
           }
-          // Medidor ao vivo: o que está prestes a sair, quando cresceu além
-          // do último valor real. É o aviso que faltava num turno longo — o
-          // número só se mexia no fim da resposta (ou nunca, se ela falhasse).
+          // Live meter: what is about to go out, when it grew past
+          // the last real value. It is the warning that was missing in a long turn — the
+          // number only moved at the end of the answer (or never, if it failed).
           const outgoing = estimateTokens(preparedWithImages)
           if (outgoing > lastContextInput) {
             lastContextInput = outgoing
             emitContext(outgoing, 0, true)
           }
-          // Último passo EXECUTADO é maxSteps - 1: o SDK chama o prepareStep com
-          // stepNumber = passos já concluídos e o do-while para quando
-          // steps.length === maxSteps (isStepCount usa igualdade). Com
-          // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
-          // terminar numa tool call sem texto.
+          // The last step EXECUTED is maxSteps - 1: the SDK calls prepareStep with
+          // stepNumber = steps already completed and the do-while stops when
+          // steps.length === maxSteps (isStepCount uses equality). With
+          // `stepNumber >= maxSteps` the guard below never fired — it was the turn
+          // ending on a tool call without text.
           if (stepNumber < maxSteps - 1) {
-            // Recalculado a cada passo a partir do histórico: é o que faz a
-            // família carregada AGORA valer no passo seguinte, sem estado.
-            const ativas = catalogo
-              ? derivarAtivas(preparedWithImages, catalogo.familias, nomesExistentes, { auto: autoFamilias })
+            // Recomputed on every step from the history: it is what makes the
+            // family loaded NOW count in the next step, without state.
+            const active = catalog
+              ? deriveActive(preparedWithImages, catalog.families, existingNames, { auto: autoFamilies })
               : null
-            if (!ativas) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
-            if (ativas.cortadas.length > 0) {
+            if (!active) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
+            if (active.dropped.length > 0) {
               console.warn(
-                `[tools] teto do conjunto ativo: ${ativas.cortadas.join(', ')} fora por falta de uso`,
+                `[tools] active set cap: ${active.dropped.join(', ')} dropped for lack of use`,
               )
             }
-            return { messages: preparedWithImages, activeTools: ativas.nomes }
+            return { messages: preparedWithImages, activeTools: active.names }
           }
           return {
             activeTools: [],
@@ -2392,7 +2409,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           }
         },
         onError: () => {
-          // erros são tratados no loop do fullStream
+          // errors are handled in the fullStream loop
         },
       })
 
@@ -2400,17 +2417,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       let sawFinish = false
       let lastSave = Date.now()
       const reasoningStart = new Map<string, number>()
-      // Input das tools de LIVE_OPEN_TOOLS ainda em streaming: o JSON vai
-      // chegando em pedaços (tool-input-delta) e o nome do canvas/composição
-      // aparece MUITO antes do modelo terminar de transmitir o HTML — abrir a
-      // aba ali é o que deixa o usuário ver a peça montar ao vivo.
+      // Input of the LIVE_OPEN_TOOLS tools still streaming: the JSON arrives
+      // in pieces (tool-input-delta) and the canvas/composition name
+      // shows up LONG before the model finishes streaming the HTML — opening the
+      // tab there is what lets the user watch the piece assemble live.
       const liveOpen = new Map<string, { toolName: string; json: string; opened: boolean }>()
-      // Usage do último step (última chamada real ao modelo) — ao contrário do
-      // total do turno (soma de todos os steps), reflete o tamanho real do
-      // contexto no momento em que a resposta terminou.
+      // Usage of the last step (last real call to the model) — unlike the
+      // turn total (sum of all steps), it reflects the real size of the
+      // context at the moment the answer ended.
       let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
-      // Custo somado passo a passo: a faixa de preço depende do tamanho de CADA
-      // chamada (ex.: acima de 200k tokens), então o total do turno não basta.
+      // Cost added up step by step: the price tier depends on the size of EACH
+      // call (e.g. above 200k tokens), so the turn total is not enough.
       let turnCost: number | undefined
       let stepCount = 0
 
@@ -2429,26 +2446,26 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             stepCount++
             turnSteps++
-            // Provedor sem usage devolve zeros: aí fica valendo a estimativa.
+            // A provider without usage returns zeros: then the estimate still counts.
             if (lastStepUsage.input > 0) {
               lastContextInput = lastStepUsage.input
               emitContext(lastStepUsage.input, lastStepUsage.output, false, lastStepUsage)
             }
             break
           case 'text-start':
-            // Textos gerados na continuação do nudge de overclaim nascem
-            // marcados como internos ('nudge'): a UI os renderiza em cor
-            // apagada, nunca como resposta final. No fim do loop: arquivos
-            // alterados → marcador removido (a última resposta vale como
-            // final); só "nada a corrigir" → vira 'internal' e some do chat.
+            // Texts generated in the overclaim nudge continuation are born
+            // marked as internal ('nudge'): the UI renders them in a faded
+            // color, never as the final answer. At the end of the loop: files
+            // changed → marker removed (the last answer counts as
+            // final); only "nothing to fix" → becomes 'internal' and disappears from the chat.
             //
-            // O nudge de fechamento da TODO ganha um marcador próprio
-            // ('todo'): o modelo responde a ele com uma linha de bookkeeping
-            // ("checklist atualizado"), e sem marcador esse texto passava a
-            // ser o ÚLTIMO da mensagem — a UI promovia a linha a resposta
-            // final e a resposta de verdade, já escrita, ficava apagada
-            // (parecia que o texto final tinha sido substituído). 'todo'
-            // nunca é promovido, nem quando o turno grava arquivos.
+            // The TODO-closing nudge gets a marker of its own
+            // ('todo'): the model answers it with a bookkeeping line
+            // ("checklist updated"), and without a marker that text became
+            // the LAST one of the message — the UI promoted the line to the final
+            // answer and the real answer, already written, stayed faded
+            // (it looked like the final text had been replaced). 'todo'
+            // is never promoted, not even when the turn writes files.
             upsertPart({
               id: startStreamPart(part.id),
               type: 'text',
@@ -2461,9 +2478,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'text') {
               if (filterLeaks) {
-                // Painel do atalho e chamada falada: o texto vai para a tela e
-                // para a voz, então o raciocínio que o modelo escreve na
-                // resposta é cortado ANTES de sair (ver leaked-reasoning.ts).
+                // Shortcut panel and spoken call: the text goes to the screen and
+                // to the voice, so the reasoning that the model writes in the
+                // answer is cut BEFORE it goes out (see leaked-reasoning.ts).
                 const raw = (rawTexts.get(existing.id) ?? existing.text) + part.text
                 rawTexts.set(existing.id, raw)
                 const cleaned = stripLeakedReasoning(raw, input.language)
@@ -2474,7 +2491,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                     emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: existing.id, kind: 'text', delta })
                   }
                 } else {
-                  // Uma frase que já tinha saído virou pensamento: reemite o texto inteiro.
+                  // A sentence that had already gone out became a thought: it re-emits the whole text.
                   upsertPart({ ...existing, text: cleaned })
                 }
                 break
@@ -2493,11 +2510,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           }
           case 'text-end': {
             const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
-            // Saneamento do texto visível: o modelo às vezes copia os
-            // marcadores internos que recebeu no contexto ("[Verified
-            // record: ...]", "[SYSTEM: ...]"). Aqui a part já está completa,
-            // então o upsertPart reemite o texto inteiro limpo — o que a UI
-            // mostra e o que é persistido saem sem o marcador.
+            // Cleanup of the visible text: the model sometimes copies the
+            // internal markers it received in the context ("[Verified
+            // record: ...]", "[SYSTEM: ...]"). Here the part is already complete,
+            // so upsertPart re-emits the whole text clean — what the UI
+            // shows and what is persisted go out without the marker.
             if (existing?.type === 'text') {
               upsertPart({ ...existing, text: stripEngineMarkers(existing.text), state: 'done' })
             }
@@ -2537,7 +2554,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'tool-input-start':
-            // Worker não abre aba: o painel é da sessão que fala com o usuário.
+            // A worker does not open a tab: the panel belongs to the session that talks to the user.
             if (input.orchestrationRole !== 'worker') {
               liveOpen.set(part.id, { toolName: part.toolName, json: '', opened: false })
             }
@@ -2559,8 +2576,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             liveOpen.delete(part.id)
             break
           case 'tool-call': {
-            // Provedor sem streaming de input: o nome só chega aqui, no tool-call
-            // completo — antes do execute, então a aba ainda abre cedo.
+            // Provider without input streaming: the name only arrives here, on the complete
+            // tool-call — before execute, so the tab still opens early.
             const live = liveOpen.get(part.toolCallId)
             liveOpen.delete(part.toolCallId)
             const openLive = live && !live.opened ? LIVE_OPEN_TOOLS[live.toolName] : undefined
@@ -2594,14 +2611,14 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
             })
             if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
-            // Modo Visão: a descrição da imagem vira texto no histórico (a
-            // ToolPart não é reenviada em turnos futuros — o placeholder na
-            // mensagem do usuário é substituído pela descrição real).
+            // Vision mode: the image description becomes text in the history (the
+            // ToolPart is not resent in future turns — the placeholder in the
+            // user message is replaced by the real description).
             if (part.toolName === 'describe_image') {
-              // Só o anexo do turno tem placeholder para substituir. Uma
-              // referência da galeria (orbit-media://) descreve imagem que não
-              // está em mensagem nenhuma, e não há onde gravar — o número em
-              // forma de texto, porém, ainda é o anexo do turno.
+              // Only the turn's attachment has a placeholder to replace. A
+              // gallery reference (orbit-media://) describes an image that is not
+              // in any message, and there is nowhere to write it — the number as
+              // text, however, is still the turn's attachment.
               const input = existing?.input as { ref?: number | string } | undefined
               const turnRef =
                 typeof input?.ref === 'number'
@@ -2619,13 +2636,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 })
               }
             }
-            // Transcrição de um anexo de áudio: volta para a nota do anexo.
-            // Duas formas, conforme o destino escolhido pelo agente: o texto
-            // (no contexto) ou só onde ele está (documento para o usuário).
+            // Transcript of an audio attachment: it goes back to the attachment's note.
+            // Two forms, according to the destination chosen by the agent: the text
+            // (in the context) or only where it is (a document for the user).
             if (part.toolName === 'transcribe') {
-              // A tool unificada recebe `sources`; só a transcrição de UM áudio
-              // anexado (aud_…) volta para a nota do anexo — um vídeo já tem a
-              // nota dele, com o cache.
+              // The unified tool receives `sources`; only the transcript of ONE attached
+              // audio (aud_…) goes back to the attachment's note — a video already has its
+              // own note, with the cache.
               const sources = (existing?.input as { sources?: { path?: string }[] } | undefined)?.sources
               const ref = sources?.length === 1 ? (sources[0]?.path ?? '') : ''
               const audioId = audioIdFrom(ref)
@@ -2638,12 +2655,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                     : null
               if (audioId && body) await persistAudioTranscript({ sessionId, audioId, body, history, win })
             }
-            // Áudio gerado (ou comprimido/extraído): um player na resposta,
-            // como a imagem do show_image.
+            // Generated audio (or compressed/extracted): a player in the answer,
+            // like the image from show_image.
             if (
               part.toolName === 'audio_generate' ||
               part.toolName === 'media_compress' ||
-              // Download por link: o áudio extraído de um vídeo toca aqui.
+              // Download by link: the audio extracted from a video plays here.
               part.toolName === 'ytdlp_download'
             ) {
               const output = part.output as { audioUrl?: string; title?: string; durationMs?: number } | string
@@ -2655,19 +2672,19 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                   title: output.title || undefined,
                   durationMs: output.durationMs,
                 })
-                // Liga o registro do acervo à mensagem ("abrir no chat" da galeria).
+                // Links the store record to the message ("open in chat" in the gallery).
                 void attachMediaMessage(output.audioUrl, assistantMessage.id, sessionId)
               }
             }
-            // Vídeo renderizado/mostrado: player na resposta. O arquivo segue
-            // no projeto; o resultado traz a URL orbit-video:// já registrada.
+            // Rendered/shown video: player in the answer. The file stays
+            // in the project; the result carries the already registered orbit-video:// URL.
             if (
               part.toolName === 'video_render' ||
               part.toolName === 'motion_render' ||
               part.toolName === 'media_compress' ||
               part.toolName === 'browser_record' ||
               part.toolName === 'cu_record_stop' ||
-              // Vídeo baixado de um link: player na resposta, como um render.
+              // Video downloaded from a link: player in the answer, like a render.
               part.toolName === 'ytdlp_download' ||
               part.toolName === 'show_video'
             ) {
@@ -2683,10 +2700,10 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 })
               }
             }
-            // show_image e image_edit: a imagem vira parte da resposta
-            // (renderizada pelo ai/image). No image_edit isso é o ponto — uma
-            // edição descrita em texto obrigaria o usuário a abrir a galeria
-            // para saber se o recorte do fundo ficou bom.
+            // show_image and image_edit: the image becomes part of the answer
+            // (rendered by ai/image). In image_edit that is the point — an
+            // edit described in text would force the user to open the gallery
+            // to know whether the background crop came out well.
             if (
               part.toolName === 'show_image' ||
               part.toolName === 'image_edit' ||
@@ -2703,17 +2720,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                   alt: output.alt || undefined,
                 })
                 turnMediaUrls.add(output.mediaUrl)
-                // Completa o registro de mídia: a tool não conhece o id da
-                // mensagem (roda no meio do turno) — a galeria usa esse
-                // vínculo para o "abrir no chat".
+                // Completes the media record: the tool does not know the
+                // message id (it runs in the middle of the turn) — the gallery uses that
+                // link for "open in chat".
                 void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
               }
             }
-            // video_timeline: o sheet vai SEMPRE para a galeria (é o que
-            // permite mostrá-lo depois com show_image), mas só entra na
-            // resposta quando a tool foi chamada com show: true — o padrão é a
-            // olhada interna nos pontos de decisão. Sem isto a imagem existia
-            // só no contexto do modelo e o usuário nunca via nada.
+            // video_timeline: the sheet ALWAYS goes to the gallery (it is what
+            // allows showing it later with show_image), but it only enters the
+            // answer when the tool was called with show: true — the default is the
+            // internal look at the decision points. Without this the image existed
+            // only in the model's context and the user never saw anything.
             if (part.toolName === 'video_timeline') {
               const output = part.output as { mediaUrl?: string; alt?: string; shown?: boolean } | string
               if (typeof output === 'object' && output?.mediaUrl && output.shown === true) {
@@ -2723,15 +2740,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                   src: output.mediaUrl,
                   alt: output.alt || undefined,
                 })
-                // Completa o registro de mídia (mesmo motivo do show_image): a
-                // tool roda no meio do turno e não conhece o id da mensagem.
+                // Completes the media record (same reason as show_image): the
+                // tool runs in the middle of the turn and does not know the message id.
                 void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
               }
             }
-            // image_import: as imagens que o agente trouxe de um acervo aberto
-            // aparecem na resposta, uma parte para cada. Ficam FORA do turnMediaUrls
-            // de propósito: aquele conjunto é o dos degraus de uma edição, que
-            // somem no fim do turno — e uma foto escolhida não é um degrau.
+            // image_import: the images the agent brought from an open collection
+            // appear in the answer, one part for each. They stay OUT of turnMediaUrls
+            // on purpose: that set is the ladder steps of an edit, which
+            // vanish at the end of the turn — and a chosen photo is not a step.
             if (part.toolName === 'image_import') {
               const output = part.output as { images?: Array<{ mediaUrl: string; alt?: string }> } | string
               if (typeof output === 'object' && Array.isArray(output?.images)) {
@@ -2746,11 +2763,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 })
               }
             }
-            // create_artifact/update_artifact: o HTML vira parte da resposta
-            // (renderizada pelo ai/artifact-part). O update emite uma part NOVA
-            // no turno atual em vez de mexer na mensagem antiga: o arquivo é o
-            // mesmo, então o card antigo passa a mostrar a versão nova sozinho
-            // — o que a part nova marca é ONDE na conversa a mudança foi feita.
+            // create_artifact/update_artifact: the HTML becomes part of the answer
+            // (rendered by ai/artifact-part). The update emits a NEW part
+            // in the current turn instead of touching the old message: the file is the
+            // same, so the old card starts showing the new version on its own
+            // — what the new part marks is WHERE in the conversation the change was made.
             if (part.toolName === 'create_artifact' || part.toolName === 'update_artifact') {
               const output = part.output as
                 | { artifactId?: string; url?: string; title?: string; thumb?: string; revision?: number }
@@ -2768,15 +2785,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 void attachArtifactMessage(output.artifactId, assistantMessage.id, sessionId)
               }
             }
-            // create_document/update_document: o documento vira parte da
-            // resposta (renderizado pelo ai/document-part). Mesmo contrato do
-            // artefato: a mensagem persiste a URL do preview, nunca o conteúdo.
+            // create_document/update_document: the document becomes part of the
+            // answer (rendered by ai/document-part). Same contract as the
+            // artifact: the message persists the preview URL, never the content.
             if (
               part.toolName === 'create_document' ||
               part.toolName === 'update_document' ||
-              // Transcrição entregue ao usuário: é um documento do chat.
+              // Transcript delivered to the user: it is a chat document.
               part.toolName === 'transcribe' ||
-              // Transcrição de um vídeo por link, com deliver "user".
+              // Transcript of a video by link, with deliver "user".
               part.toolName === 'ytdlp_transcript' ||
               part.toolName === 'docx_edit' ||
               part.toolName === 'pdf_merge' ||
@@ -2810,7 +2827,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'tool-output-denied': {
-            // Execução negada pelo gate de permissões (política ou usuário)
+            // Execution denied by the permission gate (policy or user)
             const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
               | ToolPart
               | undefined
@@ -2841,13 +2858,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'finish':
-            // Usage agregado da geração (todos os steps) + custo via catálogo;
-            // lastStep guarda o tamanho real do contexto na última chamada.
-            // Em auto-continue, soma a cada iteração do loop (a mensagem é a
-            // mesma, mas cada chamada ao modelo tem seu próprio uso).
+            // Aggregated usage of the generation (all steps) + cost via the catalog;
+            // lastStep keeps the real context size on the last call.
+            // In auto-continue, it adds up on every iteration of the loop (the message is the
+            // same, but each call to the model has its own usage).
             {
-              // Com os passos já somados, o custo vem deles; sem nenhum passo
-              // (provedor que não reporta), cai no total do turno.
+              // With the steps already summed, the cost comes from them; without any step
+              // (a provider that does not report), it falls back to the turn total.
               const price = provider?.models[primary.modelId]?.cost
               const stepTokens = toTokenUsage(part.totalUsage, turnCost === undefined ? price : undefined)
               if (turnCost !== undefined) stepTokens.cost = turnCost
@@ -2858,11 +2875,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             lastFinishReason = part.finishReason
             sawFinish = true
-            // Backstop raro: o prepareStep acima já força um resumo em texto
-            // no último passo (finishReason deveria vir 'stop'). Isso só
-            // dispara se mesmo assim o modelo não fechar limpo — sem isso,
-            // esse caso ficaria indistinguível de uma conclusão normal tanto
-            // pra UI quanto pro modelo no próximo turno.
+            // Rare backstop: the prepareStep above already forces a text summary
+            // on the last step (finishReason should come as 'stop'). This only
+            // fires if the model still does not close cleanly — without it,
+            // that case would be indistinguishable from a normal conclusion both
+            // for the UI and for the model in the next turn.
             if (stepCount >= maxSteps && part.finishReason !== 'stop') {
               assistantMessage.truncated = true
             }
@@ -2873,31 +2890,31 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
         }
 
-        // Persistência incremental: garante que um crash não perca a resposta
+        // Incremental persistence: it guarantees that a crash does not lose the answer
         if (assistantMessage.parts.length > 0 && Date.now() - lastSave > 2000) {
           lastSave = Date.now()
           await saveMessages(sessionId, history)
         }
       }
 
-      // Alguns provedores/gateways encerram o stream sem emitir `finish` (ou
-      // retornam um motivo não padronizado) quando a conexão é interrompida.
-      // Sem este diagnóstico o turno parecia concluído normalmente e o agente
-      // parava no meio. Não tentamos repetir automaticamente — isso poderia
-      // duplicar tool calls — mas persistimos o estado como truncado e deixamos
-      // o próximo turno receber o lembrete de continuação.
+      // Some providers/gateways end the stream without emitting `finish` (or
+      // return a non-standard reason) when the connection is interrupted.
+      // Without this diagnostic the turn looked normally completed and the agent
+      // stopped midway. We do not try to repeat automatically — that could
+      // duplicate tool calls — but we persist the state as truncated and let
+      // the next turn receive the continuation reminder.
       if (!sawFinish && !controller.signal.aborted) {
         assistantMessage.truncated = true
-        console.warn(`[chat] stream terminou sem finish para sessão ${sessionId}`)
+        console.warn(`[chat] stream ended without finish for session ${sessionId}`)
       }
 
-      // Auto-continue por limite de TOKENS DE SAÍDA (finish_reason 'length'):
-      // a resposta foi cortada no meio, não finalizada — igual ao opencode
-      // (#17471/#18108), re-entramos no loop com uma "synthetic user message"
-      // pedindo pra continuar do ponto exato do corte, com teto por turno.
-      // Se a última tool call ficou pela metade (part sem resultado), a tool
-      // é marcada como não executada e o modelo é instruído a dividir a
-      // operação em pedaços menores.
+      // Auto-continue on the OUTPUT TOKEN limit (finish_reason 'length'):
+      // the answer was cut midway, not finished — same as opencode
+      // (#17471/#18108), we re-enter the loop with a "synthetic user message"
+      // asking to continue from the exact cut point, with a cap per turn.
+      // If the last tool call was left half-done (a part without result), the tool
+      // is marked as not executed and the model is instructed to split the
+      // operation into smaller pieces.
       const pendingToolCalls = assistantMessage.parts.filter(
         (p): p is ToolPart => p.type === 'tool' && p.state === 'running',
       )
@@ -2921,17 +2938,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       }
 
       if (lastFinishReason === 'length') {
-        // Esgotou o teto de continuações: sinaliza truncamento (a UI mostra o
-        // aviso e o próximo turno recebe o nudge de continuar via
-        // messageContextText) — nunca um fim silencioso.
+        // The continuation cap ran out: it signals truncation (the UI shows the
+        // warning and the next turn receives the continue nudge via
+        // messageContextText) — never a silent end.
         assistantMessage.truncated = true
       }
 
-      // Nudge de fechamento da TODO: o turno terminou naturalmente ('stop')
-      // mas a última todowrite ainda tem itens "in_progress" — o modelo
-      // respondeu sem marcar as tarefas como concluídas, e o card fica com
-      // spinner eterno. Re-entra no loop com a synthetic user message
-      // (padrão do auto-continue) pedindo o fechamento, limitado por turno.
+      // TODO-closing nudge: the turn ended naturally ('stop')
+      // but the last todowrite still has "in_progress" items — the model
+      // answered without marking the tasks as done, and the card stays with
+      // an endless spinner. It re-enters the loop with the synthetic user message
+      // (auto-continue pattern) asking for the closing, capped per turn.
       if (
         lastFinishReason !== 'length' &&
         !controller.signal.aborted &&
@@ -2943,25 +2960,25 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         continue
       }
 
-      // Sinal de que a última parte é um texto concluído — usado pelo nudge
-      // de overclaim abaixo.
+      // Sign that the last part is a completed text — used by the
+      // overclaim nudge below.
       const lastPart = assistantMessage.parts[assistantMessage.parts.length - 1]
       const lastPartIsDoneText = lastPart?.type === 'text' && lastPart.state === 'done'
 
-      // Nudge de overclaim: a resposta afirma ter feito algo e o snapshot
-      // prova que nada foi escrito — cobre o caso em que o agente relata
-      // conclusão sem ter tocado em nenhum arquivo.
+      // Overclaim nudge: the answer claims to have done something and the snapshot
+      // proves that nothing was written — it covers the case where the agent reports
+      // completion without having touched any file.
       //
-      // Só cobra em turnos que USARAM ferramentas de escrita: sem nenhuma
-      // delas (pergunta informativa respondida só com leitura/texto), verbos
-      // de conclusão descrevem trabalho de turnos anteriores — o usuário
-      // pediu explicitamente que essa verificação não vire resposta final.
+      // It only charges in turns that USED write tools: without any of them
+      // (an informative question answered with reading/text only), conclusion
+      // verbs describe work from previous turns — the user
+      // explicitly asked that this check not become the final answer.
       //
-      // O veredito é calculado aqui (e não depois do loop) para poder cobrar a
-      // correção ainda dentro do turno; fica guardado em `verification` e é
-      // reaproveitado no fim, sem capturar o snapshot duas vezes.
-      // Em modo plano a escrita está desligada e o entregável (PLAN.md) é
-      // gravado fora do turno — "escrevi o plano" ali não é overclaim.
+      // The verdict is computed here (and not after the loop) so that the
+      // correction can be charged still inside the turn; it is stored in `verification` and
+      // is reused at the end, without capturing the snapshot twice.
+      // In plan mode writing is off and the deliverable (PLAN.md) is
+      // written outside the turn — "I wrote the plan" there is not overclaim.
       if (lastFinishReason === 'stop' && !controller.signal.aborted && toolContext) {
         verification = await verifyTurn()
         if (
@@ -2972,15 +2989,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           usedFileWritingTools(assistantMessage.parts) &&
           claimsCompletion(partText(assistantMessage.parts, 'text'))
         ) {
-          console.warn('[overclaim] turno alegou conclusão sem alterar arquivos', { sessionId })
+          console.warn('[overclaim] turn claimed completion without changing files', { sessionId })
           overclaimNudges++
-          verification = null // o turno continua: o veredito atual não é o final
+          verification = null // the turn continues: the current verdict is not the final one
           previousResponseMessages = await result.responseMessages
           continue
         }
       }
-      // Tela: as tools existem neste turno, nenhuma foi chamada, e a resposta
-      // fala como se tivesse olhado ou agido — cobra uma vez, como acima.
+      // Screen: the tools exist in this turn, none was called, and the answer
+      // talks as if it had looked or acted — it charges once, as above.
       if (
         lastFinishReason === 'stop' &&
         !controller.signal.aborted &&
@@ -2989,43 +3006,43 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         lastPartIsDoneText &&
         (input.options.overlay === true || agentMayControlComputer(input, isComputerAvailable())) &&
         !usedScreenTools(assistantMessage.parts) &&
-        // Com a tela já descrita, não há o que cobrar; com só o texto, cobra a
-        // promessa de olhar a imagem sem chamar a tool.
+        // With the screen already described, there is nothing to charge; with only the text, it charges the
+        // promise to look at the image without calling the tool.
         (!prefetchedScreen || (!screenDescription && claimsImageLook(partText(assistantMessage.parts, 'text')))) &&
         claimsScreenWork(partText(assistantMessage.parts, 'text'))
       ) {
-        console.warn('[overclaim] turno falou da tela sem chamar tool de tela', { sessionId })
+        console.warn('[overclaim] turn talked about the screen without calling a screen tool', { sessionId })
         screenNudges++
-        verification = null // o turno continua: o veredito atual não é o final
+        verification = null // the turn continues: the current verdict is not the final one
         previousResponseMessages = await result.responseMessages
         continue
       }
       break
     }
 
-    // Finaliza partes que ficaram em streaming (ex.: abort)
+    // Finishes parts that were left streaming (e.g. abort)
     for (const part of assistantMessage.parts) {
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
         if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
       }
-      // Backstop: uma tool-call sem resultado que não foi pega pelo ramo de
-      // auto-continue acima (ex.: teto de continuações esgotado com
-      // finish_reason 'length') ficaria 'running' para sempre — e o acordeon
-      // de ações (TaskGroup) lê isso como "ainda trabalhando": shimmer e
-      // "Working" eternos mesmo com o turno já encerrado e salvo.
+      // Backstop: a tool-call without result that was not caught by the
+      // auto-continue branch above (e.g. continuation cap exhausted with
+      // finish_reason 'length') would stay 'running' forever — and the action
+      // accordion (TaskGroup) reads that as "still working": shimmer and
+      // "Working" forever even with the turn already ended and saved.
       if (part.type === 'tool' && part.state === 'running') {
         part.state = 'error'
         part.error = 'Tool call has no result — the turn ended before it finished.'
       }
     }
-    // Degraus da escada saem antes de a resposta ser gravada: o que fica é o
-    // resultado, não o caminho até ele.
+    // The ladder steps leave before the answer is written: what stays is the
+    // result, not the path to it.
     await purgeDraftImages()
-    // Cobrança de tela que deu certo: depois do aviso o modelo olhou de fato
-    // (chamou uma tool de tela) e corrigiu. A correção é a resposta; o texto de
-    // antes do aviso foi dito sem olhar e sai da conversa — no painel do
-    // atalho ele ficava em cima da resposta certa.
+    // Screen charge that worked: after the warning the model did look
+    // (it called a screen tool) and corrected it. The correction is the answer; the text
+    // before the warning was said without looking and leaves the conversation — in the shortcut
+    // panel it sat on top of the right answer.
     if (screenNudges > 0 && usedScreenTools(assistantMessage.parts)) {
       const correction = [...assistantMessage.parts]
         .reverse()
@@ -3038,29 +3055,29 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       }
     }
     assistantMessage.completedAt = Date.now()
-    // TODO não fechada ao final do turno → lembrete persistente para o
-    // próximo turno (messageContextText reemite o aviso via todoReminder).
+    // TODO not closed at the end of the turn → persistent reminder for the
+    // next turn (messageContextText re-emits the warning via todoReminder).
     if (hasTodoInProgress(assistantMessage.parts)) assistantMessage.todoReminder = true
-    // Persiste a mensagem primeiro para que o usuário a veja o quanto antes
+    // Persists the message first so the user sees it as soon as possible
     await saveMessages(sessionId, history)
-    // Veredito do turno: reaproveita o que o loop já calculou (só recaptura se
-    // o turno saiu por outro caminho — abort, teto de passos).
+    // Turn verdict: it reuses what the loop already computed (it only recaptures if
+    // the turn left by another path — abort, step ceiling).
     const endSnapshot = verification ?? (await verifyTurn())
-    // Textos do nudge de overclaim: se o modelo de fato gravou arquivos depois
-    // do aviso, deixam de ser internos — a última resposta volta a ser a
-    // resposta final (branca). Sem alterações, dois desfechos: a resposta ao
-    // nudge foi só a confirmação de que não havia nada a corrigir (falso
-    // positivo do gatilho — ex.: o texto descrevia trabalho de um turno
-    // anterior) → vira 'internal' e a UI nem renderiza; ou houve uma correção
-    // real ("Correção: …") → permanece 'nudge', visível em cor apagada.
+    // Texts of the overclaim nudge: if the model did in fact write files after
+    // the warning, they stop being internal — the last answer goes back to being the
+    // final answer (white). Without changes, two outcomes: the answer to the
+    // nudge was only the confirmation that there was nothing to fix (a false
+    // positive of the trigger — e.g. the text described work from a previous
+    // turn) → it becomes 'internal' and the UI does not even render it; or there was a real
+    // correction ("Correction: …") → it stays 'nudge', visible in a faded color.
     if (endSnapshot.state === 'changed') {
-      // Promove SÓ o último texto do nudge: é ele que carrega a resposta real
-      // pós-correção (trabalho feito + "Correção: …"). Os anteriores seguem
-      // 'nudge' (apagados) — varrer todos abria caminho para o texto do nudge
-      // que não é a resposta final virar branco. Se o último não foi correção
-      // de verdade ("Nada a corrigir.") mas o snapshot mudou por outra via
-      // (ex.: ferramentas do próprio nudge gravaram algo), também não promove:
-      // linha de verificação interna nunca vira resposta final.
+      // Promotes ONLY the last text of the nudge: it is the one that carries the real answer
+      // after the correction (work done + "Correction: …"). The previous ones stay
+      // 'nudge' (faded) — scanning all of them opened the way for the nudge text
+      // that is not the final answer turning white. If the last one was not a real
+      // correction ("Nothing to fix.") but the snapshot changed by another route
+      // (e.g. the nudge's own tools wrote something), it does not promote either:
+      // an internal verification line never becomes the final answer.
       const lastNudgeText = [...assistantMessage.parts]
         .reverse()
         .find((p): p is TextPart => p.type === 'text' && p.source === 'nudge')
@@ -3079,12 +3096,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
     if (assistantMessage.snapshot) {
       assistantMessage.snapshot.verified = endSnapshot.state
-      // O que a pessoa salvou à mão no painel durante o turno não é do agente:
-      // o revert preserva esses caminhos em vez de desfazê-los.
+      // What the person saved by hand in the panel during the turn is not the agent's:
+      // the revert preserves those paths instead of undoing them.
       if (toolContext) {
         assistantMessage.snapshot.manual = [...manualSavesUnder(toolContext.directory, turnStartedAt)]
-        // Autoria para o revert: o que as tools deste turno gravaram, e o que
-        // as de outras conversas gravaram enquanto ele rodava.
+        // Ownership for the revert: what this turn's tools wrote, and what
+        // those of other conversations wrote while it ran.
         const writes = currentTurnWrites(toolContext.directory)
         if (writes) {
           assistantMessage.snapshot.authored = writes.authored
@@ -3096,8 +3113,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         assistantMessage.snapshot.files = endSnapshot.files
         assistantMessage.snapshot.patch = endSnapshot.patch
       } else if (endSnapshot.state === 'unchanged' && endSnapshot.end) {
-        // Pasta mudou só por save manual: guarda a árvore final para o revert
-        // conseguir isolar o que é do turno (o `manual` acima) do que não é.
+        // Folder changed only by a manual save: it keeps the final tree so the revert
+        // can isolate what belongs to the turn (the `manual` above) from what does not.
         assistantMessage.snapshot.end = endSnapshot.end
       }
       await saveMessages(sessionId, history)
@@ -3107,26 +3124,26 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
-    // Turno encerrado: é aqui que a próxima compactação pode virar uma oferta
-    // de chat novo (ver maybeSuggestCompaction). Worker não tem quem decida.
+    // Turn finished: this is where the next compaction can become an offer
+    // of a new chat (see maybeSuggestCompaction). A worker has nobody to decide.
     if (input.orchestrationRole !== 'worker') {
       void maybeSuggestCompaction(win, sessionId, history, catalogModel, modelVision)
     }
-    // Notificação nativa (janela fora de foco + prefs habilitada)
+    // Native notification (window out of focus + preference enabled)
     void notifyNewMessage(sessionId, assistantMessage)
 
-    // Título: gerado no INÍCIO do turno, em dispatchSend (ver
-    // startSessionNaming) — aqui ele já apareceu faz tempo.
-    // Sugestão só faz sentido para quem está conversando: workers e rotinas
-    // não têm ninguém digitando a próxima mensagem.
+    // Title: generated at the START of the turn, in dispatchSend (see
+    // startSessionNaming) — here it showed up a long time ago.
+    // A suggestion only makes sense for someone chatting: workers and routines
+    // have nobody typing the next message.
     if (getAppSettings().promptSuggestions && !input.orchestrationRole && !assistantMessage.error) {
       void generateSuggestion(input, assistantMessage, win)
     }
         break
       } catch (err) {
-        // Tentativa falhou: rotaciona se a falha é recuperável e ainda não
-        // emitiu conteúdo (v1 não reenvia tokens já entregues). Abort e erros
-        // finais sobem para o catch externo — comportamento atual.
+        // Attempt failed: it rotates if the failure is recoverable and it has not
+        // emitted content yet (v1 does not resend tokens already delivered). Abort and final
+        // errors go up to the outer catch — current behavior.
         const aborted = controller.signal.aborted
         const { kind } = classifyProviderError(err)
         const nextIndex = attemptIndex + 1
@@ -3160,7 +3177,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             fallback: { current: retryRound + 1, total: maxRetryRounds + 1, retry: true },
           })
           await waitUnlessAborted(retryDelay(retryRound), controller.signal)
-          // Parado durante a espera: cai no catch externo como abort (idle)
+          // Stopped during the wait: it falls into the outer catch as an abort (idle)
           if (controller.signal.aborted) throw err
           continue
         }
@@ -3172,17 +3189,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const aborted = controller.signal.aborted
     const classified = classifyProviderError(err)
     const message = classified.detail
-    // Estouro depois de passos concluídos: o histórico coube na primeira
-    // chamada, quem passou da janela foi o acúmulo do turno. Compactar não
-    // alcança isso — a orientação certa é outra (ver context-length-turn).
+    // Overflow after completed steps: the history fit in the first
+    // call, what went past the window was the turn's accumulation. Compacting does not
+    // reach that — the right guidance is another one (see context-length-turn).
     const kind = classified.kind === 'context-length' && turnSteps > 0 ? 'context-length-turn' : classified.kind
     assistantMessage.error = aborted ? undefined : message
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
-    // O que o turno gravou ANTES de falhar. O caminho de sucesso registra em
-    // `authored` (perto do fim do try); a falha nunca registrava — e é
-    // justamente o turno que falhou que precisa de autoria, porque é sobre ele
-    // que o retry seguinte avisa o modelo (ver session/retry-note.ts) e é o que
-    // o revert teria de isolar.
+    // What the turn wrote BEFORE failing. The success path records it in
+    // `authored` (near the end of the try); the failure never recorded it — and it is
+    // exactly the turn that failed that needs ownership, because it is about it
+    // that the next retry warns the model (see session/retry-note.ts) and it is what
+    // the revert would have to isolate.
     if (input.mode === 'code' && input.directory) {
       const writes = currentTurnWrites(input.directory)
       if (writes) {
@@ -3198,11 +3215,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
       }
-      // tool-call chegou mas tool-result/tool-error nunca veio — abort no meio
-      // da execução, ou a conexão caiu antes do resultado. Sem isto a part
-      // fica 'running' para sempre, e o acordeon de ações (TaskGroup) lê isso
-      // como "ainda trabalhando": shimmer e "Working" eternos mesmo com o
-      // turno já encerrado.
+      // tool-call arrived but tool-result/tool-error never came — abort in the middle
+      // of the execution, or the connection dropped before the result. Without this the part
+      // stays 'running' forever, and the action accordion (TaskGroup) reads that
+      // as "still working": shimmer and "Working" forever even with the
+      // turn already ended.
       if (part.type === 'tool' && part.state === 'running') {
         part.state = 'error'
         part.error = aborted ? 'Interrupted.' : (message ?? 'Execution did not finish.')
@@ -3216,42 +3233,48 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       sessionId,
       status: aborted ? 'idle' : 'error',
       error: aborted ? undefined : message,
-      // Vai junto para o mobile traduzir o aviso: o texto cru é diagnóstico.
+      // It goes along so the mobile can translate the warning: the raw text is diagnostic.
       errorKind: aborted ? undefined : assistantMessage.errorKind,
     })
-    // Falha real (não aborto manual) → notificação nativa de erro
+    // Real failure (not a manual abort) → native error notification
     if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
   } finally {
-    // Grava o estado FINAL de cada caminho do diário: é o que o revert usa
-    // para saber se o turno ainda é o dono do estado atual (ver media-journal).
+    // Writes the FINAL state of each journal path: it is what the revert uses
+    // to know whether the turn still owns the current state (see media-journal).
     await closeMediaJournal()
     clearTurnImages(sessionId)
-    // Fim do turno = fim do controle do computador: some o indicador, solta o
-    // atalho de pânico e devolve as flags de acessibilidade dos apps.
+    // End of the turn = end of computer control: the indicator goes away, the panic
+    // shortcut is released and the apps' accessibility flags are given back.
     endActivity(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
     activeBashCommands.delete(sessionId)
     if (controller.signal.aborted && activeCmd) {
       console.warn(
-        `[chat] turno da sessão ${sessionId} abortado com comando bash ativo — ` +
-          'se ele não encerrou, continua rodando (veja o painel de processos): ' +
+        `[chat] turn of session ${sessionId} aborted with an active bash command — ` +
+          'if it did not finish, it is still running (see the processes panel): ' +
           `${activeCmd}`,
       )
     }
+    perf.end({
+      steps: turnSteps,
+      tools: assistantMessage.parts.filter((p) => p.type === 'tool').length,
+      aborted: controller.signal.aborted,
+      ...(assistantMessage.error ? { error: assistantMessage.error.slice(0, 160) } : {}),
+    })
   }
 }
 
 /**
- * Compactação manual acionada pelo botão na UI.
+ * Manual compaction triggered by the button in the UI.
  *
- * Com um turno da conversa em andamento ela NÃO roda: ela lê o histórico do
- * disco, insere o resumo, grava e reemite a lista inteira — e o turno, que tem
- * a própria cópia do histórico, grava por cima no fim. Era o que acontecia: a
- * lista reemitida não tinha a mensagem que o usuário acabara de mandar (a bolha
- * sumia da tela), o resumo chegava ao renderer como "a resposta" (e o modo
- * chamada o lia em voz alta), e no fim o turno apagava o resumo do disco. A
- * compactação automática roda DENTRO do turno, com a cópia certa.
+ * With a turn of the conversation in progress it does NOT run: it reads the history from
+ * disk, inserts the summary, writes and re-emits the whole list — and the turn, which has
+ * its own copy of the history, writes over it at the end. That is what happened: the
+ * re-emitted list did not have the message the user had just sent (the bubble vanished
+ * from the screen), the summary arrived in the renderer as "the answer" (and call mode
+ * read it aloud), and in the end the turn erased the summary from disk. Automatic
+ * compaction runs INSIDE the turn, with the right copy.
  */
 export async function compactSession(
   win: BrowserWindow,
@@ -3281,6 +3304,6 @@ async function compactSessionTurn(win: BrowserWindow, sessionId: string): Promis
       emit(win, { type: 'messages', sessionId, messages: history })
     }
   } catch (err) {
-    console.error('[compaction] manual falhou:', err)
+    console.error('[compaction] manual failed:', err)
   }
 }

@@ -1,33 +1,34 @@
 import { readAppLanguage } from './app-language'
 
 /**
- * i18n do processo main.
+ * Main-process i18n.
  *
- * O renderer traduz a própria UI com i18next, mas o main também produz texto
- * que o usuário lê fora dela: títulos e corpos das notificações nativas
- * (pergunta/permissão pendente, mensagem concluída, erro de chat, rotina).
- * Antes disso ele só sabia português, então um app em inglês recebia banner em
- * português.
+ * The renderer translates its own UI with i18next, but the main process also
+ * produces text the user reads outside it: titles and bodies of the native
+ * notifications (pending question/permission, finished message, chat error,
+ * routine). Before this it only knew Portuguese, so an English app received a
+ * Portuguese banner.
  *
- * O idioma é o mesmo que o renderer publica em `app:setLanguage` (nome do
- * idioma em inglês, ex.: "Portuguese") — o valor que o scheduler de rotinas já
- * usa para os prompts. O renderer publica no boot e a cada troca, então basta
- * espelhar aqui: `setMainLocale` no handler do IPC e `loadMainLocale` no boot.
+ * The language is the same one the renderer publishes in `app:setLanguage`
+ * (language name in English, e.g.: "Portuguese") — the value the routine
+ * scheduler already uses for the prompts. The renderer publishes it on boot and
+ * on every switch, so mirroring it here is enough: `setMainLocale` in the IPC
+ * handler and `loadMainLocale` on boot.
  *
- * Só entram aqui frases fixas do produto. Texto de conteúdo (título da sessão,
- * preview da resposta, mensagem crua do provedor) não se traduz: é dado.
+ * Only fixed product sentences enter here. Content text (session title,
+ * response preview, raw provider message) is not translated: it is data.
  */
 
-/** Idiomas que o app fala. Espelha os locales do renderer (src/i18n/locales). */
+/** Languages the app speaks. Mirrors the renderer's locales (src/i18n/locales). */
 export type MainLocale = 'pt-BR' | 'en'
 
 /**
- * Frases fixas do main. Chaves planas com ponto: o consumidor pede
- * `t('notif.chatError.title')` e o tipo `MainMessageKey` recusa chave inexistente.
- * Exportado para o teste conferir que os dois idiomas cobrem toda chave.
+ * Fixed main-process sentences. Flat keys with a dot: the consumer asks for
+ * `t('notif.chatError.title')` and the `MainMessageKey` type refuses a nonexistent key.
+ * Exported so the test can check that both languages cover every key.
  */
 export const MESSAGES = {
-  // ── Pergunta/permissão pendente ───────────────────────────────────────────
+  // ── Pending question/permission ───────────────────────────────────────────
   'notif.question.title': {
     'pt-BR': 'Pergunta do Orbit',
     en: 'Orbit question',
@@ -57,7 +58,7 @@ export const MESSAGES = {
     en: '(+{{count}} more)',
   },
 
-  // ── Erro de chat ──────────────────────────────────────────────────────────
+  // ── Chat error ──────────────────────────────────────────────────────────
   'notif.chatError.title': {
     'pt-BR': 'Erro no chat',
     en: 'Chat error',
@@ -66,8 +67,8 @@ export const MESSAGES = {
     'pt-BR': 'erro inesperado',
     en: 'unexpected error',
   },
-  // Motivo curto por tipo de falha — o card no app traz a explicação completa
-  // (i18n do renderer, chat.errorKind.*) e o texto cru do provedor.
+  // Short reason per failure type — the card in the app brings the full explanation
+  // (renderer i18n, chat.errorKind.*) and the provider's raw text.
   'notif.chatError.kind.moderation': {
     'pt-BR': 'o filtro de conteúdo do provedor bloqueou a resposta — troque de modelo',
     en: 'the provider blocked this reply with its content filter — switch models',
@@ -101,24 +102,24 @@ export const MESSAGES = {
     en: 'the provider rejected the request for having too many tools — the catalog drops the least used ones for the next try',
   },
 
-  // ── Rotinas agendadas ─────────────────────────────────────────────────────
-  'notif.rotina.done': {
+  // ── Scheduled routines ────────────────────────────────────────────────────
+  'notif.routine.done': {
     'pt-BR': 'Rotina concluída',
     en: 'Routine finished',
   },
-  'notif.rotina.doneWithCost': {
+  'notif.routine.doneWithCost': {
     'pt-BR': 'Rotina concluída — US$ {{cost}}',
     en: 'Routine finished — US$ {{cost}}',
   },
-  'notif.rotina.failed': {
+  'notif.routine.failed': {
     'pt-BR': 'Rotina falhou: {{error}}',
     en: 'Routine failed: {{error}}',
   },
-  'notif.rotina.unknownError': {
+  'notif.routine.unknownError': {
     'pt-BR': 'erro desconhecido',
     en: 'unknown error',
   },
-  // ── Permissões de site no navegador integrado ──────────────────────────────
+  // ── Site permissions in the built-in browser ──────────────────────────────
   'browserPerm.title': {
     'pt-BR': '{{site}} quer acessar',
     en: '{{site}} wants to use',
@@ -187,7 +188,7 @@ export const MESSAGES = {
     'pt-BR': 'A tela principal será compartilhada com o site aberto no navegador do Orbit.',
     en: 'Your main screen will be shared with the site open in the Orbit browser.',
   },
-  // ── Bandeja do sistema ────────────────────────────────────────────────────
+  // ── System tray ────────────────────────────────────────────────────
   'tray.open': {
     'pt-BR': 'Abrir o Orbit',
     en: 'Open Orbit',
@@ -201,7 +202,7 @@ export const MESSAGES = {
     en: 'Orbit — click to open',
   },
 
-  // ── Resultado do /init (mensagem do assistente no chat) ───────────────────
+  // ── /init result (assistant message in the chat) ───────────────────
   'init.unfinished': {
     'pt-BR': '_O coordenador parou sem confirmar a revisão final; o rascunho estava consistente e foi gravado como estava._',
     en: '_The coordinator stopped without confirming the final review; the draft was consistent and was saved as it was._',
@@ -257,7 +258,7 @@ export const MESSAGES = {
     en: 'Nothing was saved.',
   },
 
-  // ── Feed de atividade do browser do painel ────────────────────────────────
+  // ── Panel browser activity feed ────────────────────────────────
   'panel.activity.resize': {
     'pt-BR': 'Redimensionando para {{label}}',
     en: 'Resizing to {{label}}',
@@ -323,7 +324,7 @@ export const MESSAGES = {
     en: 'Capturing the full page',
   },
 
-  // ── Fontes da conversa (erros devolvidos à UI) ────────────────────────────
+  // ── Conversation sources (errors returned to the UI) ─────────────────────
   'sources.error.noFileToPrint': {
     'pt-BR': 'Este tipo de fonte não tem arquivo para imprimir.',
     en: 'This kind of source has no file to print.',
@@ -360,7 +361,7 @@ export const MESSAGES = {
     'pt-BR': 'documento',
     en: 'document',
   },
-  // ── Computer Use: faixa no topo da tela enquanto o agente controla um app ──
+  // ── Computer Use: strip at the top of the screen while the agent controls an app ──
   'computer.overlay': {
     'pt-BR': 'Orbit está controlando {{apps}}',
     en: 'Orbit is controlling {{apps}}',
@@ -373,35 +374,398 @@ export const MESSAGES = {
     'pt-BR': 'Parar',
     en: 'Stop',
   },
+
+  // ── Default session titles ────────────────────────────────────────────────
+  // Written into the session on creation (companion-server), so they are data:
+  // `isDefaultTitle` has to recognise what each language produced.
+  'chat.defaultTitle.chat': {
+    'pt-BR': 'Nova conversa',
+    en: 'New chat',
+  },
+  'chat.defaultTitle.code': {
+    'pt-BR': 'Nova sessão de código',
+    en: 'New code session',
+  },
+
+  // ── Companion WebSocket server (errors the mobile app shows) ─────────────
+  'companion.server.notAuthenticated': {
+    'pt-BR': 'Não autenticado',
+    en: 'Not authenticated',
+  },
+  'companion.server.noMainWindow': {
+    'pt-BR': 'Janela principal indisponível',
+    en: 'Main window unavailable',
+  },
+  'companion.server.sessionNotFound': {
+    'pt-BR': 'Sessão não encontrada',
+    en: 'Session not found',
+  },
+  'companion.server.sessionWithoutFolder': {
+    'pt-BR': 'Sessão sem diretório',
+    en: 'Session without a folder',
+  },
+  'companion.server.noDesktopWindow': {
+    'pt-BR': 'Nenhuma janela do desktop aberta',
+    en: 'No desktop window open',
+  },
+  'companion.server.revertFailed': {
+    'pt-BR': 'Não foi possível reverter',
+    en: 'Could not revert',
+  },
+  'companion.server.nothingToRevert': {
+    'pt-BR': 'Nada para reverter',
+    en: 'Nothing to revert',
+  },
+  'companion.server.nothingToUndo': {
+    'pt-BR': 'Nada para desfazer',
+    en: 'Nothing to undo',
+  },
+  'companion.server.memoryNotFound': {
+    'pt-BR': 'Memória não encontrada',
+    en: 'Memory not found',
+  },
+  'companion.server.memoryCannotPromote': {
+    'pt-BR': 'Memória não pode ser promovida',
+    en: 'Memory cannot be promoted',
+  },
+  'companion.server.listFailed': {
+    'pt-BR': 'Não foi possível listar: {{error}}',
+    en: 'Could not list: {{error}}',
+  },
+  'companion.server.pipelineNotFound': {
+    'pt-BR': 'Pipeline não encontrada',
+    en: 'Pipeline not found',
+  },
+  'companion.server.projectNotFound': {
+    'pt-BR': 'Projeto não encontrado',
+    en: 'Project not found',
+  },
+  'companion.server.taskNotFound': {
+    'pt-BR': 'Task não encontrada',
+    en: 'Task not found',
+  },
+
+  // ── Companion HTTP API (errors the mobile app shows) ────────────────────
+  'companion.http.invalidJson': {
+    'pt-BR': 'JSON inválido',
+    en: 'Invalid JSON',
+  },
+  'companion.http.invalidToken': {
+    'pt-BR': 'Token inválido ou expirado',
+    en: 'Invalid or expired token',
+  },
+  'companion.http.invalidPin': {
+    'pt-BR': 'PIN inválido ou ausente',
+    en: 'Invalid or missing PIN',
+  },
+  'companion.http.providerAndModelRequired': {
+    'pt-BR': 'providerId e modelId são obrigatórios',
+    en: 'providerId and modelId are required',
+  },
+  'companion.http.nameAndContentRequired': {
+    'pt-BR': 'name e content são obrigatórios',
+    en: 'name and content are required',
+  },
+  'companion.http.contentAndFilenameRequired': {
+    'pt-BR': 'content (base64) e filename são obrigatórios',
+    en: 'content (base64) and filename are required',
+  },
+  'companion.http.repoAndBranchRequired': {
+    'pt-BR': 'repoPath e branch obrigatórios',
+    en: 'repoPath and branch are required',
+  },
+  'companion.http.pcmRequired': {
+    'pt-BR': 'pcm (base64) é obrigatório',
+    en: 'pcm (base64) is required',
+  },
+  'companion.http.invalidSampleRate': {
+    'pt-BR': 'sampleRate deve ser um número positivo (Hz)',
+    en: 'sampleRate must be a positive number (Hz)',
+  },
+  'companion.http.invalidPcm': {
+    'pt-BR': 'pcm vazio ou base64 inválido',
+    en: 'empty pcm or invalid base64',
+  },
+  'companion.http.invalidSlug': {
+    'pt-BR': 'Slug inválido — use apenas letras minúsculas, números e underscores',
+    en: 'Invalid slug — use only lowercase letters, digits and underscores',
+  },
+  'companion.http.invalidSlugShort': {
+    'pt-BR': 'Slug inválido',
+    en: 'Invalid slug',
+  },
+  'companion.http.voiceUnavailable': {
+    'pt-BR': 'Voz indisponível',
+    en: 'Voice unavailable',
+  },
+  'companion.http.imageNotFound': {
+    'pt-BR': 'Imagem não encontrada',
+    en: 'Image not found',
+  },
+  'companion.http.fileNotFound': {
+    'pt-BR': 'Arquivo não encontrado',
+    en: 'File not found',
+  },
+  'companion.http.internalError': {
+    'pt-BR': 'Erro interno',
+    en: 'Internal error',
+  },
+  'companion.http.endpointNotFound': {
+    'pt-BR': 'Endpoint não encontrado',
+    en: 'Endpoint not found',
+  },
+
+  // ── Permission claims ───────────────────────────────────────────────────
+  'perm.control.plain': {
+    'pt-BR': 'Controlar {{app}}',
+    en: 'Control {{app}}',
+  },
+  'perm.control.withHost': {
+    'pt-BR': 'Controlar {{app}} em {{host}}',
+    en: 'Control {{app}} on {{host}}',
+  },
+  'perm.bringToFront': {
+    'pt-BR': 'abrir / trazer para a frente',
+    en: 'open / bring to front',
+  },
+  'perm.batchCount': {
+    'pt-BR': '{{count}} ações em sequência',
+    en: '{{count}} actions in a row',
+  },
+  'perm.approvalThisApp': {
+    'pt-BR': 'A aprovação vale para este app',
+    en: 'The approval applies to this app',
+  },
+  'perm.approvalAllTabs': {
+    'pt-BR':
+      ' Atenção: o site desta aba não pôde ser lido, então a aprovação vale para TODAS as abas deste navegador.',
+    en: " Warning: this tab's site could not be read, so the approval applies to ALL tabs of this browser.",
+  },
+  'perm.risk.elevated': {
+    'pt-BR': 'comando com privilégios elevados (sudo)',
+    en: 'command with elevated privileges (sudo)',
+  },
+  'perm.risk.recursiveRemoveOutside': {
+    'pt-BR': 'remoção recursiva fora do projeto ou da raiz',
+    en: 'recursive removal outside the project or the root',
+  },
+  'perm.risk.recursiveRemove': {
+    'pt-BR': 'remoção recursiva de arquivos (rm -rf)',
+    en: 'recursive file removal (rm -rf)',
+  },
+  'perm.risk.forcePush': {
+    'pt-BR': 'push forçado reescreve histórico remoto',
+    en: 'force push rewrites remote history',
+  },
+  'perm.risk.hardReset': {
+    'pt-BR': 'descarta alterações locais (git reset --hard)',
+    en: 'discards local changes (git reset --hard)',
+  },
+  'perm.risk.osascript': {
+    'pt-BR': 'controla outros apps pela interface (osascript/System Events)',
+    en: 'controls other apps through the UI (osascript/System Events)',
+  },
+  'perm.risk.powershell': {
+    'pt-BR': 'controla outros apps pela interface (PowerShell/UI Automation)',
+    en: 'controls other apps through the UI (PowerShell/UI Automation)',
+  },
+  'perm.risk.dependencies': {
+    'pt-BR': 'instalação/remoção de dependências',
+    en: 'installing/removing dependencies',
+  },
+  'perm.risk.gitWrite': {
+    'pt-BR': 'escrita dentro de .git corrompe o repositório',
+    en: 'writing inside .git corrupts the repository',
+  },
+  'perm.risk.envFile': {
+    'pt-BR': 'arquivo de segredos/ambiente (.env)',
+    en: 'secrets/environment file (.env)',
+  },
+  'perm.risk.lockfile': {
+    'pt-BR': 'lockfile de dependências',
+    en: 'dependency lockfile',
+  },
+  'perm.worktree.remove': {
+    'pt-BR': 'Remover o worktree {{name}}',
+    en: 'Remove the worktree {{name}}',
+  },
+  'perm.worktree.removeDetail': {
+    'pt-BR': 'Apaga a pasta do worktree — alterações não commitadas nela são perdidas.',
+    en: 'Deletes the worktree folder — uncommitted changes in it are lost.',
+  },
+  'perm.worktree.branchDeleted': {
+    'pt-BR': ' O branch dele também é apagado.',
+    en: ' Its branch is deleted too.',
+  },
+  'perm.worktree.branchKept': {
+    'pt-BR': ' O branch é mantido.',
+    en: ' The branch is kept.',
+  },
+  'perm.subchat.sendInstruction': {
+    'pt-BR': 'Enviar uma instrução a um subchat',
+    en: 'Send an instruction to a subchat',
+  },
+  'perm.mcp.tool': {
+    'pt-BR': 'Ferramenta do servidor MCP "{{server}}"',
+    en: 'Tool from the MCP server "{{server}}"',
+  },
+
+  // ── Providers (errors shown in Settings) ────────────────────────────────
+  'provider.invalidId': {
+    'pt-BR': 'ID inválido: use letras, números, "-" e "_" (sem espaços).',
+    en: 'Invalid ID: use letters, digits, "-" and "_" (no spaces).',
+  },
+  'provider.nameRequired': {
+    'pt-BR': 'Informe um nome para o provedor.',
+    en: 'Enter a name for the provider.',
+  },
+  'provider.idExists': {
+    'pt-BR': 'Já existe um provedor com o ID "{{id}}".',
+    en: 'A provider with the ID "{{id}}" already exists.',
+  },
+  'provider.notFound': {
+    'pt-BR': 'Provedor não encontrado.',
+    en: 'Provider not found.',
+  },
+  'provider.notFoundWithId': {
+    'pt-BR': 'Provedor "{{id}}" não encontrado.',
+    en: 'Provider "{{id}}" not found.',
+  },
+  'provider.noBaseUrl': {
+    'pt-BR': 'O provedor não tem URL base configurada.',
+    en: 'The provider has no base URL configured.',
+  },
+  'provider.listModelsFailed': {
+    'pt-BR': 'Não foi possível listar os modelos do servidor.',
+    en: 'Could not list the server models.',
+  },
+
+  // ── Voice model status ──────────────────────────────────────────────────
+  'voice.status.downloading': {
+    'pt-BR': 'baixando…',
+    en: 'downloading…',
+  },
+  'voice.status.extracting': {
+    'pt-BR': 'extraindo o pacote…',
+    en: 'extracting the package…',
+  },
+  'voice.status.extractFailed': {
+    'pt-BR': 'falha ao extrair o pacote',
+    en: 'failed to extract the package',
+  },
+  'voice.status.notExtracted': {
+    'pt-BR': 'o pacote está baixado; falta extrair (e baixar o VAD Silero) antes de usar',
+    en: 'the package is downloaded; it still has to be extracted (and the Silero VAD fetched) before use',
+  },
+  'voice.status.partial': {
+    'pt-BR': 'download incompleto ({{received}} de {{total}} bytes)',
+    en: 'incomplete download ({{received}} of {{total}} bytes)',
+  },
+  'voice.status.absent': {
+    'pt-BR': 'ainda não foi baixado',
+    en: 'not downloaded yet',
+  },
+
+  // ── Generated document previews ─────────────────────────────────────────
+  'media.previewUnavailable': {
+    'pt-BR': '(pré-visualização indisponível)',
+    en: '(preview unavailable)',
+  },
+  'media.morePages': {
+    'pt-BR': '… {{count}} página(s) a mais — baixe o PDF para ver o documento inteiro.',
+    en: '… {{count}} more page(s) — download the PDF to see the whole document.',
+  },
+
+  // ── Voice hardware recommendation (Settings → Voice) ────────────────────
+  'voice.hardware.sherpaMissing': {
+    'pt-BR':
+      'Sem binário do sherpa-onnx para {{platform}}/{{arch}}: o Parakeet não roda aqui, então a recomendação é o whisper ({{arch}} fora de x64/arm64 ou sistema não coberto).',
+    en: 'No sherpa-onnx binary for {{platform}}/{{arch}}: Parakeet does not run here, so the recommendation is whisper ({{arch}} outside x64/arm64 or an uncovered system).',
+  },
+  'voice.hardware.lowRam': {
+    'pt-BR':
+      'A máquina tem {{gb}} GB de RAM: o Parakeet carrega ~{{need}} GB em memória, então vale um modelo de whisper menor para não pesar.',
+    en: 'This machine has {{gb}} GB of RAM: Parakeet loads ~{{need}} GB into memory, so a smaller whisper model is worth it to keep things light.',
+  },
+  'voice.hardware.parakeetReady': {
+    'pt-BR':
+      'Parakeet TDT 0.6B v3 em CPU pelo sherpa-onnx: binário pronto para {{platform}}/{{arch}}, sem compilar nada, e a máquina tem {{gb}} GB de RAM para os ~{{need}} GB que ele carrega.',
+    en: 'Parakeet TDT 0.6B v3 on CPU through sherpa-onnx: binary ready for {{platform}}/{{arch}}, nothing to compile, and the machine has {{gb}} GB of RAM for the ~{{need}} GB it loads.',
+  },
+  'voice.hardware.lowMemoryWarning': {
+    'pt-BR':
+      'Memória baixa: {{gb}} GB. Com o Parakeet carregado o processo cresce ~{{need}} GB — em máquina de 8 GB isso trava o resto do app.',
+    en: 'Low memory: {{gb}} GB. With Parakeet loaded the process grows ~{{need}} GB — on an 8 GB machine that stalls the rest of the app.',
+  },
+  'voice.hardware.fewCpus': {
+    'pt-BR':
+      'Só {{cpus}} núcleo(s) de CPU: use 2 threads no ditado (acima disso a inferência não melhora e o app fica sem folga).',
+    en: 'Only {{cpus}} CPU core(s): use 2 dictation threads (beyond that inference does not improve and the app runs out of headroom).',
+  },
+  'voice.hardware.macIntel': {
+    'pt-BR': 'macOS em x64 (Intel): o Parakeet roda em CPU, bem mais devagar que no Apple Silicon.',
+    en: 'macOS on x64 (Intel): Parakeet runs on CPU, far slower than on Apple Silicon.',
+  },
+  'voice.hardware.windowsPreview': {
+    'pt-BR':
+      'No Windows as APIs de voz novas do sistema estão em preview e só aceitam inglês — por isso o app leva o próprio modelo.',
+    en: 'On Windows the new system speech APIs are in preview and only accept English — that is why the app ships its own model.',
+  },
+  'voice.hardware.macos26': {
+    'pt-BR':
+      'No macOS 26 existiria o reconhecedor de fala do próprio sistema; aqui os motores do app são só parakeet e whisper.',
+    en: 'On macOS 26 the system has its own speech recognizer; here the app engines are only parakeet and whisper.',
+  },
+  'voice.hardware.linuxNoEngine': {
+    'pt-BR': 'No Linux não há motor de fala no sistema: o modelo é sempre o do app.',
+    en: 'On Linux there is no system speech engine: the model is always the app one.',
+  },
+  'voice.hardware.notDownloaded': {
+    'pt-BR':
+      'O modelo recomendado ({{model}}) ainda não está baixado — baixe em Configurações → Voz (~{{mb}} MB).',
+    en: 'The recommended model ({{model}}) is not downloaded yet — download it in Settings → Voice (~{{mb}} MB).',
+  },
+
+  // ── Orchestrator messages shown in the chat ─────────────────────────────
+  'orchestrator.stepsExhausted': {
+    'pt-BR':
+      'O orçamento de passos do planejamento acabou antes de eu conseguir responder e não registrei nenhuma tarefa. Diga "continue" que eu retomo de onde parei — ou me diga se prefere que eu divida o trabalho em tarefas.',
+    en: 'The planning step budget ran out before I could answer and I registered no task. Say "continue" and I will pick up where I stopped — or tell me if you would rather I split the work into tasks.',
+  },
+  'orchestrator.planGone': {
+    'pt-BR':
+      'Este plano não está mais disponível para execução (o app foi reiniciado?). Envie o pedido novamente.',
+    en: 'This plan is no longer available for execution (did the app restart?). Send the request again.',
+  },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
 export type MainMessageKey = keyof typeof MESSAGES
 
-/** Idioma em memória — evita reler o storage a cada frase de uma notificação. */
+/** Language held in memory — avoids re-reading the storage on every sentence of a notification. */
 let cached: MainLocale | undefined
 
-/** "Portuguese"/"pt-BR"/"pt" → pt-BR; qualquer outra coisa (inclusive vazio) → en. */
+/** "Portuguese"/"pt-BR"/"pt" → pt-BR; anything else (including empty) → en. */
 export function resolveMainLocale(language: string | undefined): MainLocale {
   const value = (language ?? '').trim().toLowerCase()
   return value.startsWith('pt') || value.startsWith('portuguese') ? 'pt-BR' : 'en'
 }
 
-/** O idioma já em memória (sem ler o storage) — para quem não pode esperar,
- *  como a fala que precisa de um idioma de reserva. */
+/** The language already in memory (without reading the storage) — for whoever cannot wait,
+ *  such as speech that needs a fallback language. */
 export function currentMainLocale(): MainLocale | undefined {
   return cached
 }
 
-/** Espelha o idioma publicado pelo renderer (`app:setLanguage`). */
+/** Mirrors the language published by the renderer (`app:setLanguage`). */
 export function setMainLocale(language: string): void {
   cached = resolveMainLocale(language)
 }
 
 /**
- * Carrega o idioma persistido — chamado no boot e, sob demanda, na primeira
- * frase de cada notificação. Nunca lança: `t()` roda em caminho de aviso (e
- * dentro de `void ...` sem catch), onde um storage corrompido não pode virar
- * rejection sem tratamento — nesse caso vale o idioma já em memória.
+ * Loads the persisted language — called at boot and, on demand, on the first
+ * sentence of each notification. It never throws: `t()` runs on a warning path (and
+ * inside `void ...` without catch), where a corrupted storage cannot become an
+ * unhandled rejection — in that case the language already in memory applies.
  */
 export async function loadMainLocale(): Promise<void> {
   try {
@@ -412,9 +776,9 @@ export async function loadMainLocale(): Promise<void> {
 }
 
 /**
- * Traduz uma frase fixa. Assíncrona porque o idioma pode ainda não estar em
- * memória (rotina atrasada disparando logo depois do boot) e a leitura do
- * storage é assíncrona — o resultado fica em cache.
+ * Translates a fixed sentence. Asynchronous because the language may not be in
+ * memory yet (a late routine firing right after boot) and reading the storage
+ * is asynchronous — the result is cached.
  */
 export async function t(
   key: MainMessageKey,
@@ -425,9 +789,9 @@ export async function t(
 }
 
 /**
- * Versão síncrona, para caminhos que não podem esperar (o feed de atividade
- * do painel sai na ordem das ações). Usa o idioma já em memória — o boot
- * carrega com `loadMainLocale` — e cai em inglês se ainda não houver.
+ * Synchronous version, for paths that cannot wait (the panel's activity
+ * feed goes out in the order of the actions). It uses the language already in memory — the boot
+ * loads it with `loadMainLocale` — and falls back to English if there is none yet.
  */
 export function tNow(key: MainMessageKey, vars?: Record<string, string | number>): string {
   return format(key, cached ?? 'en', vars)
@@ -437,7 +801,7 @@ function format(key: MainMessageKey, locale: MainLocale, vars?: Record<string, s
   let text: string = MESSAGES[key][locale]
   if (vars) {
     for (const [name, value] of Object.entries(vars)) {
-      // Sem `replaceAll`: o target do tsconfig é ES2020.
+      // No `replaceAll`: the tsconfig target is ES2020.
       text = text.split(`{{${name}}}`).join(String(value))
     }
   }

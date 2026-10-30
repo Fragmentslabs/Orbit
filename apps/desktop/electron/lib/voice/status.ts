@@ -10,34 +10,33 @@ import { parakeetExtractPhase } from "./models-store"
 import { modelTtsStatus } from "./model-tts"
 import { sttEngineStatus, sttModelInstalled } from "./stt"
 import { enginePresent } from "./tts"
+import { t } from "../i18n"
 
 /**
- * A ÚNICA fonte de verdade do "dá para usar".
+ * The SINGLE source of truth for "usable".
  *
- * Havia duas visões discordando: o downloader chamava de "instalado" assim que
- * os bytes chegavam ao disco, enquanto o motor só considera pronto o que ele
- * consegue RODAR (o pacote do Parakeet extraído e com o VAD Silero). O selo da
- * UI saía de uma e o texto do motivo da outra — "Not installed" ao lado de "o
- * pacote está baixado".
+ * There used to be two views disagreeing: the downloader called it "installed" as soon as
+ * the bytes reached the disk, while the engine only considers ready what it
+ * can RUN (the Parakeet package extracted and with the Silero VAD). The UI badge came
+ * from one and the reason text from the other — "Not installed" next to "the
+ * package is downloaded".
  *
- * Aqui as duas coisas saem do MESMO retrato, por modelo:
- *   - `downloaded`: bytes completos e conferidos no disco (só o downloader sabe);
- *   - `installed` : o motor consegue usar agora (só o motor sabe).
- * Um pacote baixado e ainda não extraído fica `downloaded: true`,
- * `installed: false`, `state: "downloaded"` — honesto e sem ambiguidade.
+ * Here both things come out of the SAME snapshot, per model:
+ *   - `downloaded`: bytes complete and checked on disk (only the downloader knows);
+ *   - `installed` : the engine can use it now (only the engine knows).
+ * A package downloaded and not yet extracted stays `downloaded: true`,
+ * `installed: false`, `state: "downloaded"` — honest and unambiguous.
  */
 
-/** Motivo, em uma frase, do pacote baixado que ainda não está utilizável. */
-const REASON_ARCHIVE_NOT_EXTRACTED =
-  "o pacote está baixado; falta extrair (e baixar o VAD Silero) antes de usar"
+/** One-sentence reason for the downloaded package that is not usable yet. */
 
-/** Retrato honesto de um modelo: o selo e o motivo saem daqui. */
+/** Honest snapshot of a model: the badge and the reason come out of here. */
 export async function voiceModelStatus(model: VoiceModelInfo): Promise<VoiceModelStatus> {
   const total = model.bytes
   const received = await receivedBytes(model.id)
   const downloaded = await isModelDownloaded(model.id)
   const archive = model.archive === true
-  // Só o pacote (Parakeet) tem extração; nos demais `installed` = `downloaded`.
+  // Only the package (Parakeet) has extraction; for the others `installed` = `downloaded`.
   const extract = archive ? parakeetExtractPhase() : { phase: "idle" as const, error: null }
   const installed = downloaded && (!archive || sttModelInstalled(model.id))
 
@@ -49,37 +48,37 @@ export async function voiceModelStatus(model: VoiceModelInfo): Promise<VoiceMode
     state = "ready"
   } else if (isDownloading(model.id)) {
     state = "downloading"
-    reason = "baixando…"
+    reason = await t("voice.status.downloading")
   } else if (archive && downloaded && extract.phase === "extracting") {
     state = "extracting"
-    reason = "extraindo o pacote…"
+    reason = await t("voice.status.extracting")
   } else if (archive && downloaded && extract.phase === "error") {
     state = "error"
-    error = extract.error ?? "falha ao extrair o pacote"
+    error = extract.error ?? (await t("voice.status.extractFailed"))
     reason = error
   } else if (downloaded) {
-    // Só o pacote chega aqui: baixado e ainda não extraído.
+    // Only the package gets here: downloaded and not yet extracted.
     state = "downloaded"
-    reason = archive ? REASON_ARCHIVE_NOT_EXTRACTED : undefined
+    reason = archive ? await t("voice.status.notExtracted") : undefined
   } else {
-    const falha = progressOf(model.id)?.error
-    if (falha) {
+    const failure = progressOf(model.id)?.error
+    if (failure) {
       state = "error"
-      error = falha
-      reason = falha
+      error = failure
+      reason = failure
     } else if (received > 0) {
       state = "partial"
-      reason = `download incompleto (${received} de ${total} bytes)`
+      reason = await t("voice.status.partial", { received, total })
     } else {
       state = "absent"
-      reason = "ainda não foi baixado"
+      reason = await t("voice.status.absent")
     }
   }
 
   return { downloaded, installed, ready: installed, state, received, total, reason, error }
 }
 
-/** O retrato completo que o `voice:status` (e o `voice:status-changed`) publica. */
+/** The full snapshot that `voice:status` (and `voice:status-changed`) publishes. */
 export async function voiceStatusSnapshot(): Promise<VoiceStatusSnapshot> {
   const models: Record<string, VoiceModelStatus> = {}
   for (const model of VOICE_MODELS) models[model.id] = await voiceModelStatus(model)
@@ -87,19 +86,19 @@ export async function voiceStatusSnapshot(): Promise<VoiceStatusSnapshot> {
   return {
     models,
     engines: await sttEngineStatus(),
-    // Utilizável AGORA = modelo do Supertonic presente e válido E o motor no build.
+    // Usable NOW = Supertonic model present and valid AND the engine in the build.
     ttsReady: tts?.installed === true && enginePresent(),
-    // A prioridade "Modelo de voz" não depende do disco local: quem responde se
-    // a rota do provedor existe é o retrato do próprio provedor. Sem ela, o
-    // pipeline usa o motor local e a UI explica por quê (ver a tela de voz).
+    // The "Voice model" priority does not depend on the local disk: what answers whether
+    // the provider route exists is the provider's own snapshot. Without it, the
+    // pipeline uses the local engine and the UI explains why (see the voice screen).
     modelTts: await modelTtsStatus(),
   }
 }
 
 /**
- * ids com os bytes completos no disco — alimenta o aviso "ainda não baixado" do
- * `voice:hardware`. É "baixado" de propósito: o Parakeet já conta assim que o
- * pacote chega, porque a extração é automática.
+ * ids with the complete bytes on disk — it feeds the "not downloaded yet" warning of
+ * `voice:hardware`. It is "downloaded" on purpose: Parakeet already counts as soon as the
+ * package arrives, because the extraction is automatic.
  */
 export async function downloadedModelIds(): Promise<string[]> {
   const ids: string[] = []

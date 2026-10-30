@@ -1,11 +1,12 @@
 import type { DiscoveredModel, ProviderProtocol } from '@shared/chat'
+import { tNow } from './i18n'
 
 /**
- * Descobre os modelos SERVIDOS por um endpoint, em vez de assumir uma lista
- * fixa: `GET {base}/models` (OpenAI-like) e, em Ollama, o `/api/tags` nativo,
- * que lista o que está instalado mesmo em versões em que o `/v1/models` não
- * existe. O resultado é candidato — quem decide o que entra no catálogo é o
- * usuário (ou a adoção automática dos servidores locais, ver detect-local.ts).
+ * Discovers the models SERVED by an endpoint, instead of assuming a fixed
+ * list: `GET {base}/models` (OpenAI-like) and, in Ollama, the native `/api/tags`,
+ * which lists what is installed even in versions where `/v1/models` does not
+ * exist. The result is a candidate — whoever decides what enters the catalog is the
+ * user (or the automatic adoption of local servers, see detect-local.ts).
  */
 
 const TIMEOUT_MS = 6_000
@@ -14,14 +15,14 @@ export interface DiscoverOptions {
   baseURL: string
   apiKey?: string
   protocol?: ProviderProtocol
-  /** Provedor já salvo: a chave guardada é usada quando `apiKey` não vem. */
+  /** Provider already saved: the stored key is used when `apiKey` does not come. */
   providerId?: string
 }
 
 /**
- * URLs que podem listar modelos, na ordem de preferência. A segunda só existe
- * quando a URL base termina em `/v1` — é o caso do seed de Ollama
- * (`http://localhost:11434/v1`), cujo endpoint nativo fica em `/api/tags`.
+ * URLs that may list models, in order of preference. The second one only exists
+ * when the base URL ends in `/v1` — it is the case of the Ollama seed
+ * (`http://localhost:11434/v1`), whose native endpoint is at `/api/tags`.
  */
 function candidateUrls(baseURL: string): string[] {
   const base = baseURL.trim().replace(/\/+$/, '')
@@ -52,10 +53,10 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * Modelos de uma resposta de listagem. Aceita os formatos que aparecem na
- * prática: `{ data: [{ id }] }` (OpenAI, LM Studio, gateways), `{ models:
- * [{ name, details }] }` (Ollama nativo), `{ data: [{ id, display_name }] }`
- * (Anthropic). Item que não tem id reconhecível é ignorado.
+ * Models of a listing response. It accepts the formats that show up in
+ * practice: `{ data: [{ id }] }` (OpenAI, LM Studio, gateways), `{ models:
+ * [{ name, details }] }` (native Ollama), `{ data: [{ id, display_name }] }`
+ * (Anthropic). An item without a recognizable id is ignored.
  */
 export function parseModelList(body: unknown): DiscoveredModel[] {
   const root = record(body)
@@ -80,7 +81,7 @@ export function parseModelList(body: unknown): DiscoveredModel[] {
     if (!raw) continue
     const idField = [raw.id, raw.name, raw.model].find((v): v is string => typeof v === 'string')
     if (!idField) continue
-    // Ollama devolve "llama3.2:latest"; o nome com tag não é o id que o chat usa.
+    // Ollama returns "llama3.2:latest"; the name with a tag is not the id the chat uses.
     const id = idField.replace(/:latest$/, '')
     if (!id || seen.has(id)) continue
     seen.add(id)
@@ -100,9 +101,9 @@ export function parseModelList(body: unknown): DiscoveredModel[] {
 }
 
 /**
- * Consulta as URLs candidatas e devolve o primeiro resultado não vazio. Um
- * servidor que responde 200 sem modelos (nada instalado) devolve lista vazia —
- * não é erro. Só lança quando nenhum endpoint respondeu.
+ * Queries the candidate URLs and returns the first non-empty result. A
+ * server that answers 200 without models (nothing installed) returns an empty list —
+ * that is not an error. It only throws when no endpoint answered.
  */
 export async function discoverModels(opts: DiscoverOptions): Promise<DiscoveredModel[]> {
   if (!opts.baseURL?.trim()) throw new Error('Informe a URL base do provedor.')
@@ -115,7 +116,7 @@ export async function discoverModels(opts: DiscoverOptions): Promise<DiscoveredM
     try {
       const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
       if (!res.ok) {
-        failures.push(`${url} respondeu HTTP ${res.status}`)
+        failures.push(`${url} answered HTTP ${res.status}`)
         continue
       }
       answered = true
@@ -127,5 +128,5 @@ export async function discoverModels(opts: DiscoverOptions): Promise<DiscoveredM
   }
 
   if (answered) return []
-  throw new Error(failures.join(' · ') || 'Não foi possível listar os modelos do servidor.')
+  throw new Error(failures.join(' · ') || tNow('provider.listModelsFailed'))
 }

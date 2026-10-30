@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { VoiceModelState } from '@shared/voice'
+import { setMainLocale } from '../i18n'
 
 /**
- * O `voice:status` é o que a UI lê para pintar o selo ("installed") e o texto do
- * motivo. O bug de fundo era o downloader e o motor discordarem: o selo dizia
- * "Not installed" e o motivo, logo abaixo, dizia que o pacote estava baixado.
+ * `voice:status` is what the UI reads to paint the badge ("installed") and the reason
+ * text. The underlying bug was the downloader and the engine disagreeing: the badge said
+ * "Not installed" and the reason, right below, said the package was downloaded.
  *
- * Aqui as duas respostas saem do MESMO retrato (`installed` + `state` +
- * `reason`), então o invariante testado é: `installed` é verdadeiro SÓ quando o
- * motor consegue usar o modelo (`state === "ready"`), e todo estado não pronto
- * traz um motivo. O disco e os motores são dublês: o que se fecha é o mapeamento.
+ * Here both answers come from the SAME snapshot (`installed` + `state` +
+ * `reason`), so the invariant under test is: `installed` is true ONLY when the
+ * engine can use the model (`state === "ready"`), and every non-ready state
+ * carries a reason. The disk and the engines are stubs: what is closed is the mapping.
  */
 
-const estado = vi.hoisted(() => ({
+const state = vi.hoisted(() => ({
   downloaded: false,
   installed: false,
   downloading: false,
@@ -23,28 +24,28 @@ const estado = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/orbit-voice-status-teste', getAppPath: () => '/tmp/orbit-voice-status-teste' },
+  app: { getPath: () => '/tmp/orbit-voice-status-test', getAppPath: () => '/tmp/orbit-voice-status-test' },
 }))
 
 vi.mock('./download', () => ({
-  isModelDownloaded: async () => estado.downloaded,
-  isDownloading: () => estado.downloading,
-  receivedBytes: async () => estado.received,
-  progressOf: () => estado.progress,
+  isModelDownloaded: async () => state.downloaded,
+  isDownloading: () => state.downloading,
+  receivedBytes: async () => state.received,
+  progressOf: () => state.progress,
 }))
 
 vi.mock('./models-store', () => ({
-  parakeetExtractPhase: () => estado.extract,
+  parakeetExtractPhase: () => state.extract,
 }))
 
 vi.mock('./tts', () => ({
-  enginePresent: () => estado.engine,
+  enginePresent: () => state.engine,
 }))
 
-// A rota pelo MODELO vive em ./model-tts (catálogo/provedores, que não cabem
-// neste teste): aqui só interessa que o retrato a publique como veio.
+// The route through the MODEL lives in ./model-tts (catalog/providers, which do not fit
+// in this test): what matters here is that the snapshot publishes it as it came.
 vi.mock('./model-tts', () => ({
-  modelTtsStatus: async () => ({ available: false, reason: 'sem provedor de fala' }),
+  modelTtsStatus: async () => ({ available: false, reason: 'with no speech provider' }),
 }))
 
 vi.mock('./stt', () => ({
@@ -55,13 +56,13 @@ vi.mock('./stt', () => ({
       engine: 'parakeet',
       label: 'Parakeet TDT 0.6B v3',
       bytes: 487170055,
-      url: 'https://exemplo/parakeet.tar.bz2',
+      url: 'https://example.org/parakeet.tar.bz2',
       langs: ['pt'],
       archive: true,
     },
   ],
   sttEngineStatus: async () => [],
-  sttModelInstalled: () => estado.installed,
+  sttModelInstalled: () => state.installed,
 }))
 
 const { voiceModelStatus, voiceStatusSnapshot } = await import('./status')
@@ -71,46 +72,49 @@ const PARAKEET = 'parakeet-tdt-0.6b-v3'
 const TTS = 'supertonic-3'
 
 beforeEach(() => {
-  estado.downloaded = false
-  estado.installed = false
-  estado.downloading = false
-  estado.received = 0
-  estado.progress = null
-  estado.extract = { phase: 'idle', error: null }
-  estado.engine = true
+  // The reason sentences go through the main i18n now; the assertions below are the
+  // product's default language.
+  setMainLocale('Portuguese')
+  state.downloaded = false
+  state.installed = false
+  state.downloading = false
+  state.received = 0
+  state.progress = null
+  state.extract = { phase: 'idle', error: null }
+  state.engine = true
 })
 
 describe('voiceModelStatus', () => {
-  it('modelo ausente: absent, não instalado, com motivo', async () => {
+  it('missing model: absent, not installed, with a reason', async () => {
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(st).toMatchObject({ downloaded: false, installed: false, state: 'absent' })
     expect(st.reason).toBe('ainda não foi baixado')
     expect(st.total).toBe(487170055)
   })
 
-  it('o pacote baixado e não extraído NUNCA aparece como instalado', async () => {
-    estado.downloaded = true
-    estado.installed = false
+  it('a downloaded and not extracted package NEVER shows as installed', async () => {
+    state.downloaded = true
+    state.installed = false
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
-    // O bug: o downloader diria "instalado" e o motor "não pronto".
+    // The bug: the downloader would say "installed" and the engine "not ready".
     expect(st.downloaded).toBe(true)
     expect(st.installed).toBe(false)
     expect(st.state).toBe('downloaded')
     expect(st.reason).toMatch(/falta extrair/)
   })
 
-  it('extraindo o pacote: estado intermediário explícito', async () => {
-    estado.downloaded = true
-    estado.extract = { phase: 'extracting', error: null }
+  it('extracting the package: an explicit intermediate state', async () => {
+    state.downloaded = true
+    state.extract = { phase: 'extracting', error: null }
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(st.installed).toBe(false)
     expect(st.state).toBe('extracting')
     expect(st.reason).toMatch(/extraindo/)
   })
 
-  it('extração falhou: vira erro com o motivo concreto', async () => {
-    estado.downloaded = true
-    estado.extract = { phase: 'error', error: 'falha ao extrair o pacote (tar): bzip2: dados corrompidos' }
+  it('extraction failed: becomes an error with the concrete reason', async () => {
+    state.downloaded = true
+    state.extract = { phase: 'error', error: 'falha ao extrair o pacote (tar): bzip2: dados corrompidos' }
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(st.state).toBe('error')
     expect(st.installed).toBe(false)
@@ -118,54 +122,54 @@ describe('voiceModelStatus', () => {
     expect(st.reason).toBe(st.error)
   })
 
-  it('pronto: só aí installed é true, e sem motivo', async () => {
-    estado.downloaded = true
-    estado.installed = true
+  it('ready: only then is installed true, and with no reason', async () => {
+    state.downloaded = true
+    state.installed = true
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(st.state).toBe('ready')
     expect(st.installed).toBe(true)
     expect(st.reason).toBeUndefined()
   })
 
-  it('download em curso e download parcial têm estados distintos', async () => {
-    estado.downloading = true
+  it('download in progress and partial download have distinct states', async () => {
+    state.downloading = true
     expect((await voiceModelStatus(modelInfo(PARAKEET)!)).state).toBe('downloading')
 
-    estado.downloading = false
-    estado.received = 1024
+    state.downloading = false
+    state.received = 1024
     const parcial = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(parcial.state).toBe('partial')
     expect(parcial.reason).toMatch(/1024 de 487170055/)
   })
 
-  it('falha de download: state error com o motivo', async () => {
-    estado.progress = { error: 'origem respondeu 404' }
+  it('download failure: state error with the reason', async () => {
+    state.progress = { error: 'origem respondeu 404' }
     const st = await voiceModelStatus(modelInfo(PARAKEET)!)
     expect(st.state).toBe('error')
     expect(st.installed).toBe(false)
     expect(st.reason).toBe('origem respondeu 404')
   })
 
-  it('invariante: installed é true só em ready, e todo outro estado tem motivo', async () => {
-    const cenarios: Array<[VoiceModelState, () => void]> = [
-      ['ready', () => ((estado.downloaded = true), (estado.installed = true))],
-      ['downloaded', () => (estado.downloaded = true)],
-      ['extracting', () => ((estado.downloaded = true), (estado.extract = { phase: 'extracting', error: null }))],
-      ['error', () => (estado.progress = { error: 'falhou' })],
-      ['downloading', () => (estado.downloading = true)],
-      ['partial', () => (estado.received = 10)],
+  it('invariant: installed is true only in ready, and every other state has a reason', async () => {
+    const scenarios: Array<[VoiceModelState, () => void]> = [
+      ['ready', () => ((state.downloaded = true), (state.installed = true))],
+      ['downloaded', () => (state.downloaded = true)],
+      ['extracting', () => ((state.downloaded = true), (state.extract = { phase: 'extracting', error: null }))],
+      ['error', () => (state.progress = { error: 'falhou' })],
+      ['downloading', () => (state.downloading = true)],
+      ['partial', () => (state.received = 10)],
       ['absent', () => undefined],
     ]
-    for (const [esperado, montar] of cenarios) {
-      estado.downloaded = false
-      estado.installed = false
-      estado.downloading = false
-      estado.received = 0
-      estado.progress = null
-      estado.extract = { phase: 'idle', error: null }
+    for (const [expected, montar] of scenarios) {
+      state.downloaded = false
+      state.installed = false
+      state.downloading = false
+      state.received = 0
+      state.progress = null
+      state.extract = { phase: 'idle', error: null }
       montar()
       const st = await voiceModelStatus(modelInfo(PARAKEET)!)
-      expect(st.state).toBe(esperado)
+      expect(st.state).toBe(expected)
       expect(st.installed).toBe(st.state === 'ready')
       expect(st.ready).toBe(st.installed)
       if (st.state !== 'ready') expect(st.reason?.length).toBeGreaterThan(0)
@@ -174,30 +178,30 @@ describe('voiceModelStatus', () => {
 })
 
 describe('voiceStatusSnapshot', () => {
-  it('traz todo o catálogo e só marca ttsReady com o modelo e o motor prontos', async () => {
-    estado.downloaded = true
-    estado.installed = true
-    estado.engine = false
-    const semMotor = await voiceStatusSnapshot()
-    expect(Object.keys(semMotor.models).sort()).toEqual(VOICE_MODELS.map((m) => m.id).sort())
-    expect(semMotor.models[TTS].installed).toBe(true)
-    expect(semMotor.ttsReady).toBe(false)
+  it('brings the whole catalog and only marks ttsReady with the model and the engine ready', async () => {
+    state.downloaded = true
+    state.installed = true
+    state.engine = false
+    const withoutEngine = await voiceStatusSnapshot()
+    expect(Object.keys(withoutEngine.models).sort()).toEqual(VOICE_MODELS.map((m) => m.id).sort())
+    expect(withoutEngine.models[TTS].installed).toBe(true)
+    expect(withoutEngine.ttsReady).toBe(false)
 
-    estado.engine = true
+    state.engine = true
     expect((await voiceStatusSnapshot()).ttsReady).toBe(true)
   })
 
-  it('sem o modelo do Supertonic, ttsReady é false', async () => {
+  it('without the Supertonic model, ttsReady is false', async () => {
     const snap = await voiceStatusSnapshot()
     expect(snap.models[TTS].installed).toBe(false)
     expect(snap.models[TTS].state).toBe('absent')
     expect(snap.ttsReady).toBe(false)
   })
 
-  it('publica a rota do MODELO junto do estado local (prioridade de áudio)', async () => {
+  it('publishes the MODEL route next to the local state (audio priority)', async () => {
     const snap = await voiceStatusSnapshot()
-    // O estado local sozinho não responde à preferência "Modelo de voz": a UI
-    // precisa das duas metades para dizer quem vai falar.
-    expect(snap.modelTts).toEqual({ available: false, reason: 'sem provedor de fala' })
+    // The local state alone does not answer the "Voice model" preference: the UI
+    // needs both halves to say who will speak.
+    expect(snap.modelTts).toEqual({ available: false, reason: 'with no speech provider' })
   })
 })

@@ -3,113 +3,114 @@ import { detectMachine } from "../machine"
 import { STT_MODELS } from "./stt"
 import { modelInfo } from "./manifest"
 import { preferredWhisperModelId } from "./catalog"
+import { tNow } from '../i18n'
 
 /**
- * Detecção da máquina e recomendação do motor de transcrição.
+ * Machine detection and recommendation of the transcription engine.
  *
- * A regra vem das medições do laboratório de voz:
- *  - Parakeet TDT 0.6B v3 pelo `sherpa-onnx` é o preferido (binários prontos
- *    para darwin/win/linux x64 e arm64, N-API, só CPU). Em troca, o processo
- *    cresce ~1,3 GB com o modelo carregado;
- *  - então ele exige memória de verdade: numa máquina de 8 GB o custo em RAM
- *    estoura e vale um whisper menor (o small, ou o base abaixo de 8 GB);
- *  - arch fora de x64/arm64 (ou sistema sem binário do sherpa-onnx) não roda
- *    Parakeet de jeito nenhum — aí a recomendação é whisper.
+ * The rule comes from the voice laboratory measurements:
+ *  - Parakeet TDT 0.6B v3 through `sherpa-onnx` is the preferred one (binaries ready
+ *    for darwin/win/linux x64 and arm64, N-API, CPU only). In exchange, the process
+ *    grows ~1.3 GB with the model loaded;
+ *  - so it demands real memory: on an 8 GB machine the RAM cost
+ *    blows up and a smaller whisper is worth it (the small one, or base below 8 GB);
+ *  - an arch outside x64/arm64 (or a system with no sherpa-onnx binary) does not run
+ *    Parakeet at all — there the recommendation is whisper.
  *
- * `reason` e `warnings` saem SEMPRE preenchidos: a tela de voz mostra os dois,
- * e recomendação sem justificativa vira caixa-preta para quem usa.
+ * `reason` and `warnings` ALWAYS come out filled: the voice screen shows both,
+ * and a recommendation without a justification becomes a black box for whoever uses it.
  */
 
-/** id preferido do Parakeet no catálogo do STT (o concreto vem de STT_MODELS). */
+/** preferred Parakeet id in the STT catalog (the concrete one comes from STT_MODELS). */
 export const PARAKEET_MODEL_ID = "parakeet-tdt-0.6b-v3"
 
 /**
- * Abaixo disto, o Parakeet (1,3 GB de RSS) pesa demais na máquina. Não é 16:
- * o `os.totalmem()` desconta o que o firmware e a GPU integrada reservam, e uma
- * máquina de 16 GB aparece com 15,3 GB — ficava de fora justamente quem tem
- * folga de sobra. 12 separa as de 16 GB das de 8 GB com margem.
+ * Below this, Parakeet (1.3 GB of RSS) weighs too much on the machine. It is not 16:
+ * `os.totalmem()` discounts what the firmware and the integrated GPU reserve, and a
+ * 16 GB machine shows up with 15.3 GB — precisely those with plenty of
+ * room were left out. 12 separates the 16 GB ones from the 8 GB ones with margin.
  */
 const MIN_MEMORY_GB = 12
 
-/** RAM que o Parakeet ocupa com o modelo carregado (medido no laboratório). */
+/** RAM Parakeet occupies with the model loaded (measured in the laboratory). */
 const PARAKEET_RAM_GB = 1.3
 
 export interface HardwareOptions {
-  /** ids de modelos já BAIXADOS (bytes completos no disco) — só para o aviso "ainda não baixado". */
+  /** ids of models already DOWNLOADED (complete bytes on disk) — only for the "not downloaded yet" warning. */
   downloadedIds?: string[]
 }
 
-/** O sistema tem binário do sherpa-onnx nesta plataforma? */
+/** Does the system have a sherpa-onnx binary on this platform? */
 function sherpaSupported(platform: string, arch: string): boolean {
   if (platform !== "darwin" && platform !== "win32" && platform !== "linux") return false
   return arch === "arm64" || arch === "x64"
 }
 
 /**
- * id do catálogo para o motor pedido: usa o id conhecido quando ele existe em
- * STT_MODELS e cai no menor modelo daquele motor quando não existe (o catálogo
- * é do outro worker — a recomendação nunca aponta para um id inventado).
+ * catalog id for the requested engine: uses the known id when it exists in
+ * STT_MODELS and falls back to the smallest model of that engine when it does not (the catalog
+ * belongs to the other worker — the recommendation never points to an invented id).
  */
 function pickModel(engine: VoiceEngineId, preferredId: string): string {
   if (STT_MODELS.some((model) => model.id === preferredId && model.engine === engine)) return preferredId
   const same = STT_MODELS.filter((model) => model.engine === engine)
   if (same.length === 0) return preferredId
-  return same.reduce((menor, model) => (model.bytes < menor.bytes ? model : menor)).id
+  return same.reduce((smallest, model) => (model.bytes < smallest.bytes ? model : smallest)).id
 }
 
-/** Tamanho em MB "de UI" (decimal, como o HuggingFace e as lojas anunciam). */
+/** Size in "UI" MB (decimal, the way HuggingFace and the stores advertise it). */
 function mb(bytes: number): number {
   return Math.round(bytes / 1e6)
 }
 
 export function detectHardware(options: HardwareOptions = {}): VoiceHardwareInfo {
-  // Números da máquina vêm do detector comum (`lib/machine.ts`): a gravação de
-  // vídeo usa os mesmos, e duas contas diferentes para "quantos GB tem esta
-  // máquina" acabariam divergindo.
+  // Machine numbers come from the common detector (`lib/machine.ts`): video
+  // recording uses the same ones, and two different calculations for "how many GB this
+  // machine has" would end up diverging.
   const { platform, arch, totalMemGb, cpus } = detectMachine()
-  const baixados = new Set(options.downloadedIds ?? [])
+  const downloaded = new Set(options.downloadedIds ?? [])
   const warnings: string[] = []
 
-  const rodaParakeet = sherpaSupported(platform, arch)
-  const memoriaSuficiente = totalMemGb >= MIN_MEMORY_GB
-  const recommendedEngine: VoiceEngineId = rodaParakeet && memoriaSuficiente ? "parakeet" : "whisper"
-  // O modelo é SEMPRE do motor recomendado: pedir o id do Parakeet para o
-  // whisper devolvia o próprio Parakeet (existe no catálogo), e a tela dizia
-  // "whisper.cpp com o Parakeet".
+  const runsParakeet = sherpaSupported(platform, arch)
+  const enoughMemory = totalMemGb >= MIN_MEMORY_GB
+  const recommendedEngine: VoiceEngineId = runsParakeet && enoughMemory ? "parakeet" : "whisper"
+  // The model ALWAYS belongs to the recommended engine: asking for the Parakeet id for
+  // whisper returned Parakeet itself (it exists in the catalog), and the screen said
+  // "whisper.cpp with Parakeet".
   const preferredModel = recommendedEngine === "parakeet" ? PARAKEET_MODEL_ID : preferredWhisperModelId(totalMemGb)
   const recommendedModel = pickModel(recommendedEngine, preferredModel)
 
   let reason: string
-  if (!rodaParakeet) {
-    reason = `Sem binário do sherpa-onnx para ${platform}/${arch}: o Parakeet não roda aqui, então a recomendação é o whisper (${arch} fora de x64/arm64 ou sistema não coberto).`
-  } else if (!memoriaSuficiente) {
-    reason = `A máquina tem ${totalMemGb} GB de RAM: o Parakeet carrega ~${PARAKEET_RAM_GB} GB em memória, então vale um modelo de whisper menor para não pesar.`
+  if (!runsParakeet) {
+    reason = tNow('voice.hardware.sherpaMissing', { platform, arch })
+  } else if (!enoughMemory) {
+    reason = tNow('voice.hardware.lowRam', { gb: totalMemGb, need: PARAKEET_RAM_GB })
   } else {
-    reason = `Parakeet TDT 0.6B v3 em CPU pelo sherpa-onnx: binário pronto para ${platform}/${arch}, sem compilar nada, e a máquina tem ${totalMemGb} GB de RAM para os ~${PARAKEET_RAM_GB} GB que ele carrega.`
+    reason = tNow('voice.hardware.parakeetReady', { platform, arch, gb: totalMemGb, need: PARAKEET_RAM_GB })
   }
 
-  if (rodaParakeet && !memoriaSuficiente) {
-    warnings.push(`Memória baixa: ${totalMemGb} GB. Com o Parakeet carregado o processo cresce ~${PARAKEET_RAM_GB} GB — em máquina de 8 GB isso trava o resto do app.`)
+  if (runsParakeet && !enoughMemory) {
+    warnings.push(tNow('voice.hardware.lowMemoryWarning', { gb: totalMemGb, need: PARAKEET_RAM_GB }))
   }
   if (cpus < 4) {
-    warnings.push(`Só ${cpus} núcleo(s) de CPU: use 2 threads no ditado (acima disso a inferência não melhora e o app fica sem folga).`)
+    warnings.push(tNow('voice.hardware.fewCpus', { cpus }))
   }
   if (platform === "darwin" && arch === "x64") {
-    warnings.push("macOS em x64 (Intel): o Parakeet roda em CPU, bem mais devagar que no Apple Silicon.")
+    warnings.push(tNow('voice.hardware.macIntel'))
   }
   if (platform === "win32") {
-    warnings.push("No Windows as APIs de voz novas do sistema estão em preview e só aceitam inglês — por isso o app leva o próprio modelo.")
+    warnings.push(tNow('voice.hardware.windowsPreview'))
   }
   if (platform === "darwin") {
-    warnings.push("No macOS 26 existiria o reconhecedor de fala do próprio sistema; aqui os motores do app são só parakeet e whisper.")
+    warnings.push(tNow('voice.hardware.macos26'))
   }
   if (platform === "linux") {
-    warnings.push("No Linux não há motor de fala no sistema: o modelo é sempre o do app.")
+    warnings.push(tNow('voice.hardware.linuxNoEngine'))
   }
 
   const info = modelInfo(recommendedModel)
-  if (info && !baixados.has(recommendedModel)) {
-    warnings.push(`O modelo recomendado (${recommendedModel}) ainda não está baixado — baixe em Configurações → Voz (~${mb(info.bytes)} MB).`)
+  if (info && !downloaded.has(recommendedModel)) {
+    warnings.push(tNow('voice.hardware.notDownloaded', { model: recommendedModel, mb: mb(info.bytes) }))
   }
 
   return { platform, arch, totalMemGb, cpus, recommendedEngine, recommendedModel, reason, warnings }

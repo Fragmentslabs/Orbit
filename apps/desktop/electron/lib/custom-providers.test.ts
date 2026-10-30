@@ -31,12 +31,16 @@ const {
 } = await import('./custom-providers')
 
 beforeEach(async () => {
+  // Provider errors go through the main i18n; the assertions below are the product's
+  // default language.
+  const { setMainLocale } = await import('./i18n')
+  setMainLocale('Portuguese')
   credentials.clear()
   await fs.rm(dir, { recursive: true, force: true })
 })
 
 describe('addCustomProvider', () => {
-  it('grava protocolo, modelos e guarda a chave fora do arquivo', async () => {
+  it('stores the protocol, the models and keeps the key out of the file', async () => {
     const provider = await addCustomProvider({
       id: 'meu-gateway',
       name: 'Meu gateway',
@@ -61,7 +65,7 @@ describe('addCustomProvider', () => {
     expect(credentials.get('custom:meu-gateway')).toBe('sk-123')
   })
 
-  it('com variável de ambiente não grava credencial', async () => {
+  it('with an environment variable it does not store a credential', async () => {
     const provider = await addCustomProvider({
       id: 'gw',
       name: 'GW',
@@ -73,9 +77,9 @@ describe('addCustomProvider', () => {
     expect(credentials.size).toBe(0)
   })
 
-  it('recusa id e URL inválidos', async () => {
+  it('refuses invalid id and URL', async () => {
     await expect(
-      addCustomProvider({ id: 'com espaço', name: 'X', baseURL: 'https://x.dev/v1' }),
+      addCustomProvider({ id: 'with space', name: 'X', baseURL: 'https://x.dev/v1' }),
     ).rejects.toThrow(/ID inválido/)
     await expect(
       addCustomProvider({ id: 'ok', name: 'X', baseURL: 'ftp://x.dev' }),
@@ -84,48 +88,48 @@ describe('addCustomProvider', () => {
 })
 
 describe('listCustomProviders', () => {
-  it('marca hasKey pela credencial salva', async () => {
+  it('sets hasKey from the stored credential', async () => {
     await addCustomProvider({
-      id: 'com-chave',
-      name: 'Com chave',
+      id: 'with-key',
+      name: 'With key',
       baseURL: 'https://a.dev/v1',
       apiKey: 'sk',
       models: [{ id: 'm' }],
     })
     await addCustomProvider({
-      id: 'sem-chave',
-      name: 'Sem chave',
+      id: 'without-key',
+      name: 'Without key',
       baseURL: 'https://b.dev/v1',
       models: [{ id: 'm' }],
     })
 
     const providers = await listCustomProviders()
-    expect(providers.find((p) => p.id === 'custom:com-chave')?.hasKey).toBe(true)
-    expect(providers.find((p) => p.id === 'custom:sem-chave')?.hasKey).toBe(false)
+    expect(providers.find((p) => p.id === 'custom:with-key')?.hasKey).toBe(true)
+    expect(providers.find((p) => p.id === 'custom:without-key')?.hasKey).toBe(false)
   })
 })
 
 describe('updateCustomProvider', () => {
-  it('substitui os modelos e limpa o compat quando o patch manda null', async () => {
+  it('replaces the models and clears the compat when the patch sends null', async () => {
     await addCustomProvider({
       id: 'gw',
       name: 'GW',
       baseURL: 'https://gw.dev/v1',
       compat: { thinkingFormat: 'deepseek' },
-      models: [{ id: 'antigo' }],
+      models: [{ id: 'old' }],
     })
 
     const updated = await updateCustomProvider('gw', {
-      models: [{ id: 'novo', reasoning: true }],
+      models: [{ id: 'new-one', reasoning: true }],
       compat: null,
     })
 
-    expect(Object.keys(updated.models)).toEqual(['novo'])
-    expect(updated.models.novo.reasoning).toBe(true)
+    expect(Object.keys(updated.models)).toEqual(['new-one'])
+    expect(updated.models["new-one"].reasoning).toBe(true)
     expect(updated.compat).toBeUndefined()
   })
 
-  it('trocar para "sem chave" limpa o env e a credencial', async () => {
+  it('switching to "without key" clears the env and the credential', async () => {
     await addCustomProvider({
       id: 'gw',
       name: 'GW',
@@ -142,7 +146,7 @@ describe('updateCustomProvider', () => {
 })
 
 describe('applyDiscoveredModels', () => {
-  it('preserva o que já se sabia e remove o modelo que saiu do servidor', async () => {
+  it('preserves what was already known and removes the model that left the server', async () => {
     await addCustomProvider({
       id: 'ollama',
       name: 'Ollama',
@@ -161,13 +165,13 @@ describe('applyDiscoveredModels', () => {
     expect(provider!.models['qwen3:8b'].reasoning).toBe(true)
   })
 
-  it('provedor inexistente devolve undefined (não cria entrada)', async () => {
-    await expect(applyDiscoveredModels('nao-existe', [{ id: 'm' }])).resolves.toBeUndefined()
+  it('a nonexistent provider returns undefined (does not create an entry)', async () => {
+    await expect(applyDiscoveredModels('missing', [{ id: 'm' }])).resolves.toBeUndefined()
   })
 })
 
 describe('seedCustomProviders', () => {
-  it('semeia só na primeira execução', async () => {
+  it('seeds only on the first run', async () => {
     await seedCustomProviders()
     expect((await listCustomProviders()).map((p) => p.id).sort()).toEqual([
       'custom:lmstudio',
@@ -183,7 +187,7 @@ describe('seedCustomProviders', () => {
 })
 
 describe('inferReasoning', () => {
-  it('reconhece modelos que pensam e não marca os que não pensam', () => {
+  it('recognizes models that think and does not mark those that do not', () => {
     expect(inferReasoning('deepseek-reasoner')).toBe(true)
     expect(inferReasoning('qwen3-coder')).toBe(true)
     expect(inferReasoning('o3-mini')).toBe(true)

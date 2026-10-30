@@ -11,7 +11,7 @@ import type {
   TextPart,
   ToolPart,
 } from '@shared/chat'
-import { StorageKeys, normalizeOrchestrationSettings } from '@shared/chat'
+import { StorageKeys, normalizeOrchestrationPlan, normalizeOrchestrationSettings } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { forwardChatEvent } from './companion-server'
@@ -37,60 +37,63 @@ import {
 } from './tools/files'
 import { createCodeTools } from './tools/code'
 import { createToolApproval, takeDenialReason } from './permission'
-import { modoGlobal } from './permission/modo-global'
+import { globalMode } from './permission/global-mode'
 import { createQuestionTool } from './tools/question'
 import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/workers'
 import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
 import { getWorkerConfigCache } from './companion-http'
-import { diffDaPasta, diffDosTurnos } from './orquestra/diff'
-import { executarPlano } from './orquestra/execucao'
-import { revisarComModelo } from './orquestra/revisor'
-import { descobrirVerificacoes, rodarVerificacao } from './orquestra/verificacoes'
+import { folderDiff, turnDiffs } from './orchestration/diff'
+import { MAX_PARALLEL, executePlan } from './orchestration/execution'
+import { reviewWithModel } from './orchestration/reviewer'
+import { discoverChecks, runCheck } from './orchestration/checks'
 import {
-  arquivosDoWorktree,
-  commitarTrabalho,
-  criarWorktreeDoWorker,
-  diffDoWorktree,
-  juntarBranches,
-  removerWorktreeDoWorker,
-  repositorioDoChat,
-} from './orquestra/worktrees'
-import { raizDoRepositorio } from './worktrees/nucleo'
+  commitWork,
+  createWorkerWorktree,
+  chatRepository,
+  mergeBranches,
+  removeWorkerWorktree,
+  worktreeDiff,
+  worktreeFiles,
+} from './orchestration/worktrees'
+import { repositoryRoot } from './worktrees/core'
 import { capture, diff } from './snapshot'
 import { manualSavesUnder, stripFilesFromPatch } from './manual-saves'
+import { perfEvent, perfSpan } from './perf'
+import { tNow } from './i18n'
 
 /**
- * OrchestratorEngine (modo Orchestra), em quatro fases:
- * 1. Triagem + planejamento: o orquestrador decide se o pedido é conversa
- *    (responde direto), ambiguidade (usa a tool question) ou trabalho — e só
- *    aí divide em create_task. O plano é proposto ao usuário (semi-auto).
- * 2. Execução: cada tarefa aprovada vira uma session filha real (persistida,
- *    aparece na sidebar/painel), sempre em modo código, com os modos que o
- *    orquestrador escolheu para ela dentro do teto da sessão do usuário.
- * 3. Acompanhamento (orquestra/execucao.ts): cada worker que termina é revisado
- *    pelo orquestrador enquanto os outros seguem; ele aceita, pede ajuste, marca
- *    falha ou cria worker extra, dentro do orçamento "ajustes por worker" das
- *    configurações da Orquestra. Dependências entre tarefas e, opcionalmente,
- *    um worktree por worker (juntado no fim).
- * 4. Síntese: o orquestrador consolida os resultados na resposta final.
+ * OrchestratorEngine (Orchestra mode), in four phases:
+ * 1. Triage + planning: the orchestrator decides whether the request is a
+ *    conversation (answers directly), an ambiguity (uses the question tool) or
+ *    work — and only then splits it with create_task. The plan is proposed to
+ *    the user (semi-auto).
+ * 2. Execution: each approved task becomes a real child session (persisted,
+ *    shows up in the sidebar/panel), always in code mode, with the modes the
+ *    orchestrator chose for it within the user's session ceiling.
+ * 3. Follow-up (orchestration/execution.ts): each worker that finishes is
+ *    reviewed by the orchestrator while the others keep going; it accepts, asks
+ *    for an adjustment, marks a failure or creates an extra worker, within the
+ *    "adjustments per worker" budget from the Orchestra settings. Dependencies
+ *    between tasks and, optionally, one worktree per worker (merged at the end).
+ * 4. Synthesis: the orchestrator consolidates the results into the final answer.
  */
 
 const MAX_TASKS = 8
-// Teto de passos do planejamento. Precisa acomodar pesquisa (subagent) +
-// registro de várias tarefas (create_task) + o resumo final. Baixo demais
-// (era 4) fazia a pesquisa consumir todo o orçamento e o plano nascer vazio.
+// Step ceiling for planning. It has to fit research (subagent) +
+// registering several tasks (create_task) + the final summary. Too low
+// (it used to be 4) made the research eat the whole budget and the plan be born empty.
 const PLAN_MAX_STEPS = 16
-// Pesquisa de planejamento é leve: embasa a divisão, não resolve a tarefa.
+// Planning research is light: it grounds the split, it does not solve the task.
 const PLAN_SUBAGENT_MAX_STEPS = 5
-// Teto DURO de chamadas de subagent durante o planejamento (o prompt já pede
-// "2-3 chamadas", mas isso é só sugestão — sem um limite de verdade em código
-// o modelo pode ignorá-lo, como aconteceu (17 chamadas para montar um plano).
+// HARD ceiling on subagent calls during planning (the prompt already asks for
+// "2-3 calls", but that is only a suggestion — without a real limit in code the
+// model can ignore it, as it did: 17 calls to assemble one plan).
 const PLAN_SUBAGENT_MAX_CALLS = 3
 /**
- * Mudança pequena que o orquestrador passa a um subagente em vez de montar
- * plano (modo Subagentes ligado). Orçamento de passos de um subagente normal —
- * é execução, não pesquisa — e poucas chamadas: mais que isso já é um plano.
+ * A small change the orchestrator hands to a subagent instead of assembling a
+ * plan (Subagents mode on). Step budget of a regular subagent — this is
+ * execution, not research — and few calls: more than that is already a plan.
  */
 const PLAN_DELEGATE_MAX_CALLS = 2
 const PLAN_DELEGATE_DESCRIPTION =
@@ -98,30 +101,30 @@ const PLAN_DELEGATE_DESCRIPTION =
   + 'Use it instead of create_task when the whole request is one small change. Set code: true. '
   + 'The subagent does not see this conversation: name the files and say exactly what to change.'
 /**
- * Ele prometeu um plano e não registrou tarefa? Só então vale a cutucada.
- * Português e inglês porque a resposta segue o idioma do usuário.
+ * Did it promise a plan and register no task? Only then is the nudge worth it.
+ * Portuguese and English because the answer follows the user's language.
  */
 const PROMISED_PLAN_RE =
   /\b(create_task|vou (dividir|criar|planejar)|dividir em (tarefas|workers)|criar (as )?tarefas|I(’|')?ll (split|create|plan)|going to (split|create)|split .{0,20}into (tasks|workers))\b/i
-/** Resposta do retry que diz "a primeira resposta já estava certa". */
+/** Retry answer that says "the first answer was already right". */
 const NO_PLAN_SENTINEL = '<<NO_PLAN>>'
 /**
- * Teto DURO de leituras diretas (read/ls/glob/grep/subagent) numa passada de
- * planejamento. O prompt manda o orquestrador ler o projeto sozinho; sem teto,
- * o reconhecimento de um repo grande consome o orçamento inteiro, a passada
- * termina numa tool call de leitura — sem texto e sem create_task — e o usuário
- * via só os cards de ferramenta: o orquestrador "parava no meio, sem responder".
+ * HARD ceiling on direct reads (read/ls/glob/grep/subagent) in a planning pass.
+ * The prompt tells the orchestrator to read the project on its own; without a
+ * ceiling, scouting a large repo consumes the whole budget, the pass ends on a
+ * read tool call — no text, no create_task — and the user saw only the tool
+ * cards: the orchestrator "stopped halfway, without answering".
  */
 const PLAN_READ_MAX_CALLS = 8
-/** Devolvido no lugar do resultado quando o orçamento de leitura acabou. */
+/** Returned in place of the result when the reading budget ran out. */
 const PLAN_READ_BUDGET_NOTICE =
   'Planning read budget exhausted. Stop researching: register the tasks you already have with create_task, or answer in plain text saying what you still need.'
 /**
- * Último passo da passada de planejamento: tools desligadas e resposta em TEXTO
- * forçada. É o mesmo guard do chat-engine (mesma ideia do max-steps.ts do
- * opencode): em vez de cortar a stream no meio de uma tool call, o modelo é
- * obrigado a dizer o que tem. Sem isso a passada terminava numa tool call, com
- * text vazio, e o turno acabava sem bolha nenhuma.
+ * Last step of the planning pass: tools off and a TEXT answer
+ * forced. It is the same guard as the chat-engine (the same idea as
+ * opencode's max-steps.ts): instead of cutting the stream in the middle of a
+ * tool call, the model is made to say what it has. Without it the pass ended on
+ * a tool call, with empty text, and the turn ended without any bubble.
  */
 const PLAN_MAX_STEPS_PROMPT = `MAXIMUM STEPS REACHED while planning. Tools are now disabled — respond with text ONLY.
 
@@ -130,9 +133,7 @@ Your response must:
 - Summarize what you learned about the project so far
 - Say plainly whether the request needs to be split, and that you did NOT register the tasks if that is the case
 - Suggest what to do next (the user can say "continue" to resume)`
-/** Última rede: nenhuma bolha de assistente termina sem texto. */
-const PLAN_EMPTY_FALLBACK =
-  'O orçamento de passos do planejamento acabou antes de eu conseguir responder e não registrei nenhuma tarefa. Diga "continue" que eu retomo de onde parei — ou me diga se prefere que eu divida o trabalho em tarefas.'
+/** Last net: no assistant bubble ends without text (translated at the use site). */
 
 interface PendingOrchestration {
   input: SendMessageInput
@@ -140,14 +141,14 @@ interface PendingOrchestration {
   assistantMessageId: string
 }
 
-// Planos aguardando aprovação/execução — em memória: se o app reiniciar entre
-// proposta e aprovação, o plano persiste no storage mas não é mais executável.
+// Plans waiting for approval/execution — in memory: if the app restarts between
+// the proposal and the approval, the plan stays in storage but is no longer executable.
 const pending = new Map<string, PendingOrchestration>()
 const controllers = new Map<string, AbortController>()
-// Workers em execução por orquestrador — para propagar o abort do pai
+// Running workers per orchestrator — to propagate the parent's abort
 const activeWorkers = new Map<string, string[]>()
 
-/** Comparação de títulos de worker: "Tela de Login " e "tela de login" são o mesmo nome na sidebar. */
+/** Worker title comparison: "Login Screen " and "login screen" are the same name in the sidebar. */
 function normalizeTitle(title: string) {
   return title.trim().replace(/\s+/g, ' ').toLowerCase()
 }
@@ -156,18 +157,18 @@ function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
 
-/** Mesmo funil do chat-engine: janela + companions. Sem o forward, todo o
- *  fluxo de orquestracao (stream do planejamento, card do plano, progresso das
- *  tasks, status) so existia no desktop — no celular o card de aprovacao so
- *  aparecia se a conversa fosse reaberta, e nunca atualizava ao vivo. */
+/** Same funnel as the chat-engine: window + companions. Without the forward,
+ *  the whole orchestration flow (planning stream, plan card, task progress,
+ *  status) existed only on the desktop — on the phone the approval card only
+ *  appeared if the conversation was reopened, and never updated live. */
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
   forwardChatEvent(event)
 }
 
-/** Insere ou atualiza uma part na mensagem e emite o evento 'part' — usado
- * para renderizar o streaming do planejamento (texto, raciocínio, tool-calls)
- * na mensagem do orquestrador. */
+/** Inserts or updates a part in the message and emits the 'part' event — used
+ * to render the planning stream (text, reasoning, tool calls) in the
+ * orchestrator's message. */
 function upsertPart(win: BrowserWindow, sessionId: string, message: ChatMessage, part: MessagePart) {
   const idx = message.parts.findIndex((p) => p.id === part.id)
   if (idx >= 0) message.parts[idx] = part
@@ -184,15 +185,15 @@ async function saveMessages(sessionId: string, messages: ChatMessage[]) {
 }
 
 /**
- * Snapshot do turno de planejamento — o mesmo registro de um turno normal do
- * chat-engine. Agora que o orquestrador faz mudança pequena sozinho (edit/write
- * ou delegate_change), sem isso o que ele mudou não aparecia na aba Diff nem
- * podia ser revertido pela mensagem.
+ * Snapshot of the planning turn — the same record as a regular chat-engine turn.
+ * Now that the orchestrator makes a small change on its own (edit/write or
+ * delegate_change), without this what it changed did not show in the Diff tab
+ * nor could be reverted from the message.
  */
-/** Início de cada turno com snapshot aberto — os saves manuais contam daqui. */
+/** Start of each turn with an open snapshot — manual saves count from here. */
 const snapshotStartedAt = new WeakMap<ChatMessage, number>()
 
-async function abrirSnapshot(directory: string, message: ChatMessage) {
+async function openSnapshot(directory: string, message: ChatMessage) {
   snapshotStartedAt.set(message, Date.now())
   try {
     message.snapshot = { start: await capture(directory) }
@@ -201,18 +202,18 @@ async function abrirSnapshot(directory: string, message: ChatMessage) {
   }
 }
 
-async function fecharSnapshot(directory: string, message: ChatMessage) {
+async function closeSnapshot(directory: string, message: ChatMessage) {
   const snapshot = message.snapshot
   if (!snapshot) return
   if (!snapshot.start) {
     snapshot.verified = 'unknown'
     return
   }
-  // Saves manuais do painel não são do orquestrador: o revert os preserva.
+  // Manual saves from the panel are not the orchestrator's: revert preserves them.
   const since = snapshotStartedAt.get(message) ?? 0
   snapshot.manual = [...manualSavesUnder(directory, since)]
-  // Autoria para o revert: o que as tools do turno (e dos workers que ele
-  // esperou) gravaram, e o que as de outras conversas gravaram no intervalo.
+  // Authorship for the revert: what the turn's tools (and those of the workers
+  // it awaited) wrote, and what the ones from other conversations wrote meanwhile.
   const writes = currentTurnWrites(directory)
   if (writes) {
     snapshot.authored = writes.authored
@@ -225,15 +226,15 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
       return
     }
     const changes = await diff(directory, snapshot.start, end)
-    // O que a pessoa salvou à mão durante o turno, e o que outra conversa
-    // gravou na pasta no mesmo intervalo, não é obra do orquestrador.
+    // What the person saved by hand during the turn, and what another
+    // conversation wrote to the folder in the same window, is not the orchestrator's work.
     const notAgent = manualSavesUnder(directory, since)
     for (const file of changes.files) if (coveredBy(file, writes?.others ?? [])) notAgent.add(file)
     const files = notAgent.size > 0 ? changes.files.filter((f) => !notAgent.has(f)) : changes.files
     if (files.length === 0) {
       snapshot.verified = 'unchanged'
-      // A pasta mudou só por save manual: guarda a árvore final para o revert
-      // isolar os caminhos do orquestrador dos da pessoa.
+      // The folder changed only by a manual save: keep the final tree for the
+      // isolate the orchestrator's paths from the person's.
       snapshot.end = end
       return
     }
@@ -242,7 +243,7 @@ async function fecharSnapshot(directory: string, message: ChatMessage) {
     snapshot.files = files
     snapshot.patch = notAgent.size > 0 ? stripFilesFromPatch(changes.patch, notAgent) : changes.patch
   } catch (err) {
-    console.error('[snapshot] captura final do orquestrador falhou:', err)
+    console.error('[snapshot] final orchestrator capture failed:', err)
     snapshot.verified = 'unknown'
   }
 }
@@ -253,9 +254,9 @@ async function persistPlan(win: BrowserWindow, sessionId: string, plan: Orchestr
 }
 
 /**
- * Um turno num worker que já existe: a mensagem entra no chat dele (que
- * lembra o que fez e o que o usuário disse lá) com os mesmos modos que ele
- * recebeu do plano. Usado pela revisão e pela tool message_worker.
+ * A turn in a worker that already exists: the message enters its chat (which
+ * remembers what it did and what the user said there) with the same modes it
+ * received from the plan. Used by the review and by the message_worker tool.
  */
 async function runWorkerTurn(
   win: BrowserWindow,
@@ -266,6 +267,9 @@ async function runWorkerTurn(
   const orchestratorId = input.sessionId
   const workers = activeWorkers.get(orchestratorId) ?? []
   activeWorkers.set(orchestratorId, [...workers, worker.id])
+  // One span per worker turn: it is the unit the wall clock is lost in (a worker
+  // runs a whole task — 200+ tool calls — inside a single turn).
+  const perf = perfSpan('worker', { sessionId: worker.id, title: worker.title, directory: worker.directory ?? input.directory })
   try {
     await runChat(win, {
       sessionId: worker.id,
@@ -276,10 +280,10 @@ async function runWorkerTurn(
       options: {
         ...worker.orchestration?.options,
         reasoning: input.workerModel?.reasoning,
-        // Worker nunca orquestra — seria recursão.
+        // A worker never orchestrates — that would be recursion.
         orchestrate: undefined,
-        // Gatekeeping: worker herda o modo de permissões do orquestrador (e se
-        // segue o seletor global — a troca no meio vale para ele também)
+        // Gatekeeping: the worker inherits the orchestrator's permission mode (and,
+        // if it follows the global selector, a change midway applies to it as well)
         permissionMode: input.options.permissionMode,
         followGlobalPermission: input.options.followGlobalPermission,
       },
@@ -291,6 +295,11 @@ async function runWorkerTurn(
       workerTitle: worker.title,
       language: input.language,
     })
+  } catch (err) {
+    // Closes the span when the turn throws (the happy path closes it below, with
+    // the reply size). Idempotent: the second call is ignored.
+    perf.end({ error: err instanceof Error ? err.message.slice(0, 160) : String(err) })
+    throw err
   } finally {
     const rest = (activeWorkers.get(orchestratorId) ?? []).filter((id) => id !== worker.id)
     if (rest.length > 0) activeWorkers.set(orchestratorId, rest)
@@ -303,35 +312,40 @@ async function runWorkerTurn(
     .map((p) => p.text)
     .join('\n')
     .trim() ?? ''
+  perf.end({
+    replyChars: reply.length,
+    ...(last?.error ? { error: last.error.slice(0, 160) } : {}),
+  })
   return { text: reply, error: last?.error, tokens: last?.tokens }
 }
 
 export function abortOrchestration(sessionId: string) {
   controllers.get(sessionId)?.abort()
-  // Abort transitivo: workers da fase 2 têm seus próprios controllers no chat-engine
+  // Transitive abort: phase-2 workers have their own controllers in the chat-engine
   for (const workerId of activeWorkers.get(sessionId) ?? []) abortChat(workerId)
-  // Plano pendente de aprovação deixa de ser executável (ex: sessão deletada)
+  // A plan waiting for approval is no longer executable (e.g. a deleted session)
   pending.delete(sessionId)
 }
 
-/** Sessões com orquestração em andamento (planejamento/síntese). */
+/** Sessions with an orchestration in progress (planning/synthesis). */
 export function getOrchestrationRunningSessionIds(): string[] {
   return [...controllers.keys()]
 }
 
-/** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
+/** Phase 1 — planning. Replaces runChat when options.orchestrate is on. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  // Escopo de escrita do turno: os workers que ele espera abrem escopos
-  // filhos, então o que eles gravam conta também como obra deste turno.
+  // Write scope of the turn: the workers it awaits open child scopes, so what
+  // they record also counts as this turn's work.
   return runWithWriteScope(() => withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input)))
 }
 
 async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
-  // Todo worker roda em modo código na pasta de trabalho — sem pasta não há o
-  // que orquestrar. A UI do desktop já bloqueia o envio sem pasta, mas rotina
-  // agendada e companion não: antes o create_task rebaixava a tarefa para chat,
-  // e agora que o worker é sempre de código isso geraria sessões filhas sem
-  // ferramenta nenhuma. Cai no turno normal, que ao menos funciona.
+  // Every worker runs in code mode in the working folder — with no folder there
+  // is nothing to orchestrate. The desktop UI already blocks sending without a
+  // folder, but a scheduled routine and the companion do not: before, create_task
+  // downgraded the task to chat,
+  // and now that the worker is always code, that would create child sessions
+  // with no tools at all. It falls back to the normal turn, which at least works.
   if (!input.directory) {
     await runChat(win, input)
     return
@@ -366,10 +380,10 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   await saveMessages(sessionId, history)
   emit(win, { type: 'message', sessionId, message: assistantMessage })
 
-  // Rotação de modelos (mesma regra do chat-engine): rotação escolhida no
-  // seletor para este chat; senão o modelo pinado; senão o default — com o
-  // primeiro modelo como ponto de partida do loop abaixo. Um modelo de
-  // orquestra configurado vale por si: a rotação é do modelo do chat.
+  // Model rotation (same rule as the chat-engine): the rotation chosen in the
+  // selector for this chat; otherwise the pinned model; otherwise the default — with the
+  // first model as the starting point of the loop below. A configured
+  // orchestra model stands on its own: rotation belongs to the chat's model.
   const rotationSequence = input.orchestratorModel
     ? [{ providerId: conductor.providerId, modelId: conductor.modelId }]
     : resolveRotation(input.sessionId, {
@@ -378,19 +392,19 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       })
   const primaryModel = rotationSequence[0] ?? { providerId: conductor.providerId, modelId: conductor.modelId }
 
-  // Aviso automático: workers que já existem e o que o usuário mandou direto
-  // neles desde o último turno do orquestrador (a resposta anterior dele).
+  // Automatic notice: workers that already exist and what the user sent directly
+  // to them since the orchestrator's last turn (its previous answer).
   const lastOrchestratorTurn = history.slice(0, -2).reverse().find((m) => m.role === 'assistant')
   const workersNotice = await buildWorkersNotice(sessionId, lastOrchestratorTurn?.createdAt ?? 0)
   const existingTitles = new Set((await loadWorkers(sessionId)).map((w) => normalizeTitle(w.title)))
-  let autoAprovar: string | undefined
-  // Só quando ele pode escrever: em modo plano não há o que registrar.
-  if (!input.options.plan) await abrirSnapshot(input.directory, assistantMessage)
+  let autoApprove: string | undefined
+  // Only when it can write: in plan mode there is nothing to record.
+  if (!input.options.plan) await openSnapshot(input.directory, assistantMessage)
 
   try {
-    // Loop de tentativas do PLANEJAMENTO: falha recuperável antes do primeiro
-    // token troca para o próximo modelo da sequência (os workers já herdam a
-    // rotação pelo runChat; a síntese/revisão seguem o comportamento atual).
+    // PLANNING retry loop: a recoverable failure before the first token switches
+    // to the next model in the sequence (workers already inherit the rotation
+    // through runChat; synthesis/review keep the current behavior).
     let attemptIndex = 0
     for (;;) {
       const primary = rotationSequence[attemptIndex] ?? primaryModel
@@ -406,31 +420,31 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
 
     const tasks: OrchestrationTask[] = []
     let workersMessaged = 0
-    // Tool context do planejamento (leitura do projeto + subagent). Sempre
-    // existe: a guarda no topo garante a pasta de trabalho.
+    // Planning tool context (project reading + subagent). It always exists: the
+    // guard at the top guarantees the working folder.
     const planCtx: ToolContext = {
       sessionId: input.sessionId,
       directory: input.directory,
       extraDirectories: input.extraDirectories ?? [],
       abort: controller.signal,
     }
-    // Teto de modos dos workers: o que a sessão do usuário permite. O
-    // orquestrador escolhe dentro disso, tarefa a tarefa.
+    // Mode ceiling of the workers: what the user's session allows. The
+    // orchestrator chooses within it, task by task.
     const ceiling: TaskModeCeiling = {
       research: input.options.research === true,
       browser: input.options.browser === true,
       vision: Boolean(input.visionModel),
       subagents: input.options.subagents === true,
-      // Recorte de servidores MCP da conversa (ausente = todos os ligados).
+      // Slice of the conversation's MCP servers (absent = all the enabled ones).
       toolsServers: input.options.toolsServers,
     }
-    // Orçamento de leitura das passadas de planejamento. Fica fora do
-    // runPlanningPass porque as tools são criadas uma vez e reusadas pela
-    // cutucada; cada passada zera o contador no início.
+    // Reading budget of the planning passes. It lives outside runPlanningPass
+    // because the tools are created once and reused by the nudge; every pass
+    // resets the counter at the start.
     let planReadCalls = 0
-    // Envolve uma tool de leitura para que ela pare de EXECUTAR quando o
-    // orçamento acaba: o modelo recebe um aviso no lugar do resultado e decide
-    // registrar o plano, em vez de a passada morrer sem texto.
+    // Wraps a read tool so it stops EXECUTING when the budget is gone: the model
+    // gets a notice instead of the result and decides to register the plan,
+    // instead of the pass dying without text.
     const capReadTool = (readTool: ToolSet[string]): ToolSet[string] => {
       const run = readTool.execute
       if (!run) return readTool
@@ -456,7 +470,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
           return true
         },
         ceiling,
-        // Só os planos anteriores: repetir um título DESTE plano substitui a tarefa.
+        // Only earlier plans: repeating a title of THIS plan replaces the task.
         (title) => existingTitles.has(normalizeTitle(title)),
         () => tasks,
       ),
@@ -467,39 +481,39 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
           if (idx >= 0) tasks.splice(idx, 1)
         },
       ),
-      // Perguntar antes de dividir: só vale quando a resposta muda o plano,
-      // mas sem a tool ele não tinha como fazer isso nem quando valia.
+      // Asking before splitting: only worth it when the answer changes the plan,
+      // but without the tool it had no way to do that even when it was.
       question: createQuestionTool(input, controller.signal),
-      // Workers de qualquer plano desta conversa: ver, ler e continuar. Sem
-      // isso o único caminho era create_task — sempre um worker novo, que
-      // não sabe nada do que os anteriores fizeram.
+      // Workers from any plan of this conversation: see, read and continue.
+      // Without this the only path was create_task — always a new worker, which
+      // knows nothing about what the previous ones did.
       ...createWorkerTools(sessionId, async (worker, message) => {
         workersMessaged++
         return runWorkerTurn(win, input, worker, message)
       }),
     }
-    // Leitura direta do projeto. Antes o planejamento não tinha NENHUMA tool de
-    // arquivo, então a única forma de olhar o código era gastar um subagente
-    // inteiro — daí a enxurrada de chamadas. Ler não é delegar: continua
-    // disponível mesmo com o modo Subagentes desligado.
+    // Direct reading of the project. Planning used to have NO file tool at all,
+    // so the only way to look at the code was to spend a whole subagent —
+    // hence the flood of calls. Reading is not delegating: it stays available
+    // even with Subagents mode off.
     planTools.read = capReadTool(createReadTool(planCtx))
     planTools.ls = capReadTool(createListTool(planCtx))
     planTools.glob = capReadTool(createGlobTool(planCtx))
     planTools.grep = capReadTool(createGrepTool(planCtx))
-    // Índice de código: com só 8 leituras de orçamento, o mapa do projeto e a
-    // busca por símbolo rendem muito mais por chamada do que ls/read.
+    // Code index: with only 8 reads of budget, the project map and the symbol
+    // search give far more per call than ls/read.
     for (const [name, codeTool] of Object.entries(createCodeTools(planCtx))) planTools[name] = capReadTool(codeTool)
-    // Delegar pesquisa a outro modelo é o que o modo Subagentes controla no
-    // resto do app (allowDelegation em tools/index) — a orquestração era a
-    // única exceção. Agora segue a mesma regra.
+    // Delegating research to another model is what Subagents mode controls in
+    // the rest of the app (allowDelegation in tools/index) — the orchestration
+    // used to be the only exception. Now it follows the same rule.
     if (ceiling.subagents) {
       planTools.subagent = capReadTool(
         createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS),
       )
     }
-    // Pedido pequeno ("deixa o botão azul") não vale plano, aceite e worker.
-    // Com Subagentes ligado ele delega a mudança no próprio chat; senão faz
-    // sozinho. Em modo plano (só leitura) nenhum dos dois existe.
+    // A small request ("make the button blue") is not worth a plan, an approval
+    // and a worker. With Subagents on it delegates the change in this chat;
+    // otherwise it does it itself. In plan mode (read-only) neither exists.
     const canEdit = !input.options.plan
     if (canEdit && ceiling.subagents) {
       planTools.delegate_change = createSubagentTool(
@@ -513,18 +527,19 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       planTools.edit = createEditTool(planCtx)
       planTools.write = createWriteTool(planCtx)
     }
-    // As escritas passam pelo mesmo gate de permissões de um turno normal.
+    // Writes go through the same permission gate as a normal turn.
     const permissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = createToolApproval(
-      input.options.followGlobalPermission ? () => modoGlobal(sessionId, permissionMode) : permissionMode,
+      input.options.followGlobalPermission ? () => globalMode(sessionId, permissionMode) : permissionMode,
       sessionId,
       input.directory,
       assistantMessage.id,
       controller.signal,
     )
 
-    // O teto entra no prompt: sem isso o modelo pede research/browser e só
-    // descobre que não tem no retorno da tool, tarefa por tarefa.
+    // The ceiling goes into the prompt: without it the model asks for
+    // research/browser and only finds out it does not have it in the tool reply,
+    // task by task.
     const enabled = Object.entries(ceiling).filter(([, v]) => v).map(([k]) => k)
     const contextNote = [
       `\n\nWorking folder: ${input.directory}. Every worker runs there, in code mode.`,
@@ -548,21 +563,21 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     const providerOptions = await buildProviderOptions({ ...conductor, providerId: primary.providerId, modelId: primary.modelId })
     const cost = provider?.models[primary.modelId]?.cost
 
-    // Consome o stream de uma passada de planejamento, emitindo parts (texto,
-    // raciocínio, tool-calls) para a UI mostrar o orquestrador trabalhando —
-    // pesquisando com subagent e planejando — em vez de um "Analisando" mudo.
+    // Consumes the stream of a planning pass, emitting parts (text, reasoning,
+    // tool calls) so the UI shows the orchestrator working — researching with a
+    // subagent and planning — instead of a mute "Analyzing".
     const runPlanningPass = async (messages: ModelMessage[]) => {
-      // Cada passada tem o PRÓPRIO orçamento de leitura: a cutucada reusa as
-      // mesmas tools, mas não herda o que a primeira já gastou.
+      // Each pass has its OWN reading budget: the nudge reuses the same tools,
+      // but does not inherit what the first one already spent.
       planReadCalls = 0
       const reasoningStep = agentPrepareStep(provider, primary.modelId, { directory: input.directory })
       let lastStepNumber = 0
       let sawFinish = false
-      // Guard do último passo. O SDK chama o prepareStep com stepNumber = passos
-      // JÁ concluídos (o do-while roda com steps.length 0..PLAN_MAX_STEPS-1 e
-      // para quando steps.length === PLAN_MAX_STEPS), então o último passo
-      // executado é PLAN_MAX_STEPS - 1 — em `>= PLAN_MAX_STEPS` o guard nunca
-      // dispararia.
+      // Last-step guard. The SDK calls prepareStep with stepNumber = the steps
+      // ALREADY completed (the do-while runs with steps.length 0..PLAN_MAX_STEPS-1
+      // and stops when steps.length === PLAN_MAX_STEPS), so the last executed
+      // step is PLAN_MAX_STEPS - 1 — at `>= PLAN_MAX_STEPS` the guard would never
+      // fire.
       const prepareStep = ({
         stepNumber,
         messages: stepMessages,
@@ -574,9 +589,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         const base = reasoningStep({ messages: stepMessages })
         const normalized = 'messages' in base && base.messages ? base.messages : stepMessages
         if (stepNumber >= PLAN_MAX_STEPS - 1) {
-          // Sem tools e com resposta em texto obrigatória: em vez de terminar a
-          // passada numa tool call (text vazio, plano vazio, turno sem
-          // resposta), o modelo diz o que tem.
+          // No tools and a text answer required: instead of ending the pass on a
+          // tool call (empty text, empty plan, a turn
+          // without a reply), the model says what it has.
           return {
             activeTools: [],
             toolChoice: 'none' as const,
@@ -599,10 +614,10 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       })
       let text = ''
       const reasoningStart = new Map<string, number>()
-      // Ids de stream → id da part (mesma regra do chat-engine). O SDK reusa
-      // "txt-0"/"reasoning-0" a cada passo E a cada passada: sem isso a
-      // passada da cutucada sobrescrevia o texto da primeira (a resposta
-      // "cortava" no meio) e o filtro de texto velho apagava as duas.
+      // Stream ids → part id (same rule as the chat-engine). The SDK reuses
+      // "txt-0"/"reasoning-0" on every step AND every pass: without this the
+      // nudge pass overwrote the first one's text (the reply
+      // "cut" in the middle) and the stale-text filter erased both.
       const streamIds = new Map<string, string>()
       const startStreamPart = (sdkId: string): string => {
         let id = sdkId
@@ -665,8 +680,8 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
             })
             break
           }
-          // Sem estes dois, uma escrita negada (ou um read que falhou) ficava
-          // com o card girando para sempre.
+          // Without these two, a denied write (or a read that failed) left the
+          // card spinning forever.
           case 'tool-output-denied': {
             const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as ToolPart | undefined
             upsertPart(win, sessionId, assistantMessage, {
@@ -702,12 +717,12 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       return {
         text: text.trim(),
         usage: await stream.usage,
-        // Estourou o orçamento de passos (o último passo foi forçado a texto) —
-        // o plano pode ter ficado pela metade.
+        // The step budget ran out (the last step was forced to text) —
+        // the plan may have been left half done.
         hitCeiling,
-        // Stream encerrada sem `finish` (provedor/gateway que corta a conexão):
-        // sem isso o turno parecia concluído normalmente. É o mesmo diagnóstico
-        // do chat-engine.
+        // Stream ended without `finish` (a provider/gateway that drops the connection):
+        // without this the turn looked normally finished. It is the same diagnosis
+        // as the chat-engine.
         lostFinish: !sawFinish && !controller.signal.aborted,
       }
     }
@@ -716,25 +731,25 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     let planUsage = toTokenUsage(firstPass.usage, cost)
     let planTruncated = firstPass.hitCeiling || firstPass.lostFinish
 
-    // Rede de segurança: o orquestrador às vezes narra "vou dividir em tarefas"
-    // e para sem chamar create_task (plano vazio). Damos UMA cutucada explícita
-    // antes de desistir e tratar como resposta trivial.
+    // Safety net: the orchestrator sometimes narrates "I will split into tasks"
+    // and stops without calling create_task (empty plan). We give ONE explicit
+    // nudge before giving up and treating it as a trivial answer.
     //
-    // Só cutuca quando ele REALMENTE prometeu um plano, OU quando a passada
-    // estourou o orçamento sem produzir texto nenhum (o caso mais comum: gastar
-    // os passos lendo o projeto e terminar numa tool call). Responder sem
-    // tarefas agora é resultado legítimo — é o caminho 1 do prompt (pergunta
-    // simples, ou oferta de "quer que eu implemente?"). Cutucar isso
-    // transformaria toda conversa em plano, que é exatamente o que estamos
-    // consertando. Quem continuou a conversa de um worker já agiu — não é plano
-    // vazio.
+    // Only nudge when it REALLY promised a plan, OR when the pass
+    // ran out of budget without producing any text (the most common case:
+    // spending the steps reading the project and ending on a tool call). Answering
+    // with no tasks is a legitimate outcome now — it is path 1 of the prompt (a
+    // simple question, or offering "want me to implement it?"). Nudging that
+    // would turn every conversation into a plan, which is exactly what we are
+    // fixing. Whoever continued a worker's conversation has already acted — it is
+    // not an empty plan.
     const promisedPlan = Boolean(firstPass.text) && PROMISED_PLAN_RE.test(firstPass.text)
     const silentOverrun = !firstPass.text && firstPass.hitCeiling
     if (tasks.length === 0 && workersMessaged === 0 && (promisedPlan || silentOverrun)) {
       const firstPassIds = new Set(assistantMessage.parts.map((p) => p.id))
       const nudgeMessages: ModelMessage[] = [...baseMessages]
-      // Sem texto na primeira passada não há resposta de assistente para
-      // reenviar — o nudge vai só como mensagem de engine.
+      // Without text in the first pass there is no assistant reply to
+      // resend — the nudge goes only as an engine message.
       if (firstPass.text) nudgeMessages.push({ role: 'assistant', content: firstPass.text })
       nudgeMessages.push({
         role: 'user',
@@ -747,46 +762,46 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       planTruncated = planTruncated || retry.hitCeiling || retry.lostFinish
       if (tasks.length === 0) {
         if (retry.text.includes(NO_PLAN_SENTINEL) || !retry.text) {
-          // Falso positivo da regex: a primeira resposta vale. Descarta tudo
-          // da cutucada (texto e raciocínio) — senão o usuário via o modelo
-          // discutindo uma mensagem interna que ele nunca mandou.
+          // Regex false positive: the first reply stands. Discard everything
+          // from the nudge (text and reasoning) — otherwise the user saw the model
+          // arguing about an internal message they never sent.
           assistantMessage.parts = assistantMessage.parts.filter((p) => firstPassIds.has(p.id))
         } else {
-          // A resposta final é a do retry — descarta a narração do primeiro
-          // passe pra não duplicar texto na bolha final do usuário.
+          // The final reply is the retry's — drop the first pass narration so the
+          // user's final bubble does not duplicate text.
           assistantMessage.parts = assistantMessage.parts.filter((p) => p.type !== 'text' || !firstPassIds.has(p.id))
         }
       }
     }
 
-    // Backstop: bolha de assistente sem NENHUM texto não é resposta. Se a
-    // passada (e a cutucada) morreram sem texto — orçamento gasto em leitura,
-    // provedor que encerrou a stream sem `finish` — escrevemos o que aconteceu
-    // em vez de entregar os cards de ferramenta e mais nada, que é como o
-    // orquestrador "parava no meio, sem responder" para o usuário.
+    // Backstop: an assistant bubble with NO text is not a reply. If the
+    // pass (and the nudge) died without text — budget spent on reads, provider
+    // that ended the stream without `finish` — we write what happened instead of
+    // handing over the tool cards and nothing else, which is how the orchestrator
+    // "stopped halfway, without answering" the user.
     const hasText = assistantMessage.parts.some((p) => p.type === 'text' && p.text.trim().length > 0)
     if (tasks.length === 0 && !hasText) {
       upsertPart(win, sessionId, assistantMessage, {
         id: newId('prt'),
         type: 'text',
-        text: PLAN_EMPTY_FALLBACK,
+        text: tNow('orchestrator.stepsExhausted'),
         state: 'done',
       })
       planTruncated = true
     }
-    // Estouro sem plano: marca a mensagem para o próximo turno receber o
-    // lembrete de continuação (mesmo tratamento do chat-engine).
+    // Ran out with no plan: mark the message so the next turn gets the
+    // continuation reminder (same treatment as the chat-engine).
     if (tasks.length === 0 && planTruncated) assistantMessage.truncated = true
 
-    // Com message_worker no turno, o que mudou na pasta é (também) do worker,
-    // e já está registrado no chat dele — creditar ao orquestrador duplicaria.
+    // With message_worker in the turn, what changed in the folder is (also) the
+    // worker's, and is already recorded in its chat — crediting the orchestrator would duplicate it.
     if (workersMessaged > 0) assistantMessage.snapshot = undefined
-    else await fecharSnapshot(input.directory, assistantMessage)
+    else await closeSnapshot(input.directory, assistantMessage)
 
     await saveMessages(sessionId, history)
 
     if (tasks.length === 0) {
-      // Pedido trivial: o orquestrador respondeu direto, sem plano
+      // Trivial request: the orchestrator answered directly, with no plan
       emit(win, { type: 'message', sessionId, message: assistantMessage })
       emit(win, { type: 'status', sessionId, status: 'idle' })
       return
@@ -798,17 +813,17 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       status: 'proposed',
       usage: planUsage,
     }
-    // Sem loopConfig: a revisão não é mais um modo à parte com iterações
-    // próprias — ela sempre roda, e o toggle Loop só decide o TAMANHO do
-    // orçamento global de rodadas (ver a fase de revisão em approvePlan).
+    // No loopConfig: the review is no longer a separate mode with its own
+    // iterations — it always runs, and the Loop toggle only decides the SIZE of
+    // the global round budget (see the review phase in approvePlan).
     pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id })
       await persistPlan(win, sessionId, plan)
         emit(win, { type: 'message', sessionId, message: assistantMessage })
         emit(win, { type: 'status', sessionId, status: 'idle' })
-        // Plano de um worker só com a opção ligada: o card aparece (é o
-        // registro do que vai rodar), mas não espera o clique.
-        if (tasks.length === 1 && normalizeOrchestrationSettings(getWorkerConfigCache().orchestration).aprovarTarefaUnica) {
-          autoAprovar = plan.id
+        // A single-worker plan with the option on: the card shows up (it is the
+        // record of what will run), but it does not wait for the click.
+        if (tasks.length === 1 && normalizeOrchestrationSettings(getWorkerConfigCache().orchestration).approveSingleTask) {
+          autoApprove = plan.id
         }
         break
       } catch (err) {
@@ -838,9 +853,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     const { kind, detail: message } = classifyProviderError(err)
     assistantMessage.error = aborted ? undefined : message
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
-    // Parou no meio (erro ou abort) depois de já ter editado: o que mudou
-    // continua precisando aparecer.
-    await fecharSnapshot(input.directory, assistantMessage)
+    // Stopped halfway (error or abort) after it had already edited: what changed
+    // still needs to show up.
+    await closeSnapshot(input.directory, assistantMessage)
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, {
@@ -852,12 +867,12 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   } finally {
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId)
   }
-  // Fora do try: a execução tem o próprio controller e o próprio tratamento
-  // de erro. Já estamos dentro do withProviderSession do planejamento.
-  if (autoAprovar && !controller.signal.aborted) await approvePlanTurn(win, sessionId, autoAprovar)
+  // Outside the try: the execution has its own controller and its own error
+  // handling. We are already inside the planning's withProviderSession.
+  if (autoApprove && !controller.signal.aborted) await approvePlanTurn(win, sessionId, autoApprove)
 }
 
-/** Fase 2 (execução dos workers) + Fase 3 (síntese). */
+/** Phase 2 (worker execution) + Phase 3 (synthesis). */
 export async function approvePlan(
   win: BrowserWindow,
   sessionId: string,
@@ -879,7 +894,7 @@ async function approvePlanTurn(
       type: 'status',
       sessionId,
       status: 'error',
-      error: 'Este plano não está mais disponível para execução (o app foi reiniciado?). Envie o pedido novamente.',
+      error: tNow('orchestrator.planGone'),
     })
     return
   }
@@ -896,7 +911,7 @@ async function approvePlanTurn(
   }
 
   try {
-    // Marca a sessão principal como orquestradora (vira nó-pai na sidebar)
+    // Marks the main session as the orchestrator (it becomes the parent node in the sidebar)
     const parent = await readJson<SessionInfo>(StorageKeys.session(sessionId))
     if (parent && parent.orchestration?.role !== 'orchestrator') {
       const next = { ...parent, orchestration: { role: 'orchestrator' as const }, updatedAt: Date.now() }
@@ -904,24 +919,24 @@ async function approvePlanTurn(
       emit(win, { type: 'session', sessionId, session: next })
     }
 
-    // Configuração vigente (diálogo da Orquestra, via cache que o renderer
-    // empurra). Fica no plano: o card mostra o orçamento, e um plano em
-    // andamento não muda de comportamento se o usuário mexer no diálogo.
+    // Current settings (the Orchestra dialog, via the cache the renderer
+    // pushes). They live on the plan: the card shows the budget, and a plan in
+    // progress does not change behavior if the user edits the dialog.
     const config = normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
     plan.config = config
-    // Worktree por worker só faz sentido num repositório git.
-    const repoDoChat = config.worktrees ? await repositorioDoChat(input.directory!) : null
+    // One worktree per worker only makes sense in a git repository.
+    const chatRepo = config.worktrees ? await chatRepository(input.directory!) : null
 
-    // Tarefas fora da seleção não rodam — e dependência delas deixa de existir.
+    // Tasks outside the selection do not run — and depending on them no longer exists.
     const ids = new Set(selected.map((t) => t.id))
-    for (const t of selected) if (t.dependeDe) t.dependeDe = t.dependeDe.filter((id) => ids.has(id))
+    for (const t of selected) if (t.dependsOn) t.dependsOn = t.dependsOn.filter((id) => ids.has(id))
     plan.tasks = selected
 
-    // Sessões filhas dos workers. Registra cada worker em activeWorkers JÁ NA
-    // CRIAÇÃO — um abort nesta janela precisa alcançá-los.
+    // Child sessions of the workers. Each worker is registered in activeWorkers
+    // ALREADY AT CREATION — an abort in this window has to reach them.
     activeWorkers.set(sessionId, [])
     const workerSessions = new Map<string, SessionInfo>()
-    const criarSessao = async (task: OrchestrationTask): Promise<SessionInfo> => {
+    const createSession = async (task: OrchestrationTask): Promise<SessionInfo> => {
       const now = Date.now()
       const worker: SessionInfo = {
         id: newId('ses'),
@@ -932,9 +947,9 @@ async function approvePlanTurn(
         folderId: null,
         directory: input.directory,
         extraDirectories: input.extraDirectories,
-        // Os modos vêm do plano: o orquestrador escolheu tarefa a tarefa,
-        // dentro do teto da sessão. Ficam na sessão para quem continuar a
-        // conversa depois (revisão, message_worker) usar os mesmos.
+        // The modes come from the plan: the orchestrator chose them task by task,
+        // within the session ceiling. They stay on the session so whoever continues
+        // the conversation later (review, message_worker) uses the same ones.
         orchestration: { role: 'worker', parentSessionId: sessionId, task: task.title, options: task.options, vision: task.vision },
         parentId: sessionId,
         createdAt: now,
@@ -947,55 +962,55 @@ async function approvePlanTurn(
       emit(win, { type: 'session', sessionId: worker.id, session: worker })
       return worker
     }
-    // Todos aparecem na sidebar desde já, mesmo os que esperam dependência.
-    for (const task of selected) await criarSessao(task)
+    // They all show up in the sidebar right away, even the ones waiting on a dependency.
+    for (const task of selected) await createSession(task)
 
     plan.status = 'running'
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
-    // Gravações em fila: workers e revisões mudam o plano o tempo todo, e duas
-    // escritas simultâneas no mesmo arquivo se atropelariam.
-    let gravacoes = Promise.resolve()
-    const persistir = () => {
-      gravacoes = gravacoes.then(() => persistPlan(win, sessionId, plan)).catch(() => {})
-      return gravacoes
+    // Queued writes: workers and reviews change the plan all the time, and two
+    // simultaneous writes to the same file would trample each other.
+    let writes = Promise.resolve()
+    const persist = () => {
+      writes = writes.then(() => persistPlan(win, sessionId, plan)).catch(() => {})
+      return writes
     }
 
-    // O revisor é o condutor (o mesmo modelo do planejamento e da síntese).
-    const revisor = conductorInput(input)
-    const revisorModel = await resolveModel(revisor.providerId, revisor.modelId)
-    const revisorProvider = await getProvider(revisor.providerId)
-    const revisorOptions = await buildProviderOptions(revisor)
-    const raizRepo = await raizDoRepositorio(input.directory!).catch(() => undefined)
+    // The reviewer is the conductor (the same model as planning and synthesis).
+    const reviewer = conductorInput(input)
+    const reviewerModel = await resolveModel(reviewer.providerId, reviewer.modelId)
+    const reviewerProvider = await getProvider(reviewer.providerId)
+    const reviewerOptions = await buildProviderOptions(reviewer)
+    const repoRoot = await repositoryRoot(input.directory!).catch(() => undefined)
 
     /**
-     * Diff do trabalho do worker, para o revisor. Com worktree o git responde
-     * direto; sem worktree, a evidência são os snapshots dos turnos do chat
-     * dele — e um turno cuja captura falhou não deixa patch nenhum. Devolver
-     * vazio aí faria o revisor ler "não escreveu nada" onde a verdade é "não
-     * deu para registrar" (é o que a verificação discriminada do chat-engine
-     * existe para separar), então a falha é dita e o estado da pasta — a prova
-     * real, ainda que compartilhada com os outros workers — é consultado.
+     * Diff of the worker's work, for the reviewer. With a worktree git answers
+     * directly; without one, the evidence is the snapshots of its chat turns —
+     * and a turn whose capture failed leaves no patch at all. Returning empty
+     * there would make the reviewer read "wrote nothing" where the truth is
+     * "could not record it" (which is what the chat-engine's discriminated
+     * check exists to separate), so the failure is stated and the folder state — the
+     * real proof, even if shared with the other workers — is consulted.
      */
-    const diffDaTarefa = async (task: OrchestrationTask): Promise<string> => {
-      if (task.worktree) return diffDoWorktree(task.worktree)
+    const taskDiff = async (task: OrchestrationTask): Promise<string> => {
+      if (task.worktree) return worktreeDiff(task.worktree)
       if (!task.workerSessionId) return ''
       const msgs = await loadMessages(task.workerSessionId)
       const snaps = msgs.filter((m) => m.role === 'assistant' && m.snapshot).map((m) => m.snapshot!)
-      const { patch, indisponivel } = diffDosTurnos(snaps)
-      if (!indisponivel) return patch
-      const daPasta = await diffDaPasta(input.directory!)
-      return [indisponivel, patch, daPasta].filter(Boolean).join('\n\n')
+      const { patch, unavailable } = turnDiffs(snaps)
+      if (!unavailable) return patch
+      const fromFolder = await folderDiff(input.directory!)
+      return [unavailable, patch, fromFolder].filter(Boolean).join('\n\n')
     }
     /**
-     * Arquivos que o worker mudou, para conferir com os que são dele. Sem
-     * worktree vêm dos snapshots dos turnos; se algum turno não foi registrado
-     * a lista estaria incompleta, e uma lista incompleta não deve inocentar
-     * ninguém — aí não há conferência (null).
+     * Files the worker changed, to check against the ones it owns. Without a
+     * worktree they come from the turn snapshots; if some turn was not recorded
+     * the list would be incomplete, and an incomplete list must not clear
+     * anyone — then there is no check (null).
      */
-    const arquivosDaTarefa = async (task: OrchestrationTask): Promise<string[] | null> => {
-      if (task.worktree) return arquivosDoWorktree(task.worktree)
+    const taskFiles = async (task: OrchestrationTask): Promise<string[] | null> => {
+      if (task.worktree) return worktreeFiles(task.worktree)
       if (!task.workerSessionId) return null
       const snaps = (await loadMessages(task.workerSessionId))
         .filter((m) => m.role === 'assistant' && m.snapshot)
@@ -1004,71 +1019,88 @@ async function approvePlanTurn(
       return snaps.flatMap((s) => s.files ?? [])
     }
 
-    const workerResultados = await executarPlano({
+    // The plan as a window: from the first worker leaving the queue to the last
+    // review closing. `parallel` goes along so the record says how much of the
+    // slot budget the plan actually used.
+    const planPerf = perfSpan('plan', {
+      plan: plan.id,
+      tasks: plan.tasks.length,
+      parallel: MAX_PARALLEL,
+      behavior: config.behavior,
+      worktrees: chatRepo ? true : false,
+    })
+    perfEvent('plan:start', { plan: plan.id, tasks: plan.tasks.map((t) => t.title) })
+    const workerResults = await executePlan({
       plan,
       config,
       signal: controller.signal,
-      opcoesExtra: { subagents: input.options.subagents === true },
-      persistir,
-      rodarWorker: async (task, texto) => {
-        const worker = workerSessions.get(task.id) ?? (await criarSessao(task))
-        const r = await runWorkerTurn(win, input, worker, texto)
-        // Cada turno (o primeiro e os ajustes) entra no custo do plano.
+      extraOptions: { subagents: input.options.subagents === true },
+      persist,
+      runWorker: async (task, text) => {
+        const worker = workerSessions.get(task.id) ?? (await createSession(task))
+        const r = await runWorkerTurn(win, input, worker, text)
+        // Every turn (the first one and the adjustments) goes into the plan's cost.
         if (r.tokens) plan.usage = addTokenUsage(plan.usage, r.tokens)
         return r
       },
-      prepararTarefa: repoDoChat
+      prepareTask: chatRepo
         ? async (task) => {
-            const worker = workerSessions.get(task.id) ?? (await criarSessao(task))
-            const dependencias = (task.dependeDe ?? [])
+            const worker = workerSessions.get(task.id) ?? (await createSession(task))
+            const dependencies = (task.dependsOn ?? [])
               .map((id) => plan.tasks.find((t) => t.id === id)?.worktree)
               .filter((w): w is NonNullable<OrchestrationTask['worktree']> => !!w)
-            const { worktree, avisos } = await criarWorktreeDoWorker({ pastaDoChat: input.directory!, planId: plan.id, task, dependencias })
+            const { worktree, notices } = await createWorkerWorktree({ chatFolder: input.directory!, planId: plan.id, task, dependencies })
             task.worktree = worktree
-            // A sessão do worker passa a trabalhar no worktree dele.
-            const next = { ...worker, directory: worktree.pasta, updatedAt: Date.now() }
+            // The worker's session now works in its own worktree.
+            const next = { ...worker, directory: worktree.folder, updatedAt: Date.now() }
             await writeJson(StorageKeys.session(next.id), next)
             workerSessions.set(task.id, next)
             emit(win, { type: 'session', sessionId: next.id, session: next })
             return [
-              `You work in an isolated git worktree (${worktree.pasta}) on branch ${worktree.branch}, created from ${worktree.base}. Other workers have their own. You don't need to commit: the orchestrator commits your work when it is accepted and merges it at the end.`,
-              ...avisos,
+              `You work in an isolated git worktree (${worktree.folder}) on branch ${worktree.branch}, created from ${worktree.base}. Other workers have their own. You don't need to commit: the orchestrator commits your work when it is accepted and merges it at the end.`,
+              ...notices,
             ]
           }
         : undefined,
-      aoAceitar: repoDoChat
+      onAccept: chatRepo
         ? async (task) => {
-            if (task.worktree) await commitarTrabalho(task.worktree, task.title).catch(() => {})
+            if (task.worktree) await commitWork(task.worktree, task.title).catch(() => {})
           }
         : undefined,
-      revisar:
-        config.comportamento === 'orquestrar'
+      review:
+        config.behavior === 'orchestrate'
           ? undefined
-          : (pedido, acoes) =>
-              revisarComModelo(
+          : (request, actions) =>
+              reviewWithModel(
                 {
-                  model: revisorModel,
-                  providerOptions: revisorOptions,
-                  prepareStep: agentPrepareStep(revisorProvider, revisor.modelId, { directory: input.directory }),
-                  pedidoOriginal: input.text,
+                  model: reviewerModel,
+                  providerOptions: reviewerOptions,
+                  prepareStep: agentPrepareStep(reviewerProvider, reviewer.modelId, { directory: input.directory }),
+                  originalRequest: input.text,
                   plan,
                   config,
                   signal: controller.signal,
-                  diff: diffDaTarefa,
-                  arquivosTocados: arquivosDaTarefa,
-                  verificacoes: (task) => descobrirVerificacoes(task.worktree?.pasta ?? input.directory!, task.worktree?.caminho ?? raizRepo),
-                  rodarVerificacao: (_task, v) => rodarVerificacao(v, controller.signal),
-                  aoUsar: (usage) => {
-                    plan.usage = addTokenUsage(plan.usage, toTokenUsage(usage as Parameters<typeof toTokenUsage>[0], revisorProvider?.models[revisor.modelId]?.cost))
+                  diff: taskDiff,
+                  touchedFiles: taskFiles,
+                  checks: (task) => discoverChecks(task.worktree?.folder ?? input.directory!, task.worktree?.path ?? repoRoot),
+                  runCheck: (_task, check) => runCheck(check, controller.signal),
+                  onUsage: (usage) => {
+                    plan.usage = addTokenUsage(plan.usage, toTokenUsage(usage as Parameters<typeof toTokenUsage>[0], reviewerProvider?.models[reviewer.modelId]?.cost))
                   },
                 },
-                pedido,
-                acoes,
+                request,
+                actions,
               ),
     })
     activeWorkers.delete(sessionId)
+    planPerf.end({
+      accepted: plan.tasks.filter((t) => t.phase === 'accepted').length,
+      failed: plan.tasks.filter((t) => t.phase === 'failed').length,
+      inputTokens: plan.usage?.input,
+      aborted: controller.signal.aborted,
+    })
 
-    // Abort durante a execução: workers já pararam, não faz sentido sintetizar
+    // Abort during the execution: the workers already stopped, synthesizing makes no sense
     if (controller.signal.aborted) {
       plan.status = 'done'
       await persistPlan(win, sessionId, plan)
@@ -1076,10 +1108,10 @@ async function approvePlanTurn(
       return
     }
 
-    // Worktrees: junta no chat o trabalho aceito, dependências antes.
-    if (repoDoChat) await juntarTrabalho(win, sessionId, plan, input.directory!)
+    // Worktrees: merge the accepted work into the chat, dependencies first.
+    if (chatRepo) await mergeWork(win, sessionId, plan, input.directory!)
 
-    // Fase 3: síntese em streaming no chat principal
+    // Phase 3: streaming synthesis in the main chat
     const history = await loadMessages(sessionId)
     const conductor = conductorInput(input)
     const synthesisMessage: ChatMessage = {
@@ -1095,24 +1127,24 @@ async function approvePlanTurn(
 
     const resultsText = plan.tasks
       .map((t) => {
-        const estado = t.fase === 'aceita' ? 'accepted' : t.fase === 'falhou' ? 'FAILED' : t.fase ?? 'unknown'
-        const nota = t.notaRevisao ? `\nOrchestrator note: ${t.notaRevisao}` : ''
-        const texto = workerResultados.get(t.id)?.text || '(no reply)'
-        return `## ${t.title}${t.extra ? ' (extra)' : ''} [${estado}${t.revisions ? `, ${t.revisions} adjustment(s)` : ''}]${nota}\n\n${texto}`
+        const state = t.phase === 'accepted' ? 'accepted' : t.phase === 'failed' ? 'FAILED' : t.phase ?? 'unknown'
+        const note = t.reviewNote ? `\nOrchestrator note: ${t.reviewNote}` : ''
+        const text = workerResults.get(t.id)?.text || '(no reply)'
+        return `## ${t.title}${t.extra ? ' (extra)' : ''} [${state}${t.revisions ? `, ${t.revisions} adjustment(s)` : ''}]${note}\n\n${text}`
       })
-      .join('\n\n---\n\n') + (plan.revisao?.merge ? `\n\n---\n\nMerge of the workers' branches: ${plan.revisao.merge.detalhe}` : '')
+      .join('\n\n---\n\n') + (plan.review?.merge ? `\n\n---\n\nMerge of the workers' branches: ${plan.review.merge.detail}` : '')
 
-    // Uma tarefa só, aceita, sem merge com problema: a síntese seria uma
-    // chamada de modelo para reescrever o resumo do próprio worker. Entrega o
-    // resumo direto. Falha, extra criado na revisão ou merge que não fechou
-    // continuam pela síntese — aí há o que explicar.
-    const unica = plan.tasks.length === 1 ? plan.tasks[0] : undefined
-    const resumoDireto =
-      unica && unica.fase === 'aceita' && plan.revisao?.merge?.ok !== false
-        ? workerResultados.get(unica.id)?.text?.trim()
+    // A single task, accepted, with no merge issue: the synthesis would be a
+    // model call to rewrite the worker's own summary. Deliver the summary
+    // directly. A failure, an extra created in the review or a merge that did not
+    // close still go through the synthesis — there is something to explain there.
+    const onlyOne = plan.tasks.length === 1 ? plan.tasks[0] : undefined
+    const directSummary =
+      onlyOne && onlyOne.phase === 'accepted' && plan.review?.merge?.ok !== false
+        ? workerResults.get(onlyOne.id)?.text?.trim()
         : undefined
-    if (resumoDireto) {
-      const part: TextPart = { id: newId('prt'), type: 'text', text: resumoDireto, state: 'done' }
+    if (directSummary) {
+      const part: TextPart = { id: newId('prt'), type: 'text', text: directSummary, state: 'done' }
       synthesisMessage.parts.push(part)
       emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
     } else {
@@ -1153,7 +1185,7 @@ async function approvePlanTurn(
       part.state = 'done'
       if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
 
-      // Usage da síntese: registrado na própria mensagem e somado ao plano
+      // Synthesis usage: recorded on the message itself and added to the plan
       synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[conductor.modelId]?.cost)
       plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
     }
@@ -1193,64 +1225,65 @@ export async function rejectPlan(win: BrowserWindow, sessionId: string): Promise
   emit(win, { type: 'status', sessionId, status: 'idle' })
 }
 
-/** Tarefas em ordem de dependência (pré-requisitos antes) — a ordem do merge. */
-function ordemDeDependencia(tasks: OrchestrationTask[]): OrchestrationTask[] {
-  const ordem: OrchestrationTask[] = []
-  const vistos = new Set<string>()
-  const visitar = (t: OrchestrationTask) => {
-    if (vistos.has(t.id)) return
-    vistos.add(t.id)
-    for (const id of t.dependeDe ?? []) {
+/** Tasks in dependency order (prerequisites first) — the merge order. */
+function dependencyOrder(tasks: OrchestrationTask[]): OrchestrationTask[] {
+  const order: OrchestrationTask[] = []
+  const seen = new Set<string>()
+  const visit = (t: OrchestrationTask) => {
+    if (seen.has(t.id)) return
+    seen.add(t.id)
+    for (const id of t.dependsOn ?? []) {
       const dep = tasks.find((x) => x.id === id)
-      if (dep) visitar(dep)
+      if (dep) visit(dep)
     }
-    ordem.push(t)
+    order.push(t)
   }
-  for (const t of tasks) visitar(t)
-  return ordem
+  for (const t of tasks) visit(t)
+  return order
 }
 
 /**
- * Junta no chat os branches das tarefas aceitas que ainda não entraram, em
- * ordem de dependência. O resultado fica no plano (card + síntese); se algo
- * ficou de fora (alteração não commitada no chat, conflito, erro do git), o
- * card oferece "Juntar de novo".
+ * Merges into the chat the branches of the accepted tasks that are not in yet,
+ * in dependency order. The result lands on the plan (card + synthesis); if
+ * something was left out (uncommitted change in the chat, conflict, git error),
+ * the card offers "Merge again".
  */
-async function juntarTrabalho(win: BrowserWindow, sessionId: string, plan: OrchestrationPlan, pastaDoChat: string): Promise<void> {
-  const aceitas = ordemDeDependencia(plan.tasks).filter((t) => t.fase === 'aceita' && t.worktree && !t.juntada)
-  if (aceitas.length === 0) return
-  const revisao = plan.revisao ?? { ajustesUsados: 0, tetoAjustes: 0 }
-  plan.revisao = { ...revisao, atividade: 'Juntando o trabalho dos workers' }
+async function mergeWork(win: BrowserWindow, sessionId: string, plan: OrchestrationPlan, chatFolder: string): Promise<void> {
+  const accepted = dependencyOrder(plan.tasks).filter((t) => t.phase === 'accepted' && t.worktree && !t.merged)
+  if (accepted.length === 0) return
+  const review = plan.review ?? { adjustmentsUsed: 0, maxAdjustments: 0 }
+  plan.review = { ...review, activity: "Merging the workers' work" }
   await persistPlan(win, sessionId, plan)
 
-  const r = await juntarBranches(pastaDoChat, aceitas.map((t) => ({ titulo: t.title, worktree: t.worktree! })))
-  for (const t of aceitas) {
-    if (!r.juntados.includes(t.title)) continue
-    t.juntada = true
-    await removerWorktreeDoWorker(t.worktree!, true).catch(() => {})
+  const r = await mergeBranches(chatFolder, accepted.map((t) => ({ title: t.title, worktree: t.worktree! })))
+  for (const t of accepted) {
+    if (!r.merged.includes(t.title)) continue
+    t.merged = true
+    await removeWorkerWorktree(t.worktree!, true).catch(() => {})
   }
-  const faltam = aceitas.filter((t) => !t.juntada)
-  const resumo = `${r.juntados.length} de ${aceitas.length} juntado(s)`
-  const detalhe = r.bloqueio
-    ? `Nada foi juntado: a pasta do chat tem alterações não commitadas em arquivos que os workers mudaram (${r.bloqueio.arquivos.join(', ')}). Commite ou guarde (git stash) e use "Juntar de novo".`
-    : r.conflito
-      ? `Conflito ao juntar "${r.conflito.titulo}"${r.conflito.arquivos.length ? ` (${r.conflito.arquivos.join(', ')})` : ''}. ${resumo}; o restante continua nos branches dos workers. Resolva no chat e use "Juntar de novo", ou junte os branches à mão.`
-      : r.erro
-        ? `O git recusou juntar "${r.erro.titulo}": ${r.erro.mensagem}. ${resumo}; use "Juntar de novo" depois de resolver.`
-        : `${r.juntados.length} branch(es) juntado(s) no chat.`
-  plan.revisao = { ...plan.revisao, atividade: undefined, merge: { ok: faltam.length === 0, detalhe, pendente: faltam.length > 0 } }
+  const missing = accepted.filter((t) => !t.merged)
+  const summary = `${r.merged.length} of ${accepted.length} merged`
+  const detail = r.blocked
+    ? `Nothing was merged: the chat folder has uncommitted changes in files the workers changed (${r.blocked.files.join(', ')}). Commit or stash them and use "Merge again".`
+    : r.conflict
+      ? `Conflict merging "${r.conflict.title}"${r.conflict.files.length ? ` (${r.conflict.files.join(', ')})` : ''}. ${summary}; the rest stays on the workers' branches. Resolve it in the chat and use "Merge again", or merge the branches by hand.`
+      : r.error
+        ? `Git refused to merge "${r.error.title}": ${r.error.message}. ${summary}; use "Merge again" after resolving it.`
+        : `${r.merged.length} branch(es) merged into the chat.`
+  plan.review = { ...plan.review, activity: undefined, merge: { ok: missing.length === 0, detail, pending: missing.length > 0 } }
   await persistPlan(win, sessionId, plan)
 }
 
 /**
- * "Juntar de novo" (card da orquestração): tenta de novo juntar o trabalho
- * aceito que ficou de fora — depois de o usuário commitar/guardar as
- * alterações do chat ou resolver um conflito.
+ * "Merge again" (orchestration card): tries once more to merge the accepted work
+ * that was left out — after the user commits/stashes the chat changes or
+ * resolves a conflict.
  */
-export async function juntarDeNovo(win: BrowserWindow, sessionId: string): Promise<void> {
-  if (controllers.has(sessionId)) return // o plano ainda está rodando
-  const plan = await readJson<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+export async function mergeAgain(win: BrowserWindow, sessionId: string): Promise<void> {
+  if (controllers.has(sessionId)) return // the plan is still running
+  // Legacy plans (Portuguese keys/phase values) are translated at the read edge.
+  const plan = normalizeOrchestrationPlan(await readJson<unknown>(StorageKeys.orchestration(sessionId)))
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!plan || !session?.directory) return
-  await juntarTrabalho(win, sessionId, plan, session.directory)
+  await mergeWork(win, sessionId, plan, session.directory)
 }

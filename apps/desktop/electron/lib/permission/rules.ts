@@ -5,15 +5,16 @@ import { isMcpServerName } from '../mcp'
 import { computerRegistry } from '../computer/registry'
 import { approvalKey, isBrowserId, isDeniedQuery } from '../computer/safety'
 import type { PermissionClaim } from '@shared/chat'
+import { tNow } from '../i18n'
 
 export interface Assessment {
   claim: PermissionClaim
   ruleId: string
   /**
-   * Pergunta mesmo no modo de permissão total e ignora "sempre permitir":
-   * ações destrutivas que o usuário precisa ver uma a uma.
+   * Asks even in full permission mode and ignores "always allow":
+   * destructive actions the user needs to see one by one.
    */
-  sempre?: boolean
+  alwaysAsk?: boolean
 }
 
 function shorten(text: string, max = 80): string {
@@ -22,17 +23,17 @@ function shorten(text: string, max = 80): string {
 }
 
 /**
- * Tools nativas (first-party) do Orbit. O catch-all de MCP usa "_" como
- * separador de servidor — tools nativas em snake_case (show_image, panel_*,
- * memory_*, browser_*, bash_background/list/kill/output, create_skill) cairiam nele
- * e pediriam permissão em toda chamada. Esta allowlist garante que nativas
- * NUNCA sejam avaliadas como MCP. As que merecem avaliação (bash, write,
- * edit) têm regras próprias no assess() — o resto aprova sem perguntar.
- * Além da allowlist, o usuário pode ampliar o "nunca pedir" via
- * permissions.json (campo neverAsk) — ver loadUserNeverAsk().
+ * Orbit's native (first-party) tools. The MCP catch-all uses "_" as the
+ * server separator — native tools in snake_case (show_image, panel_*,
+ * memory_*, browser_*, bash_background/list/kill/output, create_skill) would fall into it
+ * and ask permission on every call. This allowlist guarantees that native
+ * ones are NEVER evaluated as MCP. The ones that deserve evaluation (bash, write,
+ * edit) have their own rules in assess() — the rest approves without asking.
+ * Beyond the allowlist, the user can extend "never ask" via
+ * permissions.json (neverAsk field) — see loadUserNeverAsk().
  */
 const NATIVE_TOOLS = new Set([
-  // Browser do painel direito
+  // Right panel browser
   'panel_navigate',
   'panel_read',
   'panel_click',
@@ -42,162 +43,162 @@ const NATIVE_TOOLS = new Set([
   'panel_console',
   'panel_hover',
   'panel_drag',
-  // Executa JS na página do browser do painel: mesmo threat model do
-  // run_browser_script (o agente já roda código arbitrário), e a página é a
-  // que o próprio agente abriu.
+  // Runs JS in the panel browser page: same threat model as
+  // run_browser_script (the agent already runs arbitrary code), and the page is
+  // the one the agent itself opened.
   'panel_eval',
   'show_image',
-  // Artefatos HTML mostrados na resposta. Não pedem permissão: escrevem só no
-  // storage do Orbit (orbit-data/artifacts), nunca no projeto do usuário, e
-  // rodam num iframe sandbox sem acesso ao app — o threat model é o de uma
-  // página web qualquer, não o do bash.
+  // HTML artifacts shown in the response. They do not ask permission: they write only to
+  // Orbit's storage (orbit-data/artifacts), never to the user's project, and
+  // they run in a sandboxed iframe with no access to the app — the threat model is that of
+  // any web page, not that of bash.
   'create_artifact',
   'update_artifact',
-  // Consulta aos documentos anexados na conversa: leitura pura do texto que o
-  // próprio usuário anexou, já persistido no storage do Orbit.
+  // Query of the documents attached to the conversation: pure read of the text the
+  // user themselves attached, already persisted in Orbit's storage.
   'doc_list',
   'doc_search',
   'doc_read',
   'pdf_view_page',
-  // Consulta de planilha: leitura pura, sem escrita em lugar nenhum
+  // Spreadsheet query: pure read, with no writing anywhere
   'sheet_query',
-  // Documentos entregaveis: escrevem no storage do Orbit
-  // (orbit-data/documents), nunca no projeto do usuario.
+  // Deliverable documents: they write to Orbit's storage
+  // (orbit-data/documents), never to the user's project.
   'create_document',
   'update_document',
   'read_document',
   'list_documents',
-  // Edicao de .docx: grava COPIA no storage do Orbit. Escrever no projeto do
-  // usuario so acontece com savePath, que a propria tool restringe ao pedido
-  // explicito — mesma convencao do panel_screenshot.
+  // .docx editing: writes a COPY to Orbit's storage. Writing to the user's
+  // project only happens with savePath, which the tool itself restricts to an
+  // explicit request — same convention as panel_screenshot.
   'docx_edit',
   'docx_paragraphs',
-  // Operacoes de PDF: geram arquivo NOVO no storage do Orbit; escrever no
-  // projeto so com savePath, restrito ao pedido explicito.
+  // PDF operations: they generate a NEW file in Orbit's storage; writing to the
+  // project only with savePath, restricted to an explicit request.
   'pdf_merge',
   'pdf_transform',
   'pdf_form_fields',
   'pdf_form_fill',
   'pdf_metadata',
   'pdf_extract_images',
-  // Edicao de imagem: processamento de pixel sobre o que ja esta na galeria ou
-  // na pasta de trabalho, com a saida indo para o storage do Orbit. Escrever no
-  // projeto so com savePath, restrito ao pedido explicito — mesma convencao do
-  // pdf_transform e do docx_edit.
+  // Image editing: pixel processing over what is already in the gallery or
+  // in the working folder, with the output going to Orbit's storage. Writing to the
+  // project only with savePath, restricted to an explicit request — same convention as
+  // pdf_transform and docx_edit.
   'image_list',
   'image_info',
   'image_edit',
-  // Limpeza da galeria: apaga imagens que o AGENTE produziu, inclusive de
-  // turnos anteriores. A trava é a origem — anexo do usuário é recusado pela
-  // própria tool —, e não o turno; mesmo padrão do memory_delete.
+  // Gallery cleanup: deletes images the AGENT produced, including from
+  // earlier turns. The lock is the origin — a user attachment is refused by the
+  // tool itself —, not the turn; same pattern as memory_delete.
   'image_delete',
-  // SVG: mesma convencao. Editar e texto, nao pixel, mas a entrega e igual —
-  // arquivo novo na galeria, projeto do usuario so com savePath.
+  // SVG: same convention. Editing is text, not pixel, but the delivery is the same —
+  // a new file in the gallery, the user's project only with savePath.
   'svg_vectorize',
   'svg_create',
   'svg_info',
   'svg_edit',
-  // Áudio: gerar grava o áudio no storage do Orbit — no projeto só com
-  // savePath, restrito ao pedido explícito. Mesma convenção das de imagem.
-  // (Transcrever é `transcribe`, listada junto das de vídeo.)
+  // Audio: generating writes the audio to Orbit's storage — in the project only with
+  // savePath, restricted to an explicit request. Same convention as the image ones.
+  // (Transcribing is `transcribe`, listed along with the video ones.)
   'audio_generate',
-  // Overlay: ler a tela e a seleção do app da frente é o que a pessoa pediu ao
-  // abrir o painel; encerrar a chamada é o "tchau, Orbit". Nenhuma escreve.
+  // Overlay: reading the screen and the selection of the front app is what the person asked for
+  // when opening the panel; ending the call is the "bye, Orbit". Neither writes.
   'see_screen',
   'see_window_text',
   'see_selection',
   'end_call',
-  // Automação em lote na engine oculta (mesmo threat model do bash: o agente
-  // já executa código arbitrário; o script roda isolado num utilityProcess)
+  // Batch automation in the hidden engine (same threat model as bash: the agent
+  // already runs arbitrary code; the script runs isolated in a utilityProcess)
   'run_browser_script',
   'capture_batch',
-  // Gravação de um roteiro: navega numa janela oculta com as MESMAS ferramentas
-  // de browser já liberadas acima e grava o framebuffer. Não pede permissão de
-  // gravação do sistema (o CDP captura a página, não a tela) e não escreve no
-  // projeto — o MP4 vai para a galeria do Orbit.
+  // Recording a script: it navigates in a hidden window with the SAME browser
+  // tools already released above and records the framebuffer. It does not ask for
+  // system recording permission (CDP captures the page, not the screen) and does not write to the
+  // project — the MP4 goes to Orbit's gallery.
   'browser_record',
-  // Browser do modo chat (toggle "Browser") — tools nativas do toggle,
-  // não MCP; caíam no catch-all "_" e pediam permissão como servidor "browser"
+  // Chat mode browser (the "Browser" toggle) — native tools of the toggle,
+  // not MCP; they fell into the "_" catch-all and asked permission as the "browser" server
   'browser_open',
   'browser_links',
-  // Memória (brain)
+  // Memory (brain)
   'memory_save',
   'memory_search',
   'memory_open',
   'memory_graph',
-  // memory_link e memory_tree existem nos dois modos (vínculos entre memórias
-  // e leitura do esqueleto da árvore); também caíam no catch-all como
-  // servidor "memory"
+  // memory_link and memory_tree exist in both modes (links between memories
+  // and reading the tree skeleton); they also fell into the catch-all as the
+  // "memory" server
   'memory_link',
   'memory_tree',
-  // Revisão in-place de uma memória — mesmo threat model do memory_save
+  // In-place review of a memory — same threat model as memory_save
   'memory_update',
-  // Manutenção de memória: listar por desuso e excluir. Nativas porque o dado
-  // é do próprio agente (resumos que ele escreveu); a trava do delete é a
-  // deliberação exigida pela tool (motivo escrito), não uma caixa de permissão.
+  // Memory maintenance: listing by disuse and deleting. Native because the data
+  // belongs to the agent itself (summaries it wrote); the lock on delete is the
+  // deliberation the tool requires (written reason), not a permission box.
   'memory_list',
   'memory_delete',
-  // Manutenção de chats — as rotinas de limpeza dependem delas. chat_delete é
-  // irreversível: a proteção mora na própria tool (recusa fixados, limite por
-  // chamada, motivo obrigatório) e na descrição, que manda preferir arquivar.
+  // Chat maintenance — the cleanup routines depend on them. chat_delete is
+  // irreversible: the protection lives in the tool itself (refuses pinned ones, limit per
+  // call, mandatory reason) and in the description, which says to prefer archiving.
   'chat_list',
   'chat_archive',
   'chat_delete',
-  // Subchats: ler a conversa de um filho é leitura pura do storage do Orbit.
-  // Instruir um (send_to_subchat) tem regra própria no assess().
+  // Subchats: reading a child's conversation is a pure read of Orbit's storage.
+  // Instructing one (send_to_subchat) has its own rule in assess().
   'read_subchat',
-  // Relatorios de uso (leitura pura do proprio historico): horas por projeto,
-  // custo e tokens. Nativas — sem isto caem no catch-all de MCP como servidor
-  // 'work'/'usage' e pedem permissao a cada chamada.
+  // Usage reports (pure read of the history itself): hours per project,
+  // cost and tokens. Native — without this they fall into the MCP catch-all as the
+  // 'work'/'usage' server and ask permission on every call.
   'work_report',
   'usage_stats',
-  // Processos em background
+  // Background processes
   'bash_background',
   'bash_list',
   'bash_kill',
   'bash_output',
-  // Worktrees do chat: listar, criar e trocar a pasta são reversíveis (o
-  // worktree_remove fica fora: pede confirmação sempre — ver assess)
+  // Chat worktrees: listing, creating and switching the folder are reversible (the
+  // worktree_remove stays out: it always asks for confirmation — see assess)
   'worktree_list',
   'worktree_create',
   'worktree_switch',
-  // Esteira (board de tasks)
-  'esteira_create',
-  'esteira_list',
-  'esteira_create_task',
-  'esteira_task_status',
-  // Modo Visão: descreve imagens anexadas com o modelo de visão configurado
-  // (leitura pura, first-party) — caía no catch-all de MCP como servidor
-  // "describe" e pedia permissão em toda chamada.
+  // Pipeline (task board)
+  'pipeline_create',
+  'pipeline_list',
+  'pipeline_create_task',
+  'pipeline_task_status',
+  // Vision mode: describes attached images with the configured vision model
+  // (pure read, first-party) — it fell into the MCP catch-all as the
+  // "describe" server and asked permission on every call.
   'describe_image',
   // Skills
   'create_skill',
-  // Estado do turno (leitura, first-party): verify_changes confere o que foi
-  // escrito no turno; session_context traz metadados dos turnos recentes.
-  // Caíam no catch-all de MCP ("verify"/"session") e pediam permissão em
-  // toda chamada — o que fazia o modelo pular a verificação.
+  // Turn state (read, first-party): verify_changes checks what was
+  // written in the turn; session_context brings metadata of recent turns.
+  // They fell into the MCP catch-all ("verify"/"session") and asked permission on
+  // every call — which made the model skip the check.
   'verify_changes',
   'session_context',
-  // Índice de código (code-index): leitura pura do projeto, mesmo threat model
-  // do read/grep — que nunca pediram. Cairiam no catch-all de MCP se houvesse
-  // um servidor chamado "code".
+  // Code index (code-index): pure read of the project, same threat model
+  // as read/grep — which never asked. They would fall into the MCP catch-all if there were
+  // a server called "code".
   'code_search',
   'code_outline',
   'code_refs',
-  // Conexões MCP (mcp_connect/mcp_update/mcp_servers): só PROPÕEM — a conexão
-  // passa a existir quando o usuário aceita no card da conversa, e é o card
-  // que grava. Sem entrar nesta lista elas caíam no catch-all de MCP como se
-  // fossem do servidor "mcp", pedindo permissão a cada chamada exatamente
-  // para depois o usuário decidir no card.
+  // MCP connections (mcp_connect/mcp_update/mcp_servers): they only PROPOSE — the connection
+  // comes into existence when the user accepts in the conversation card, and it is the card
+  // that writes. Without entering this list they fell into the MCP catch-all as if
+  // they belonged to the "mcp" server, asking permission on every call exactly
+  // so that the user could then decide in the card.
   'mcp_connect',
   'mcp_update',
   'mcp_servers',
-  // Vídeo e motion (peças do painel): o motor roda LOCAL, e a entrega é um
-  // arquivo — no storage do Orbit ou no destino que o próprio usuário escolher
-  // (o render da aba passa por um diálogo de salvar do sistema). Mesmo threat
-  // model das de imagem e de áudio, que já estavam aqui. Sem entrar nesta lista,
-  // motion_preview e companhia caíam no catch-all de MCP como servidor "motion"
-  // e pediam permissão a cada chamada.
+  // Video and motion (panel pieces): the engine runs LOCALLY, and the delivery is a
+  // file — in Orbit's storage or at the destination the user themselves chooses
+  // (the tab's render goes through a system save dialog). Same threat
+  // model as the image and audio ones, which were already here. Without entering this list,
+  // motion_preview and company fell into the MCP catch-all as the "motion" server
+  // and asked permission on every call.
   'motion_preview',
   'motion_write',
   'motion_edit',
@@ -205,26 +206,26 @@ const NATIVE_TOOLS = new Set([
   'motion_render',
   'motion_asset',
   'motion_delete',
-  // Design (canvas de artboards no painel): mesmo threat model — motor local,
-  // entrega é um arquivo no storage do Orbit. Sem entrar aqui cairia no
-  // catch-all de MCP como servidor "design" e pediria permissão a cada chamada.
+  // Design (artboard canvas in the panel): same threat model — local engine,
+  // the delivery is a file in Orbit's storage. Without entering here it would fall into the
+  // MCP catch-all as the "design" server and ask permission on every call.
   'design_write',
   'design_edit',
   'design_read',
   'design_preview',
   'design_asset',
   'design_delete',
-  // Slides (deck no painel): mesmo threat model do design — o deck é um arquivo
-  // montado no storage do app. Fora desta lista cairia no catch-all de MCP como
-  // servidor "slides" e pediria permissão a cada chamada.
+  // Slides (deck in the panel): same threat model as design — the deck is a file
+  // assembled in the app's storage. Outside this list it would fall into the MCP catch-all as the
+  // "slides" server and ask permission on every call.
   'slides_preview',
   'slides_write',
   'slides_edit',
   'slides_read',
   'slides_asset',
   'slides_delete',
-  // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
-  // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
+  // Searching and importing an image from an open collection (Commons, Openverse): only read
+  // network traffic to two known providers, and the file lands in the app's storage.
   'image_search',
   'image_import',
   'motion_frame',
@@ -234,27 +235,27 @@ const NATIVE_TOOLS = new Set([
   'transcribe',
   'video_timeline',
   'video_render',
-  // Mídia por link (yt-dlp): leitura de uma página pública e gravação no
-  // storage do Orbit (chat) ou em downloads/ da pasta de trabalho (código) —
-  // o mesmo threat model de media_compress e webfetch, que também não pedem
-  // permissão. O install só baixa o binário oficial, com checksum, para a
-  // pasta do app.
+  // Media by link (yt-dlp): reading a public page and writing to
+  // Orbit's storage (chat) or to downloads/ in the working folder (code) —
+  // the same threat model as media_compress and webfetch, which also do not ask
+  // permission. install only downloads the official binary, with a checksum, into the
+  // app's folder.
   'ytdlp_info',
   'ytdlp_download',
   'ytdlp_transcript',
   'ytdlp_install',
-  // Computer Use — leitura: listar apps, observar (screenshot + árvore), buscar
-  // e ver permissões. Só existem com o interruptor das Preferências E o modo
-  // da conversa ligados, e a denylist vale também aqui (isForbidden). Agir
-  // (cu_computer) passa pelo gate — ver assessComputer.
+  // Computer Use — read: listing apps, observing (screenshot + tree), searching
+  // and seeing permissions. They only exist with the Preferences switch AND the
+  // conversation mode on, and the denylist applies here too (isForbidden). Acting
+  // (cu_computer) goes through the gate — see assessComputer.
   'cu_apps',
   'cu_observe',
   'cu_query',
-  // Conferir lê a árvore como o cu_observe e só manda o texto a um modelo
-  // auxiliar — nada na tela muda.
+  // Checking reads the tree like cu_observe and only sends the text to an
+  // auxiliary model — nothing on the screen changes.
   'cu_verify',
   'cu_permissions',
-  // Delega a um subagente: as ações dele passam pelo gate uma a uma (por app).
+  // Delegates to a subagent: its actions go through the gate one by one (per app).
   'computer_task',
   'cu_record_start',
   'cu_record_mark',
@@ -262,10 +263,10 @@ const NATIVE_TOOLS = new Set([
 ])
 
 /**
- * Agir na tela: aprovação por app (por site, nos navegadores). Como todo
- * pedido, "Permitir" vale pelo turno, "Sempre neste chat" pela conversa e
- * "Sempre" para este app (ou site) daqui para frente. O detalhe mostra o app,
- * a janela/URL vista e a ação, para o usuário saber o que está liberando.
+ * Acting on the screen: approval per app (per site, in browsers). Like every
+ * request, "Allow" holds for the turn, "Always in this chat" for the conversation and
+ * "Always" for this app (or site) from now on. The detail shows the app,
+ * the window/URL seen and the action, so the user knows what they are releasing.
  */
 function assessComputer(args: Record<string, unknown>): Assessment | null {
   const action = typeof args.action === 'string' ? args.action : '?'
@@ -276,8 +277,8 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
   const name = target?.name ?? (query || '?')
   const ruleId = approvalKey(app, target?.url)
   const host = ruleId.includes('@') ? ruleId.split('@')[1] : null
-  // Navegador sem site conhecido (a UIA do Windows não tem URL): a aprovação
-  // vale pelo navegador inteiro, e o usuário precisa saber disso.
+  // Browser with no known site (Windows UIA has no URL): the approval
+  // holds for the whole browser, and the user needs to know that.
   const wholeBrowser = !host && isBrowserId(app)
   const what =
     action === 'type' || action === 'set_value'
@@ -285,9 +286,9 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
       : action === 'key'
         ? `key: ${String(args.key ?? '')}`
         : action === 'open_app'
-          ? 'abrir / trazer para a frente'
+          ? tNow('perm.bringToFront')
           : action === 'batch'
-            ? `${String(args.batchSteps ?? '?')} ações em sequência`
+            ? tNow('perm.batchCount', { count: String(args.batchSteps ?? '?') })
           : args.element !== undefined
             ? `${action} no elemento ${String(args.element)}`
             : `${action}${args.x !== undefined ? ` em (${String(args.x)}, ${String(args.y)})` : ''}`
@@ -295,11 +296,11 @@ function assessComputer(args: Record<string, unknown>): Assessment | null {
     ruleId,
     claim: {
       tool: 'cu_computer',
-      title: host ? `Controlar ${name} em ${host}` : `Controlar ${name}`,
+      title: host ? tNow('perm.control.withHost', { app: name, host }) : tNow('perm.control.plain', { app: name }),
       detail:
         `O agente quer agir no app ${name}${host ? ` (site ${host})` : ''} — ${what}. ` +
-        'A aprovação vale para este app' + (host ? ' e este site' : '') + '; outro app ou outro site pede de novo.' +
-        (wholeBrowser ? ' Atenção: o site desta aba não pôde ser lido, então a aprovação vale para TODAS as abas deste navegador.' : ''),
+        tNow('perm.approvalThisApp') + (host ? ' e este site' : '') + '; outro app ou outro site pede de novo.' +
+        (wholeBrowser ? tNow('perm.approvalAllTabs') : ''),
     },
   }
 }
@@ -310,11 +311,11 @@ let cachedNeverAskMtime = -1
 let cachedNeverAsk: Set<string> | null = null
 
 /**
- * Lista "nunca pedir permissão" do usuário, lida de permissions.json
- * (mesmo diretório do mcp-config.json). Formato:
+ * The user's "never ask permission" list, read from permissions.json
+ * (same directory as mcp-config.json). Format:
  *   { "neverAsk": ["bash", "write", "edit", "websearch"] }
- * Arquivo ausente ou inválido = lista vazia. Cache por mtime para o
- * assess() (chamado a cada tool call) não fazer I/O desnecessário.
+ * Missing or invalid file = empty list. Cached by mtime so that
+ * assess() (called on every tool call) does not do unnecessary I/O.
  */
 function loadUserNeverAsk(): Set<string> {
   try {
@@ -362,7 +363,7 @@ function assessBash(command: string, dir: string | null): Assessment | null {
 
   for (let tokens of segments(command)) {
     if (tokens[0] === 'sudo') {
-      found.push(claim('bash:sudo', 'comando com privilégios elevados (sudo)'))
+      found.push(claim('bash:sudo', tNow('perm.risk.elevated')))
       tokens = tokens.slice(1)
     }
     const cmd = tokens[0]
@@ -373,9 +374,9 @@ function assessBash(command: string, dir: string | null): Assessment | null {
       if (recursiveForce) {
         const targets = tokens.slice(1).filter((t) => !t.startsWith('-'))
         if (targets.some((t) => isCriticalTarget(t, dir ?? ''))) {
-          found.push(claim('bash:rm-rf-critical', 'remoção recursiva fora do projeto ou da raiz'))
+          found.push(claim('bash:rm-rf-critical', tNow('perm.risk.recursiveRemoveOutside')))
         } else {
-          found.push(claim('bash:rm-rf', 'remoção recursiva de arquivos (rm -rf)'))
+          found.push(claim('bash:rm-rf', tNow('perm.risk.recursiveRemove')))
         }
       }
     }
@@ -386,30 +387,30 @@ function assessBash(command: string, dir: string | null): Assessment | null {
         const force = tokens.some((t) => t === '--force' || t === '-f')
         found.push(
           force
-            ? claim('bash:git-push-force', 'push forçado reescreve histórico remoto')
+            ? claim('bash:git-push-force', tNow('perm.risk.forcePush'))
             : claim('bash:git-push', 'publica commits no remoto (git push)'),
         )
       }
       if (sub === 'reset' && tokens.includes('--hard')) {
-        found.push(claim('bash:git-reset-hard', 'descarta alterações locais (git reset --hard)'))
+        found.push(claim('bash:git-reset-hard', tNow('perm.risk.hardReset')))
       }
     }
 
-    // Controle de tela pelo bash: osascript com System Events (keystroke,
-    // click, key code) dirige qualquer app por fora do Computer Use — sem a
-    // denylist, sem a aprovação por app, sem a recusa de campo de senha.
+    // Screen control through bash: osascript with System Events (keystroke,
+    // click, key code) drives any app outside Computer Use — without the
+    // denylist, without the per-app approval, without the password-field refusal.
     if (cmd === 'osascript' && /system events|keystroke|key code|click at/i.test(command)) {
-      found.push(claim('bash:gui-automation', 'controla outros apps pela interface (osascript/System Events)'))
+      found.push(claim('bash:gui-automation', tNow('perm.risk.osascript')))
     }
-    // Windows: PowerShell com SendKeys/SendInput/UI Automation faz o mesmo por fora.
+    // Windows: PowerShell with SendKeys/SendInput/UI Automation does the same outside it.
     if (/^(powershell|pwsh)(\.exe)?$/.test(cmd) && /sendkeys|sendinput|mouse_event|keybd_event|system\.windows\.automation|uiautomation/i.test(command)) {
-      found.push(claim('bash:gui-automation', 'controla outros apps pela interface (PowerShell/UI Automation)'))
+      found.push(claim('bash:gui-automation', tNow('perm.risk.powershell')))
     }
 
     if (cmd.startsWith('npx') || cmd.startsWith('npm') || cmd.startsWith('pnpm') || cmd.startsWith('yarn') || cmd.startsWith('bun')) {
       const install = tokens.some((t) => t === 'install' || t === 'add' || t === 'remove' || t === 'link')
       if (install) {
-        found.push(claim('bash:package-install', 'instalação/remoção de dependências'))
+        found.push(claim('bash:package-install', tNow('perm.risk.dependencies')))
       }
     }
   }
@@ -428,24 +429,24 @@ function assessFileWrite(tool: string, filePath: string): Assessment | null {
   })
 
   if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) {
-    return claim('file:git-dir', 'escrita dentro de .git corrompe o repositório')
+    return claim('file:git-dir', tNow('perm.risk.gitWrite'))
   }
   if (/^\.env(\..+)?$/.test(base)) {
-    return claim('file:env', 'arquivo de segredos/ambiente (.env)')
+    return claim('file:env', tNow('perm.risk.envFile'))
   }
   const LOCKFILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'])
   if (LOCKFILES.has(base)) {
-    return claim('file:lockfile', 'lockfile de dependências')
+    return claim('file:lockfile', tNow('perm.risk.lockfile'))
   }
   return null
 }
 
 export function assess(toolName: string, input: unknown, dir: string | null): Assessment | null {
   const args = (input ?? {}) as Record<string, unknown>
-  // "Nunca pedir": allowlist de nativas + lista configurável do usuário
-  // (permissions.json → neverAsk). O check vem antes das regras de risco:
-  // quem colocou a tool aqui quer execução sem pergunta — isForbidden
-  // (bloqueio duro) continua valendo por cima disso.
+  // "Never ask": allowlist of native tools + the user's configurable list
+  // (permissions.json → neverAsk). The check comes before the risk rules:
+  // whoever put the tool here wants execution without a question — isForbidden
+  // (hard block) still applies on top of that.
   if (NATIVE_TOOLS.has(toolName) || loadUserNeverAsk().has(toolName)) return null
   if (toolName === 'bash' && typeof args.command === 'string') {
     return assessBash(args.command, dir)
@@ -454,49 +455,49 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
     return assessFileWrite(toolName, args.filePath)
   }
   if (toolName === 'cu_computer') return assessComputer(args)
-  // Lote: a mesma aprovação por app, com o número de passos no detalhe.
+  // Batch: the same per-app approval, with the number of steps in the detail.
   if (toolName === 'cu_batch') {
     const steps = Array.isArray(args.steps) ? args.steps.length : 0
     return assessComputer({ ...args, action: 'batch', batchSteps: steps })
   }
-  // Remover worktree apaga a pasta e o que não foi commitado nela: pergunta
-  // sempre, mesmo no modo total (a regra do plano de worktrees nos chats).
+  // Removing a worktree deletes the folder and whatever was not committed in it: it always
+  // asks, even in full mode (the rule from the worktrees plan for chats).
   if (toolName === 'worktree_remove') {
-    const destino = typeof args.destino === 'string' ? args.destino : '?'
+    const target = typeof args.target === 'string' ? args.target : '?'
     return {
       ruleId: 'worktree:remove',
-      sempre: true,
+      alwaysAsk: true,
       claim: {
         tool: toolName,
-        title: `Remover o worktree ${shorten(destino, 60)}`,
+        title: tNow('perm.worktree.remove', { name: shorten(target, 60) }),
         detail:
-          'Apaga a pasta do worktree — alterações não commitadas nela são perdidas.' +
-          (args.apagarBranch === true ? ' O branch dele também é apagado.' : ' O branch é mantido.'),
+          tNow('perm.worktree.removeDetail') +
+          (args.deleteBranch === true ? tNow('perm.worktree.branchDeleted') : tNow('perm.worktree.branchKept')),
       },
     }
   }
-  // Instruir um subchat faz outra conversa trabalhar (e escrever na pasta) em
-  // paralelo: o usuário precisa ver o que vai ser mandado. É o card de
-  // permissão de sempre — "permitir" vale pelo turno; no modo irrestrito passa
-  // direto. read_subchat só lê (está em NATIVE_TOOLS) e open_subchat não
-  // pergunta aqui: quem confirma é o card de sugestão (suggest_subchat), ou o
-  // próprio pedido do usuário ("faça num chat novo").
+  // Instructing a subchat makes another conversation work (and write in the folder) in
+  // parallel: the user needs to see what is going to be sent. It is the usual
+  // permission card — "allow" holds for the turn; in unrestricted mode it goes
+  // straight through. read_subchat only reads (it is in NATIVE_TOOLS) and open_subchat does not
+  // ask here: what confirms is the suggestion card (suggest_subchat), or the
+  // user's own request ("do it in a new chat").
   if (toolName === 'send_to_subchat') {
     const message = typeof args.message === 'string' ? args.message : ''
     return {
       ruleId: 'subchat:send',
       claim: {
         tool: toolName,
-        title: 'Enviar uma instrução a um subchat',
+        title: tNow('perm.subchat.sendInstruction'),
         detail: shorten(message, 300),
       },
     }
   }
-  // Catch-all "_" para servidores MCP (Nodara_*, N8N_-_Vlk_*, ...) — mas só
-  // quando o prefixo é um servidor REALMENTE configurado. Tools nativas em
-  // snake_case também têm "_": sem esta checagem, motion_preview, video_render,
-  // audio_generate e pdf_merge pediam permissão como "Ferramenta do servidor MCP
-  // motion" — o usuário tinha de aprovar a própria ferramenta a cada chamada.
+  // "_" catch-all for MCP servers (Nodara_*, N8N_-_Vlk_*, ...) — but only
+  // when the prefix is a REALLY configured server. Native tools in
+  // snake_case also have "_": without this check, motion_preview, video_render,
+  // audio_generate and pdf_merge asked permission as "Tool from MCP server
+  // motion" — the user had to approve the tool itself on every call.
   if (toolName.includes('_')) {
     const serverName = toolName.split('_')[0]
     if (isMcpServerName(serverName)) {
@@ -505,7 +506,7 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
         claim: {
           tool: toolName,
           title: toolName,
-          detail: `Ferramenta do servidor MCP "${serverName}"`,
+          detail: tNow('perm.mcp.tool', { server: serverName }),
         },
       }
     }
@@ -536,9 +537,9 @@ export function isForbidden(toolName: string, input: unknown, dir: string | null
     if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) return true
   }
 
-  // Cofres de senha, ajustes do sistema e prompts de segurança: nem observar,
-  // nem agir — em qualquer modo de permissão. A tool confere de novo depois de
-  // resolver o app (o modelo pode mandar um pid), esta é a primeira barreira.
+  // Password vaults, system settings and security prompts: neither observing
+  // nor acting — in any permission mode. The tool checks again after
+  // resolving the app (the model may send a pid); this is the first barrier.
   if (toolName.startsWith('cu_') && typeof args.app === 'string' && isDeniedQuery(args.app)) return true
 
   return false
