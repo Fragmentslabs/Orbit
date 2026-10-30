@@ -1928,7 +1928,31 @@ case "message": {
   // Processes the queue both in idle and in error (for retry/skip)
   if (event.type === "status" && (event.status === "idle" || event.status === "error")) {
     useMessageQueueStore.getState().onSessionIdle(sessionId)
+    releaseUnseen(sessionId, set, get)
   }
+}
+
+/**
+ * A conversation that streamed without ever being displayed (a worker, a
+ * subchat, a routine) built its buffer from the events alone — and the history
+ * cap in `ensureMessages` only knows the conversations that were displayed, so
+ * those buffers stayed whole until a reload. One orchestra left a dozen workers
+ * with thousands of tool parts each in the renderer. When such a turn ends the
+ * buffer goes: main already wrote the history, and opening the conversation
+ * re-reads it from disk.
+ */
+function releaseUnseen(sessionId: string, set: Setter, get: () => SessionState) {
+  const state = get()
+  if (state.messages[sessionId] === undefined) return
+  if (recentSessions.includes(sessionId)) return
+  if (Object.values(state.activeIds).includes(sessionId)) return
+  if (state._planReviewOutbox[sessionId]) return
+  loadedMessages.delete(sessionId)
+  set((current) => {
+    const messages = { ...current.messages }
+    delete messages[sessionId]
+    return { messages }
+  })
 }
 
 /** Active session of the current mode */

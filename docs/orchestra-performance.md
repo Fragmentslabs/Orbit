@@ -16,7 +16,10 @@ ORBIT_PERF=1 npm run dev
 
 It samples every 5 s and writes JSONL to
 `<userData>/perf/perf-YYYY-MM-DD.jsonl` (`~/Library/Application Support/@orbit/desktop/orbit-data/perf/`
-on macOS), with one line per sample and one per recorded span:
+on macOS), with one line per sample and one per recorded span. Files older than
+7 days are deleted when sampling starts. Each sample also carries
+`heavyRunning`/`heavyWaiting` — the builds, tests and typechecks holding or
+waiting for a slot (see below).
 
 | span | opened at | what it answers |
 |---|---|---|
@@ -116,20 +119,39 @@ swapping main process freezes the UI and times out the model streams — which i
 consistent with the three `terminated` turns, though the records do not prove
 the link; the `turn` span now records the peak next to the error.
 
-## What to change, in order of impact
+## What changed after this measurement
 
-1. **Serialize heavy commands per folder.** `runCheck` (reviewer) and `bash`
-   (workers) can start `tsc`/`vitest`/`eslint` freely; a semaphore of 1–2 per
-   project would cap the wave at ~2 GB instead of ~6 GB. This is the single
-   change that removes the freeze.
-2. **Do not review inside the scheduler loop.** Give the review its own queue
-   and task, and let the freed slot start the next task in the meantime. That is
-   where the 30 % utilization comes from.
-3. **Cap the size of a worker turn.** Workers do 100–300 tool calls in one turn
+1. **Heavy commands share machine-wide slots** (`electron/lib/heavy-commands.ts`).
+   The workers' `bash` and the reviewer's `runCheck` wait for a slot before
+   starting a compiler, test runner, linter or build — one slot per 8 GB of RAM
+   (2 on a 16 GB machine; `ORBIT_HEAVY_PARALLEL` overrides). The slot is held
+   until the PROCESS exits, so a command promoted to the background still counts.
+   A wave of four `tsc` now peaks at ~3.5 GB instead of ~6 GB. By the table
+   above it takes ~30 s in two pairs instead of 19.5 s all at once — ten seconds
+   against a machine in swap, which is what turned seconds into frozen minutes.
+   Light commands (git, rg, ls, a node script) and watchers never wait. A worker
+   that waited is told so in the tool output.
+2. **The review runs beside the scheduler, not inside it**
+   (`orchestration/execution.ts`). Reviews are still one at a time, but while one
+   is open, a slot freed by another worker already takes the next queued task.
+   This is what left 70 % of the slots idle.
+3. **Workers are told to check narrowly** (`WORKER_PROMPT`): the changed test
+   file while working, the full typecheck/test suite at most once at the end.
+   278 full-check runs in one night was the input to item 1.
+4. **The renderer drops the history of conversations nobody displayed.** A
+   worker's chat streams into the renderer even when it is never opened, and the
+   six-conversation cap only knew the ones that were displayed — so every worker
+   kept its whole history (thousands of tool parts) until a reload. Now its
+   buffer goes when its turn ends; opening it re-reads from disk.
+
+## Still open
+
+1. **Cap the size of a worker turn.** Workers do 100–300 tool calls in one turn
    with no checkpoint; a step budget that ends the turn and resumes it (the
    engine already supports continuations) would put the work of a long task on
    screen every few minutes instead of an hour later.
-4. **Retry from the last step, not from scratch.** Each `terminated` restarted
+2. **Retry from the last step, not from scratch.** Each `terminated` restarted
    the whole task and recorded no tokens: 2.4 h of one night, invisible in the
    cost.
-5. Run the project checks once at the integration review, not on every worker.
+3. Run the project checks once at the integration review, not on every worker
+   (item 3 above asks the workers; nothing enforces it).

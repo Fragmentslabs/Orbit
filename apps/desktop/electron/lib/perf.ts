@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { heavyState } from './heavy-commands'
 
 const execFileAsync = promisify(execFile)
 
@@ -18,7 +19,9 @@ const execFileAsync = promisify(execFile)
  *
  * OFF BY DEFAULT, zero cost when off. `ORBIT_PERF=1` turns it on; it samples
  * every `PERF_INTERVAL_MS` and writes JSONL to `<userData>/perf/perf-<date>.jsonl`,
- * plus a one-line console summary per recorded span.
+ * plus a one-line console summary per recorded span. Files older than
+ * `PERF_RETENTION_DAYS` are deleted when sampling starts, so a flag left on does
+ * not grow the folder forever.
  *
  * What a sample carries:
  *  - the MAIN process (`process.memoryUsage()`: rss, heapUsed, heapTotal,
@@ -39,6 +42,8 @@ const MB = 1024 * 1024
 
 /** Sampling period. Long enough to be invisible, short enough to catch a 25 s `tsc`. */
 export const PERF_INTERVAL_MS = 5_000
+/** Days of JSONL kept in `<userData>/perf`. */
+export const PERF_RETENTION_DAYS = 7
 
 export interface MemoryTotals {
   /** Main process RSS, MB. */
@@ -61,6 +66,9 @@ export interface PerfSample extends MemoryTotals {
   mainArrayBuffersMb: number
   /** Heaviest children: "npx tsc --noEmit 1987MB". */
   topChildren: string[]
+  /** Heavy commands (builds, tests, typechecks) running and waiting for a slot. */
+  heavyRunning: number
+  heavyWaiting: number
 }
 
 interface SpanState {
@@ -76,7 +84,7 @@ const enabled = process.env.ORBIT_PERF === '1' || process.env.ORBIT_PERF === 'tr
 
 let samplingTimer: NodeJS.Timeout | null = null
 let logFile: string | null = null
-let logDirReady = false
+let logDay: string | null = null
 /** Last sample — the baseline a span opened now would use, and the current state. */
 let last: PerfSample | null = null
 /** Open spans, so a sample can update their peak without scanning anything. */
@@ -198,23 +206,47 @@ export async function sampleOnce(readers?: {
     childrenMb: round(children.totalKb / 1024),
     children: children.count,
     totalMb: round(mb(mem.rss) + electron.totalKb / 1024 + children.totalKb / 1024),
+    heavyRunning: heavyState().running,
+    heavyWaiting: heavyState().waiting,
     topChildren: children.top
       .filter((c) => c.rss / 1024 >= 200)
       .map((c) => `${c.command.slice(0, 90)} ${Math.round(c.rss / 1024)}MB`),
   }
 }
 
+/** Pure: the perf files of a folder listing that are past the retention window. */
+export function expiredPerfFiles(names: string[], now: number, days = PERF_RETENTION_DAYS): string[] {
+  const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  return names.filter((name) => {
+    const day = /^perf-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(name)?.[1]
+    return !!day && day < cutoff
+  })
+}
+
+async function perfDir(): Promise<string> {
+  const { app } = await import('electron')
+  return path.join(app.getPath('userData'), 'perf')
+}
+
+async function pruneOldLogs(): Promise<void> {
+  try {
+    const dir = await perfDir()
+    const names = await fs.readdir(dir).catch(() => [] as string[])
+    await Promise.all(expiredPerfFiles(names, Date.now()).map((name) => fs.rm(path.join(dir, name), { force: true })))
+  } catch {
+    // Instrumentation never breaks the app it measures.
+  }
+}
+
 async function appendLine(entry: Record<string, unknown>): Promise<void> {
-  if (!logFile) {
+  // One file per day, also for an app left running past midnight.
+  const day = new Date().toISOString().slice(0, 10)
+  if (!logFile || logDay !== day) {
     try {
-      const { app } = await import('electron')
-      const base = path.join(app.getPath('userData'), 'perf')
-      if (!logDirReady) {
-        await fs.mkdir(base, { recursive: true })
-        logDirReady = true
-      }
-      const day = new Date().toISOString().slice(0, 10)
+      const base = await perfDir()
+      await fs.mkdir(base, { recursive: true })
       logFile = path.join(base, `perf-${day}.jsonl`)
+      logDay = day
     } catch {
       return
     }
@@ -229,6 +261,7 @@ async function appendLine(entry: Record<string, unknown>): Promise<void> {
 /** Starts sampling. Idempotent; does nothing when the flag is off. */
 export function startPerf(intervalMs = PERF_INTERVAL_MS): void {
   if (!enabled || samplingTimer) return
+  void pruneOldLogs()
   const tick = async () => {
     const sample = await sampleOnce()
     last = sample
@@ -285,7 +318,7 @@ export function perfSpan(label: string, fields: Record<string, unknown> = {}): P
       }
       console.log(
         `[perf] ${label} ${Math.round(durationMs / 1000)}s` +
-          (peak ? ` · pico ${peak.totalMb}MB (app ${peak.mainRssMb} + electron ${peak.appMb} + filhos ${peak.childrenMb})` : '') +
+          (peak ? ` · peak ${peak.totalMb}MB (main ${peak.mainRssMb} + electron ${peak.appMb} + children ${peak.childrenMb})` : '') +
           (peak && peak.topChildren.length > 0 ? ` · ${peak.topChildren.join(', ')}` : '') +
           ` · ${JSON.stringify({ ...span.fields, ...(extra ?? {}) }).slice(0, 200)}`,
       )

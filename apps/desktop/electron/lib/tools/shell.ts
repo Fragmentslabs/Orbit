@@ -6,6 +6,7 @@ import type { ToolContext } from './context'
 import { userShellEnv } from '../shell-env'
 import { registerProcess, type ProcessInfo } from '../process-manager'
 import { parseFileView, parseInspection, symbolSearchPattern } from '../bash-inspect'
+import { acquireHeavySlot, isHeavyCommand, type Release } from '../heavy-commands'
 
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
@@ -76,7 +77,8 @@ export function createOutputCollector(headChars = OUTPUT_HEAD, tailChars = OUTPU
   }
 }
 
-function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal, sessionId?: string) {
+/** `onExit` runs when the PROCESS exits — also after a promotion to the background. */
+function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal, sessionId?: string, onExit?: () => void) {
   return new Promise<{ output: string; exitCode: number | null; background?: ProcessInfo }>(
     (resolve, reject) => {
       const isWin = process.platform === 'win32'
@@ -95,6 +97,11 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
             detached: true,
             stdio: ['ignore', 'pipe', 'pipe'],
           })
+
+      if (onExit) {
+        child.once('exit', onExit)
+        child.once('error', onExit)
+      }
 
       const collected = createOutputCollector()
       const append = (chunk: Buffer) => collected.append(chunk.toString('utf8'))
@@ -235,7 +242,29 @@ export function createBashTool(ctx: ToolContext) {
     }),
     execute: async ({ command, timeout }) => {
       const ms = Math.min(Math.max(timeout ?? DEFAULT_TIMEOUT, 0), MAX_TIMEOUT)
-      const { output, exitCode, background } = await runShell(command, ctx.directory, ms, ctx.abort, ctx.sessionId)
+      // Compilers, test runners and builds wait for a machine-wide slot: parallel
+      // workers each starting `tsc` is what took a 16 GB machine into swap. The
+      // timeout only starts once the slot is granted.
+      let release: Release | undefined
+      let waited = ''
+      if (isHeavyCommand(command)) {
+        const queuedAt = Date.now()
+        try {
+          release = await acquireHeavySlot(ctx.abort)
+        } catch {
+          return '(aborted while waiting for another heavy command to finish)'
+        }
+        const seconds = Math.round((Date.now() - queuedAt) / 1000)
+        if (seconds >= 2) waited = `(waited ${seconds}s for another build/test/typecheck on this machine to finish)\n`
+      }
+      let result: Awaited<ReturnType<typeof runShell>>
+      try {
+        result = await runShell(command, ctx.directory, ms, ctx.abort, ctx.sessionId, release)
+      } catch (err) {
+        release?.()
+        throw err
+      }
+      const { output, exitCode, background } = result
       if (background) {
         const partial = output.slice(0, 4000)
         return (
@@ -246,7 +275,7 @@ export function createBashTool(ctx: ToolContext) {
         )
       }
       const status = exitCode === 0 ? '' : `\n(exit code: ${exitCode})`
-      return `${output || '(no output)'}${inspectionHint(ctx, command)}${status}`
+      return `${waited}${output || '(no output)'}${inspectionHint(ctx, command)}${status}`
     },
   })
 }

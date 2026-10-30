@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-const { sampleOnce, sumChildren } = await import('./perf')
+const { expiredPerfFiles, sampleOnce, sumChildren } = await import('./perf')
 
 beforeEach(() => {
   userData = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-perf-')))
@@ -60,6 +60,14 @@ describe('sampleOnce', () => {
     expect(sample.totalMb).toBe(Math.round((400 + 293 + 1000) * 10) / 10)
     expect(sample.children).toBe(1)
     expect(sample.topChildren[0]).toContain('tsc')
+  })
+})
+
+describe('expiredPerfFiles', () => {
+  it('drops only the perf files past the retention window', () => {
+    const now = Date.parse('2026-10-30T12:00:00Z')
+    const names = ['perf-2026-10-30.jsonl', 'perf-2026-10-23.jsonl', 'perf-2026-10-22.jsonl', 'perf-2026-01-01.jsonl', 'notes.txt']
+    expect(expiredPerfFiles(names, now, 7)).toEqual(['perf-2026-10-22.jsonl', 'perf-2026-01-01.jsonl'])
   })
 })
 

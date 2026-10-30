@@ -302,6 +302,7 @@ INSTRUCTIONS:
 - If there are schemas (.sql, .prisma), read them to understand the data model.
 - If the project has subprojects, focus on what's relevant to YOUR task.
 - You have access to the subagent tool to delegate quick research — use it sparingly (max 2-3 calls).
+- Checks are expensive and shared: other workers run on this machine at the same time, and builds, typechecks, test suites and linters wait in a machine-wide queue. While you work, check NARROWLY — the test file you changed, a single-file lint — and run the full project typecheck/test suite at most ONCE, at the end. Never re-run a full suite just to see the same output again; the orchestrator verifies the integration after you.
 - Your final response will be consumed by another model: end with a clear, complete summary of the result.`
 
 export const ORCHESTRATOR_PLAN_PROMPT = `You are the Orbit orchestrator, working in the user's project folder.

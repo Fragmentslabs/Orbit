@@ -113,6 +113,31 @@ describe('executePlan', () => {
     expect(p.tasks.every((t) => t.phase === 'accepted')).toBe(true)
   })
 
+  it('a review in progress does not hold the queue: the freed slot starts the next task', async () => {
+    const p = plan(Array.from({ length: MAX_PARALLEL + 2 }, (_, i) => task(`t${i}`)))
+    // t0 ends first and its slot goes to t4 before its review; t5 only gets a slot
+    // when another worker ends DURING that review.
+    const last = `t${MAX_PARALLEL + 1}`
+    let lastStarted!: () => void
+    const lastStart = new Promise<void>((r) => (lastStarted = r))
+    const runWorker = async (t: OrchestrationTask) => {
+      if (t.id === last) lastStarted()
+      await new Promise((r) => setTimeout(r, t.id === 't0' ? 1 : 20))
+      return { text: 'ok' }
+    }
+    const order: string[] = []
+    const review = async (request: ReviewRequest) => {
+      if (request.type !== 'worker') return
+      // The first review only ends once t5 started — with the review inside the
+      // scheduler loop nothing is scheduled while it is open, and this never resolves.
+      if (request.task.id === 't0') await lastStart
+      order.push(request.task.id)
+    }
+    await executePlan({ ...base(p), runWorker, review })
+    expect(order[0]).toBe('t0')
+    expect(p.tasks.every((t) => t.phase === 'accepted')).toBe(true)
+  })
+
   it('the integration may create an extra worker, which runs and is reviewed', async () => {
     const p = plan([task('a')])
     const w = workers()

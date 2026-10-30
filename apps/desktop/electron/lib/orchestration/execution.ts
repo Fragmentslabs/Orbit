@@ -9,8 +9,11 @@ import { perfEvent, perfSpan } from '../perf'
  *  - each task leaves the queue once its dependencies were ACCEPTED, up to
  *    MAX_PARALLEL at a time;
  *  - each worker that finishes goes to the review (one at a time — there is a
- *    single orchestrator, and parallel decisions would contradict each other),
- *    while the others keep running;
+ *    single orchestrator, and parallel decisions would contradict each other).
+ *    The review runs BESIDE the scheduler, not inside it: while it is open the
+ *    freed slot already takes the next queued task. Awaiting it in the loop left
+ *    the slots idle for the whole review — 30 % utilization in the 12-task run
+ *    measured in docs/orchestra-performance.md;
  *  - the review accepts, asks for an adjustment (the same worker runs again),
  *    marks a failure or creates an extra worker, within the "adjustments per
  *    worker" budget;
@@ -101,6 +104,8 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
   const reviewQueue: string[] = []
   const pendingAdjustments = new Map<string, string>()
   const prepared = new Set<string>()
+  /** The review in progress (at most one), awaited together with the workers. */
+  let reviewing: Promise<void> | null = null
   const noticesByTask = new Map<string, string[]>()
   const newId = d.newId ?? (() => `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
 
@@ -217,6 +222,32 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
     },
   }
 
+  const reviewWorker = async (t: OrchestrationTask) => {
+    review.activity = `Reviewing: ${t.title}`
+    await d.persist()
+    const reviewPerf = perfSpan('review', { type: 'worker', task: t.title, running: running.size })
+    try {
+      await d.review!({ type: 'worker', task: t, result: results.get(t.id) ?? { text: '' } }, actions)
+    } catch (err) {
+      // A reviewer that is down cannot stall the plan: the worker's work counts.
+      t.reviewNote = `Review unavailable: ${err instanceof Error ? err.message : String(err)}`
+    } finally {
+      reviewPerf.end({ decision: t.phase })
+    }
+    // No decision (the model called no action): accept it as it is.
+    if (t.phase === 'review') {
+      const r = results.get(t.id)
+      if (r?.error) {
+        t.phase = 'failed'
+        t.status = 'error'
+        t.reviewNote ??= r.error
+      } else {
+        await actions.accept(t.id)
+      }
+    }
+    review.activity = undefined
+  }
+
   let integrationPasses = 0
   for (;;) {
     if (d.signal.aborted) break
@@ -247,41 +278,21 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
     }
     await d.persist()
 
-    if (reviewQueue.length > 0 && d.review) {
+    if (!reviewing && reviewQueue.length > 0 && d.review) {
       const t = byId(reviewQueue.shift()!)
       if (!t) continue
-      review.activity = `Reviewing: ${t.title}`
-      await d.persist()
-      // The review runs INSIDE the scheduler loop: while it is open no queued task
-      // leaves the queue, so its duration is dead time for the other slots.
-      const reviewPerf = perfSpan('review', { type: 'worker', task: t.title, running: running.size })
-      try {
-        await d.review({ type: 'worker', task: t, result: results.get(t.id) ?? { text: '' } }, actions)
-      } catch (err) {
-        // A reviewer that is down cannot stall the plan: the worker's work counts.
-        t.reviewNote = `Review unavailable: ${err instanceof Error ? err.message : String(err)}`
-      } finally {
-        reviewPerf.end({ decision: t.phase })
-      }
-      // No decision (the model called no action): accept it as it is.
-      if (t.phase === 'review') {
-        const r = results.get(t.id)
-        if (r?.error) {
-          t.phase = 'failed'
-          t.status = 'error'
-          t.reviewNote ??= r.error
-        } else {
-          await actions.accept(t.id)
-        }
-      }
-      review.activity = undefined
-      continue
+      reviewing = reviewWorker(t).finally(() => {
+        reviewing = null
+      })
     }
 
-    if (running.size > 0) {
-      await Promise.race(running.values())
+    // Whatever ends first — a worker or the review — may free a slot or unlock a
+    // dependent, so the loop comes back to schedule.
+    if (running.size > 0 || reviewing) {
+      await Promise.race([...running.values(), ...(reviewing ? [reviewing] : [])])
       continue
     }
+    if (reviewQueue.length > 0 && d.review) continue
     if (pendingAdjustments.size > 0) continue
 
     if (plan.tasks.some((t) => t.phase === 'queued')) {
@@ -318,7 +329,7 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
   }
 
   // Abort: wait for the turns in progress to end (they receive the abort).
-  await Promise.allSettled(running.values())
+  await Promise.allSettled([...running.values(), ...(reviewing ? [reviewing] : [])])
   review.activity = undefined
   await d.persist()
   return results

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { userShellEnv } from '../shell-env'
 import { perfSpan } from '../perf'
+import { acquireHeavySlot } from '../heavy-commands'
 
 const execFileAsync = promisify(execFile)
 
@@ -99,8 +100,15 @@ const MAX_OUTPUT = 6000
 
 /** Runs one check; the output comes back clipped at the end (where the errors usually are). */
 export async function runCheck(check: Check, signal?: AbortSignal): Promise<{ ok: boolean; output: string }> {
-  // A check is `npm run typecheck`/`test` — a compiler or a test runner. Those are
-  // the processes that reach GBs, and this span is what puts a number on it.
+  // A check is `npm run typecheck`/`test` — a compiler or a test runner, the
+  // processes that reach GBs. It shares the machine-wide slots with the workers'
+  // bash, so a review never adds a fifth compiler to a wave of four.
+  let release: () => void
+  try {
+    release = await acquireHeavySlot(signal)
+  } catch {
+    return { ok: false, output: '(aborted while waiting for another heavy command to finish)' }
+  }
   const perf = perfSpan('check', { name: check.name, folder: check.folder })
   try {
     const { stdout, stderr } = await execFileAsync(check.command, check.args, {
@@ -117,6 +125,8 @@ export async function runCheck(check: Check, signal?: AbortSignal): Promise<{ ok
     const output = `${e.stdout ?? ''}\n${e.stderr ?? ''}`.trim() || e.message || String(err)
     perf.end({ ok: false, code: e.code })
     return { ok: false, output: clip(`(exited with ${e.code ?? 'error'})\n${output}`) }
+  } finally {
+    release()
   }
 }
 
