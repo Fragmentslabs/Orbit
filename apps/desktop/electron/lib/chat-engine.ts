@@ -1657,6 +1657,16 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   const controller = new AbortController()
   abortControllers.set(sessionId, controller)
 
+  /**
+   * Is this turn still the one that owns the session? The map holds the CURRENT
+   * controller, swapped at the top of every new turn: a turn already replaced by a
+   * newer send must not emit its ENDING status. The 'idle' would land after the
+   * newer turn's 'submitted', the composer would read "free" and the next Enter
+   * would start yet another turn (killing the one in progress, and leaving an empty
+   * reply behind) instead of queueing behind it.
+   */
+  const ownsSession = () => abortControllers.get(sessionId) === controller
+
   emit(win, { type: 'status', sessionId, status: 'submitted' })
   await bumpSessionActivity(win, sessionId)
 
@@ -2142,7 +2152,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       }
       await saveMessages(sessionId, history)
       emit(win, { type: 'message', sessionId, message: assistantMessage })
-      emit(win, { type: 'status', sessionId, status: 'idle' })
+      if (ownsSession()) emit(win, { type: 'status', sessionId, status: 'idle' })
       return
     }
 
@@ -3125,7 +3135,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
-    emit(win, { type: 'status', sessionId, status: 'idle' })
+    if (ownsSession()) emit(win, { type: 'status', sessionId, status: 'idle' })
     // Turn finished: this is where the next compaction can become an offer
     // of a new chat (see maybeSuggestCompaction). A worker has nobody to decide.
     if (input.orchestrationRole !== 'worker') {
@@ -3230,16 +3240,20 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     assistantMessage.completedAt = Date.now()
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
-    emit(win, {
-      type: 'status',
-      sessionId,
-      status: aborted ? 'idle' : 'error',
-      error: aborted ? undefined : message,
-      // It goes along so the mobile can translate the warning: the raw text is diagnostic.
-      errorKind: aborted ? undefined : assistantMessage.errorKind,
-    })
-    // Real failure (not a manual abort) → native error notification
-    if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
+    // A replaced turn reports nothing: the newer send already owns the status (see
+    // ownsSession). Its empty reply stays in the history — the UI shows no bubble for it.
+    if (ownsSession()) {
+      emit(win, {
+        type: 'status',
+        sessionId,
+        status: aborted ? 'idle' : 'error',
+        error: aborted ? undefined : message,
+        // It goes along so the mobile can translate the warning: the raw text is diagnostic.
+        errorKind: aborted ? undefined : assistantMessage.errorKind,
+      })
+      // Real failure (not a manual abort) → native error notification
+      if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
+    }
   } finally {
     // Writes the FINAL state of each journal path: it is what the revert uses
     // to know whether the turn still owns the current state (see media-journal).

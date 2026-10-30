@@ -191,11 +191,18 @@ const MessageItem = memo(
 
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")
+    /** The text the bubble shows — attachment notes, chips and the reply pill are not it.
+     *  A message can arrive with NO text at all (a pasted text becomes an attachment, a
+     *  PDF is sent on its own), and the bubble was then rendered empty: a blank box
+     *  right below the chips, which reads like a broken message. */
+    const text = visibleMessageText(msg)
     return (
       <Message from="user" data-user-msg-id={msg.id} data-msg-id={msg.id} data-msg-role="user">
         <div className="group/user-msg flex flex-col">
           {files.length > 0 && (
-            <MessageAttachments className="mb-1">
+            // With no text the attachments ARE the message: the row takes the
+            // `data-msg-surface` (target of the jump ring) that the bubble would carry.
+            <MessageAttachments className="mb-1" data-msg-surface={text ? undefined : ""}>
               {files.map((file) =>
                 file.mime.startsWith("image/") ? (
                   <MessageAttachment
@@ -241,16 +248,19 @@ const MessageItem = memo(
           {/* Quote of the replied message: a pill ABOVE the bubble, on the chat
               surface — outside `MessageContent`, so it does not inherit the bubble's
               background and padding. */}
-          <UserMessageQuote text={visibleMessageText(msg)} />
+          <UserMessageQuote text={text} />
           {/* `data-msg-surface`: target of the ring of the jump to the message (search,
               gallery, artifact) — the ring goes on the bubble, which is rounded, and
-              not on the wrapper of the row, which is rectangular (see message-jump). */}
-          <MessageContent data-msg-surface>
-            <UserMessageText text={visibleMessageText(msg)} />
-          </MessageContent>
+              not on the wrapper of the row, which is rectangular (see message-jump).
+              Without text there is no bubble at all (see above). */}
+          {text && (
+            <MessageContent data-msg-surface>
+              <UserMessageText text={text} />
+            </MessageContent>
+          )}
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
             <MessageTimestamp timestamp={msg.createdAt} />
-            <CopyAction text={visibleMessageText(msg)} />
+            {text && <CopyAction text={text} />}
             <ReplyAction message={msg} sessionId={sessionId} />
             {/* Speak reads the assistant's REPLY — the user message does not
                 get the button (nothing of it is read aloud). */}
